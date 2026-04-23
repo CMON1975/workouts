@@ -244,6 +244,83 @@ test('body id mismatch is rejected', async () => {
   assert.equal(res.statusCode, 400);
 });
 
+test('GET /api/sessions requires auth', async () => {
+  const res = await app.inject({ method: 'GET', url: '/api/sessions' });
+  assert.equal(res.statusCode, 401);
+});
+
+test('GET /api/sessions returns newest-first with values', async () => {
+  // Drain whatever earlier tests created; rely on insertion order + timestamps.
+  const res = await app.inject({
+    method: 'GET', url: '/api/sessions', headers: { cookie },
+  });
+  assert.equal(res.statusCode, 200);
+  const list = res.json();
+  assert.ok(list.length >= 2, 'expected multiple sessions from earlier tests');
+  for (let i = 1; i < list.length; i++) {
+    const a = list[i - 1].finalized_at ?? list[i - 1].started_at;
+    const b = list[i].finalized_at ?? list[i].started_at;
+    assert.ok(a >= b, `order broken at index ${i}: ${a} < ${b}`);
+  }
+  for (const s of list) {
+    assert.ok(Array.isArray(s.values), 'each session has values array');
+  }
+});
+
+test('GET /api/sessions?finalized=true filters drafts out', async () => {
+  // Create a draft that must not appear.
+  const draftId = uuidv7Fixture(20);
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${draftId}`, headers: { cookie },
+    payload: draftBody(draftId, 1, [{ row_index: 0, column_id: bicepColumnId, value_num: 3 }]),
+  });
+
+  const res = await app.inject({
+    method: 'GET', url: '/api/sessions?finalized=true', headers: { cookie },
+  });
+  assert.equal(res.statusCode, 200);
+  const ids = res.json().map(s => s.id);
+  assert.ok(!ids.includes(draftId), 'draft session is excluded when finalized=true');
+  for (const s of res.json()) {
+    assert.ok(s.finalized_at != null, 'every row is finalized');
+  }
+});
+
+test('GET /api/sessions?finalized=false returns only drafts', async () => {
+  const res = await app.inject({
+    method: 'GET', url: '/api/sessions?finalized=false', headers: { cookie },
+  });
+  assert.equal(res.statusCode, 200);
+  for (const s of res.json()) {
+    assert.equal(s.finalized_at, null, 'every row is a draft');
+  }
+});
+
+test('GET /api/sessions?template_id=X filters by template', async () => {
+  const res = await app.inject({
+    method: 'GET', url: `/api/sessions?template_id=${bicepTemplateId}`, headers: { cookie },
+  });
+  assert.equal(res.statusCode, 200);
+  const list = res.json();
+  assert.ok(list.length > 0);
+  for (const s of list) assert.equal(s.template_id, bicepTemplateId);
+});
+
+test('GET /api/sessions?limit=1 caps the result', async () => {
+  const res = await app.inject({
+    method: 'GET', url: '/api/sessions?limit=1', headers: { cookie },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().length, 1);
+});
+
+test('GET /api/sessions?limit=0 is rejected', async () => {
+  const res = await app.inject({
+    method: 'GET', url: '/api/sessions?limit=0', headers: { cookie },
+  });
+  assert.equal(res.statusCode, 400);
+});
+
 test('malformed uuid is rejected by schema', async () => {
   const res = await app.inject({
     method: 'PATCH', url: '/api/drafts/not-a-uuid', headers: { cookie },

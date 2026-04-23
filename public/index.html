@@ -7,6 +7,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#2f6feb">
+<link rel="manifest" href="/manifest.webmanifest">
 <title>Workouts</title>
 <link rel="stylesheet" href="/css/app.css">
 </head>
@@ -27,16 +29,32 @@
 
   <main id="app" hidden>
     <p id="resume-banner" class="banner" hidden></p>
-    <section id="templates">
+
+    <section id="home" class="view">
       <h2>Start a session</h2>
       <div id="template-list"></div>
+      <button id="open-history" type="button" class="secondary">View history</button>
     </section>
-    <section id="session">
+
+    <section id="session" class="view" hidden>
+      <button id="session-back" type="button" class="secondary back-btn">&larr; Back</button>
       <div id="session-root"></div>
       <div class="session-footer">
         <span id="status" class="status">Ready</span>
         <button id="submit" type="button" hidden>Submit session</button>
       </div>
+    </section>
+
+    <section id="history" class="view" hidden>
+      <button id="history-back" type="button" class="secondary back-btn">&larr; Back</button>
+      <h2>Past sessions</h2>
+      <div id="history-list"></div>
+      <p id="history-empty" class="muted" hidden>No past sessions yet.</p>
+    </section>
+
+    <section id="detail" class="view" hidden>
+      <button id="detail-back" type="button" class="secondary back-btn">&larr; Back</button>
+      <div id="detail-root"></div>
     </section>
   </main>
 

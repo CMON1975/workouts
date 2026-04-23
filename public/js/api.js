@@ -22,6 +22,14 @@ export const api = {
   login: (password) => request('/api/login', { method: 'POST', body: JSON.stringify({ password }) }),
   logout: () => request('/api/logout', { method: 'POST' }),
   templates: () => request('/api/templates'),
+  listSessions: (params = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null) qs.set(k, String(v));
+    }
+    const s = qs.toString();
+    return request('/api/sessions' + (s ? '?' + s : ''));
+  },
   getSession: (id) => request('/api/sessions/' + encodeURIComponent(id)),
   patchDraft: (id, draft) => request('/api/drafts/' + encodeURIComponent(id), {
     method: 'PATCH',

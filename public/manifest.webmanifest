@@ -1,0 +1,12 @@
+{
+  "name": "Workouts",
+  "short_name": "Workouts",
+  "description": "Personal workout tracker",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fafafa",
+  "theme_color": "#2f6feb",
+  "icons": []
+}

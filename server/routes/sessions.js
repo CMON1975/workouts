@@ -3,6 +3,52 @@ import { requireAuth } from '../auth.js';
 export default async function sessionsRoutes(app) {
   app.addHook('preHandler', requireAuth);
 
+  app.get('/api/sessions', {
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          template_id: { type: 'integer' },
+          limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
+          finalized: { type: 'boolean' },
+        },
+      },
+    },
+  }, async (req) => {
+    const db = app.db;
+    const { template_id, limit, finalized } = req.query;
+
+    const where = [];
+    const params = [];
+    if (template_id !== undefined) {
+      where.push('template_id = ?');
+      params.push(template_id);
+    }
+    if (finalized === true) {
+      where.push('finalized_at IS NOT NULL');
+    } else if (finalized === false) {
+      where.push('finalized_at IS NULL');
+    }
+    const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+    const sessions = db.prepare(`
+      SELECT id, template_id, started_at, updated_at, finalized_at, client_version, notes
+        FROM sessions
+        ${whereSql}
+        ORDER BY COALESCE(finalized_at, started_at) DESC, started_at DESC
+        LIMIT ?
+    `).all(...params, limit);
+
+    const valsStmt = db.prepare(`
+      SELECT row_index, column_id, value_num, value_text
+        FROM session_values
+       WHERE session_id = ?
+       ORDER BY row_index, column_id
+    `);
+    for (const s of sessions) s.values = valsStmt.all(s.id);
+    return sessions;
+  });
+
   app.get('/api/sessions/:id', async (req, reply) => {
     const db = app.db;
     const { id } = req.params;

@@ -369,7 +369,7 @@ After=network.target
 [Service]
 Type=simple
 User=workouts
-WorkingDirectory=/opt/workouts
+WorkingDirectory=/var/www/workouts
 EnvironmentFile=/etc/workouts.env
 ExecStart=/usr/bin/node server/index.js
 Restart=on-failure
@@ -409,7 +409,7 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
 
     # Serve static directly; proxy only /api/*.
-    root /opt/workouts/public;
+    root /var/www/workouts/public;
     index index.html;
 
     client_max_body_size 256k;                 # drafts are tiny
@@ -466,10 +466,10 @@ sudo certbot --nginx -d workouts.cmon1975.com
 
 ```bash
 sudo useradd -r -s /usr/sbin/nologin workouts
-sudo mkdir -p /opt/workouts /var/lib/workouts /var/log/workouts
-sudo chown workouts:workouts /var/lib/workouts /var/log/workouts
-sudo -u workouts git clone <repo> /opt/workouts
-cd /opt/workouts && sudo -u workouts npm ci --omit=dev
+sudo mkdir -p /var/www/workouts /var/lib/workouts /var/log/workouts
+sudo chown workouts:workouts /var/www/workouts /var/lib/workouts /var/log/workouts
+sudo -u workouts git clone <repo> /var/www/workouts
+cd /var/www/workouts && sudo -u workouts npm ci --omit=dev
 sudo cp deploy/workouts.service /etc/systemd/system/
 sudo cp deploy/nginx-workouts.conf /etc/nginx/sites-available/workouts.cmon1975.com
 sudo ln -s ../sites-available/workouts.cmon1975.com /etc/nginx/sites-enabled/
@@ -482,7 +482,7 @@ sudo systemctl enable --now workouts
 ### Deploy script (subsequent deploys)
 
 ```bash
-cd /opt/workouts && sudo -u workouts git pull && sudo -u workouts npm ci --omit=dev && sudo systemctl restart workouts
+cd /var/www/workouts && sudo -u workouts git pull && sudo -u workouts npm ci --omit=dev && sudo systemctl restart workouts
 ```
 
 ---

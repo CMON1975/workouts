@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=workouts
-WorkingDirectory=/opt/workouts
+WorkingDirectory=/var/www/workouts
 EnvironmentFile=/etc/workouts.env
 ExecStart=/usr/bin/node server/index.js
 Restart=on-failure

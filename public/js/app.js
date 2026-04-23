@@ -3,7 +3,10 @@ import { uuidv7 } from './uuidv7.js';
 import { getDraft, getLastActiveSessionId } from './idb.js';
 import { installHideFlush, installOutboxDrainers, drainOutbox, readShadow } from './persistence.js';
 import { createSessionState } from './session-state.js';
-import { renderSessionForm, renderStatus } from './renderer.js';
+import {
+  renderSessionForm, renderStatus,
+  renderHistoryList, renderSessionDetail,
+} from './renderer.js';
 
 const els = {
   login: document.getElementById('login'),
@@ -11,20 +14,43 @@ const els = {
   loginPw: document.getElementById('login-pw'),
   loginErr: document.getElementById('login-err'),
   app: document.getElementById('app'),
+  home: document.getElementById('home'),
   templateList: document.getElementById('template-list'),
+  openHistory: document.getElementById('open-history'),
+  session: document.getElementById('session'),
+  sessionBack: document.getElementById('session-back'),
   sessionRoot: document.getElementById('session-root'),
   status: document.getElementById('status'),
   submit: document.getElementById('submit'),
+  history: document.getElementById('history'),
+  historyBack: document.getElementById('history-back'),
+  historyList: document.getElementById('history-list'),
+  historyEmpty: document.getElementById('history-empty'),
+  detail: document.getElementById('detail'),
+  detailBack: document.getElementById('detail-back'),
+  detailRoot: document.getElementById('detail-root'),
   logout: document.getElementById('logout'),
   resumeBanner: document.getElementById('resume-banner'),
 };
 
+const VIEWS = ['home', 'session', 'history', 'detail'];
+
 let currentSession = null;
-let currentTemplate = null;
 let templates = [];
 
 function show(el) { el.hidden = false; }
 function hide(el) { el.hidden = true; }
+
+function showView(name) {
+  for (const v of VIEWS) {
+    if (v === name) show(els[v]);
+    else hide(els[v]);
+  }
+}
+
+function templatesById() {
+  return new Map(templates.map(t => [t.id, t]));
+}
 
 async function tryAutoRestore() {
   const lastId = await getLastActiveSessionId();
@@ -49,7 +75,6 @@ function emptyDraft(template) {
 }
 
 function bindSession(draft, template) {
-  currentTemplate = template;
   const session = createSessionState({
     draft,
     onChange: ({ state }) => renderStatus(els.status, { state }),
@@ -67,35 +92,32 @@ function bindSession(draft, template) {
 
   show(els.submit);
   els.submit.disabled = false;
+  showView('session');
 }
 
 async function reconcileWithServer(draft) {
   try {
     const server = await api.getSession(draft.id);
     if (server && server.client_version > draft.client_version) {
-      // Server is ahead — replace local draft.
       Object.assign(draft, server);
     }
   } catch (err) {
-    if (err.status !== 404) {
-      console.warn('reconcile failed', err);
-    }
+    if (err.status !== 404) console.warn('reconcile failed', err);
   }
 }
 
-async function startSession(template) {
-  const draft = emptyDraft(template);
-  bindSession(draft, template);
+function startSession(template) {
+  bindSession(emptyDraft(template), template);
 }
 
-async function resumeSession(draft) {
+function resumeSession(draft) {
   const template = templates.find(t => t.id === draft.template_id);
   if (!template) {
     console.warn('template for draft not found', draft.template_id);
     return;
   }
   bindSession(draft, template);
-  reconcileWithServer(draft);  // background
+  reconcileWithServer(draft);
 }
 
 function renderTemplateList() {
@@ -110,12 +132,46 @@ function renderTemplateList() {
   }
 }
 
+async function openHistory() {
+  showView('history');
+  els.historyList.innerHTML = '';
+  hide(els.historyEmpty);
+  try {
+    const sessions = await api.listSessions({ finalized: true, limit: 100 });
+    if (!sessions.length) {
+      show(els.historyEmpty);
+      return;
+    }
+    renderHistoryList(els.historyList, {
+      sessions,
+      templatesById: templatesById(),
+      onPick: (s) => openDetail(s),
+    });
+  } catch (err) {
+    console.error(err);
+    els.historyList.textContent = 'Failed to load history.';
+  }
+}
+
+function openDetail(session) {
+  const template = templates.find(t => t.id === session.template_id);
+  renderSessionDetail(els.detailRoot, { session, template });
+  showView('detail');
+}
+
+function goHome() {
+  currentSession = null;
+  showView('home');
+}
+
 async function enterApp() {
   hide(els.login);
   show(els.app);
+  show(els.logout);
 
   templates = await api.templates();
   renderTemplateList();
+  showView('home');
 
   const restored = await tryAutoRestore();
   if (restored) {
@@ -166,8 +222,11 @@ async function boot() {
   els.loginForm.addEventListener('submit', handleLogin);
   els.submit.addEventListener('click', handleSubmit);
   els.logout.addEventListener('click', handleLogout);
+  els.openHistory.addEventListener('click', openHistory);
+  els.sessionBack.addEventListener('click', goHome);
+  els.historyBack.addEventListener('click', goHome);
+  els.detailBack.addEventListener('click', openHistory);
 
-  // Probe auth: hit /api/templates; 401 → show login.
   try {
     await api.templates();
     await enterApp();
