@@ -17,6 +17,6 @@ on my Digital Ocean droplet.
   debounce.
 
 ## Droplet context
-- Ubuntu, nginx + certbot already configured for other subdomains
-- Will add a new server block for workouts.cmon1975.com
+- Ubuntu, Apache + certbot already configured for other subdomains
+- Will add a new vhost for workouts.cmon1975.com
 - Systemd unit for the Node process

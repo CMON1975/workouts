@@ -396,55 +396,65 @@ DB_PATH=/var/lib/workouts/workouts.db
 NODE_ENV=production
 ```
 
-### nginx server block — `/etc/nginx/sites-available/workouts.cmon1975.com`
+### Apache vhost — `/etc/apache2/sites-available/workouts.cmon1975.com.conf`
 
-```nginx
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name workouts.cmon1975.com;
+Requires modules: ssl, rewrite, headers, proxy, proxy_http.
+Enable once: `sudo a2enmod ssl rewrite headers proxy proxy_http`.
 
-    ssl_certificate     /etc/letsencrypt/live/workouts.cmon1975.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/workouts.cmon1975.com/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
+```apache
+<VirtualHost *:80>
+    ServerName workouts.cmon1975.com
+    DocumentRoot /var/www/workouts/public
 
-    # Serve static directly; proxy only /api/*.
-    root /var/www/workouts/public;
-    index index.html;
+    <Location "/.well-known/acme-challenge/">
+        Require all granted
+    </Location>
 
-    client_max_body_size 256k;                 # drafts are tiny
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,R=301]
 
-    location /api/ {
-        proxy_pass http://127.0.0.1:8787;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-        # sendBeacon is a POST/PATCH; allow it
-        proxy_read_timeout 30s;
-    }
+    ErrorLog  ${APACHE_LOG_DIR}/workouts-http-error.log
+    CustomLog ${APACHE_LOG_DIR}/workouts-http-access.log combined
+</VirtualHost>
 
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
+<VirtualHost *:443>
+    ServerName workouts.cmon1975.com
+    DocumentRoot /var/www/workouts/public
 
-    # Long-cache hashed assets if we later add them; for now, no-cache HTML.
-    location = /index.html { add_header Cache-Control "no-cache"; }
-}
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/workouts.cmon1975.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/workouts.cmon1975.com/privkey.pem
 
-server {
-    listen 80;
-    listen [::]:80;
-    server_name workouts.cmon1975.com;
-    return 301 https://$host$request_uri;
-}
+    <Directory /var/www/workouts/public>
+        Require all granted
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+    </Directory>
+
+    <Files "index.html">
+        Header set Cache-Control "no-cache"
+    </Files>
+
+    LimitRequestBody 262144
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+    ProxyPass        /api/ http://127.0.0.1:8787/api/
+    ProxyPassReverse /api/ http://127.0.0.1:8787/api/
+    RequestHeader set X-Forwarded-Proto "https"
+
+    ErrorLog  ${APACHE_LOG_DIR}/workouts-error.log
+    CustomLog ${APACHE_LOG_DIR}/workouts-access.log combined
+</VirtualHost>
 ```
 
 ### Certbot
 
+Issue via webroot (doesn't require certbot to modify the vhost):
+
 ```bash
-sudo certbot --nginx -d workouts.cmon1975.com
+sudo certbot certonly --webroot -w /var/www/workouts/public -d workouts.cmon1975.com
 ```
 (existing certbot auto-renew timer covers this new cert.)
 
@@ -471,10 +481,13 @@ sudo chown workouts:workouts /var/www/workouts /var/lib/workouts /var/log/workou
 sudo -u workouts git clone <repo> /var/www/workouts
 cd /var/www/workouts && sudo -u workouts npm ci --omit=dev
 sudo cp deploy/workouts.service /etc/systemd/system/
-sudo cp deploy/nginx-workouts.conf /etc/nginx/sites-available/workouts.cmon1975.com
-sudo ln -s ../sites-available/workouts.cmon1975.com /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d workouts.cmon1975.com
+sudo a2enmod ssl rewrite headers proxy proxy_http
+sudo cp deploy/apache-workouts.conf /etc/apache2/sites-available/workouts.cmon1975.com.conf
+# First enable an HTTP-only stub so certbot --webroot can validate, THEN swap in
+# the TLS vhost above. See the Phase H–J walkthrough for the two-step dance.
+sudo a2ensite workouts.cmon1975.com
+sudo apachectl configtest && sudo systemctl reload apache2
+sudo certbot certonly --webroot -w /var/www/workouts/public -d workouts.cmon1975.com
 sudo systemctl daemon-reload
 sudo systemctl enable --now workouts
 ```
