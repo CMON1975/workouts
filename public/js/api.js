@@ -21,7 +21,16 @@ async function request(url, opts = {}) {
 export const api = {
   login: (password) => request('/api/login', { method: 'POST', body: JSON.stringify({ password }) }),
   logout: () => request('/api/logout', { method: 'POST' }),
-  templates: () => request('/api/templates'),
+  templates: ({ includeArchived = false } = {}) =>
+    request('/api/templates' + (includeArchived ? '?include_archived=true' : '')),
+  createTemplate: (body) => request('/api/templates', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  updateTemplate: (id, body) => request('/api/templates/' + encodeURIComponent(id), {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  }),
   listSessions: (params = {}) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {

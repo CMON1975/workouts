@@ -33,7 +33,64 @@
     <section id="home" class="view">
       <h2>Start a session</h2>
       <div id="template-list"></div>
-      <button id="open-history" type="button" class="secondary">View history</button>
+      <div class="home-actions">
+        <button id="new-template" type="button" class="secondary">New template</button>
+        <button id="manage-templates" type="button" class="secondary">Manage templates</button>
+        <button id="open-history" type="button" class="secondary">View history</button>
+      </div>
+    </section>
+
+    <section id="new-tpl" class="view" hidden>
+      <button id="new-tpl-back" type="button" class="secondary back-btn">&larr; Back</button>
+      <h2>New template</h2>
+      <form id="new-tpl-form">
+        <label class="field">
+          <span>Name</span>
+          <input id="nt-name" type="text" required maxlength="100" autocomplete="off">
+        </label>
+
+        <fieldset class="mode">
+          <legend>Mode</legend>
+          <label><input type="radio" name="nt-mode" value="sets" checked> Sets (one metric, N fixed sets)</label>
+          <label><input type="radio" name="nt-mode" value="rows"> Rows (named columns, add rows during session)</label>
+        </fieldset>
+
+        <div id="nt-sets" class="mode-panel">
+          <label class="field">
+            <span>Metric name</span>
+            <input id="nt-metric" type="text" maxlength="50" placeholder="e.g. reps" autocomplete="off">
+          </label>
+          <label class="field">
+            <span>Unit (optional)</span>
+            <input id="nt-unit" type="text" maxlength="20" placeholder="e.g. pounds" autocomplete="off">
+          </label>
+          <label class="field">
+            <span>Number of sets</span>
+            <input id="nt-sets-count" type="number" inputmode="numeric" min="1" max="100" value="4">
+          </label>
+        </div>
+
+        <div id="nt-rows" class="mode-panel" hidden>
+          <div class="col-builder-header">
+            <span>Columns</span>
+            <button id="nt-add-col" type="button" class="secondary small">+ Add column</button>
+          </div>
+          <div id="nt-col-builder"></div>
+          <p class="muted">Text lets you enter anything (e.g. <code>20:00</code>). Number shows the numeric keypad.</p>
+        </div>
+
+        <p id="nt-err" class="err" role="alert"></p>
+        <div class="form-actions">
+          <button id="nt-submit" type="submit">Save template</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="manage" class="view" hidden>
+      <button id="manage-back" type="button" class="secondary back-btn">&larr; Back</button>
+      <h2>Manage templates</h2>
+      <div id="manage-list"></div>
+      <p id="manage-empty" class="muted" hidden>No templates yet.</p>
     </section>
 
     <section id="session" class="view" hidden>

@@ -203,9 +203,167 @@ button.secondary {
   font-size: 0.9rem;
 }
 
-#open-history {
+.home-actions {
   margin-top: 16px;
-  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-actions button { width: 100%; }
+
+/* New-template form */
+
+#new-tpl-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field > span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+fieldset.mode {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+fieldset.mode legend {
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding: 0 6px;
+}
+
+fieldset.mode label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+}
+
+fieldset.mode input[type='radio'] {
+  width: auto;
+  min-height: auto;
+  margin: 0;
+}
+
+.mode-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.err {
+  color: var(--danger);
+  min-height: 1.2em;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.form-actions button { width: 100%; }
+
+/* Manage templates */
+
+#manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.manage-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.manage-row.is-archived {
+  opacity: 0.6;
+}
+
+.manage-name {
+  font-weight: 600;
+}
+
+.manage-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.manage-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+button.small {
+  padding: 6px 12px;
+  min-height: 32px;
+  font-size: 0.85rem;
+  flex: 1 1 auto;
+}
+
+.session-form.no-row-labels .session-row label { display: none; }
+
+/* Column builder (rows-mode new template) */
+
+.col-builder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.col-builder-header span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+#nt-col-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.col-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.col-row input[type='text'] { flex: 1 1 auto; }
+
+.col-row select {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 0.95rem;
+  min-height: 44px;
+}
+
+.col-del {
+  flex: 0 0 44px;
+  padding: 0;
+  min-width: 44px;
+  font-size: 1.1rem;
 }
 
 /* History list */

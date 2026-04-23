@@ -7,16 +7,20 @@ export function renderSessionForm(root, { template, draft, onInput }) {
 
   const form = document.createElement('div');
   form.className = 'session-form';
+  if (!template.rows_fixed) form.classList.add('no-row-labels');
 
-  const rows = Math.max(template.default_rows, draft.values.reduce((m, v) => Math.max(m, v.row_index + 1), 0));
+  const valuesMax = draft.values.reduce((m, v) => Math.max(m, v.row_index + 1), 0);
+  const rows = Math.max(template.default_rows, valuesMax);
 
   for (let r = 0; r < rows; r++) {
     const rowEl = document.createElement('div');
     rowEl.className = 'session-row';
 
-    const label = document.createElement('label');
-    label.textContent = template.rows_fixed ? `Set ${r + 1}` : `Row ${r + 1}`;
-    rowEl.appendChild(label);
+    if (template.rows_fixed) {
+      const label = document.createElement('label');
+      label.textContent = `Set ${r + 1}`;
+      rowEl.appendChild(label);
+    }
 
     for (const col of template.columns) {
       const existing = draft.values.find(v => v.row_index === r && v.column_id === col.id);
@@ -177,6 +181,48 @@ export function renderSessionDetail(root, { session, template }) {
   }
   table.appendChild(tbody);
   root.appendChild(table);
+}
+
+export function renderManageList(root, { templates, onRename, onArchiveToggle }) {
+  root.innerHTML = '';
+  for (const t of templates) {
+    const card = document.createElement('div');
+    card.className = 'manage-row';
+    if (t.archived_at) card.classList.add('is-archived');
+
+    const name = document.createElement('div');
+    name.className = 'manage-name';
+    name.textContent = t.name + (t.archived_at ? ' (archived)' : '');
+    card.appendChild(name);
+
+    const meta = document.createElement('div');
+    meta.className = 'manage-meta';
+    const shape = t.rows_fixed
+      ? `${t.default_rows} set${t.default_rows === 1 ? '' : 's'} · ${t.columns.map(c => c.name).join(', ')}`
+      : `${t.columns.length} column${t.columns.length === 1 ? '' : 's'}: ${t.columns.map(c => c.name).join(', ')}`;
+    meta.textContent = shape;
+    card.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'manage-actions';
+
+    const renameBtn = document.createElement('button');
+    renameBtn.type = 'button';
+    renameBtn.className = 'secondary small';
+    renameBtn.textContent = 'Rename';
+    renameBtn.addEventListener('click', () => onRename(t));
+    actions.appendChild(renameBtn);
+
+    const archBtn = document.createElement('button');
+    archBtn.type = 'button';
+    archBtn.className = 'secondary small';
+    archBtn.textContent = t.archived_at ? 'Restore' : 'Archive';
+    archBtn.addEventListener('click', () => onArchiveToggle(t));
+    actions.appendChild(archBtn);
+
+    card.appendChild(actions);
+    root.appendChild(card);
+  }
 }
 
 export function renderStatus(el, { state }) {
