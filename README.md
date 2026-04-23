@@ -1,0 +1,1 @@
+Personal workout tracker. Node + Fastify + better-sqlite3. Deployed at workouts.cmon1975.com.
