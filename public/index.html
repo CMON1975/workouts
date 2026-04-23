@@ -32,12 +32,56 @@
 
     <section id="home" class="view">
       <h2>Start a session</h2>
+
+      <h3 class="home-heading">Routines</h3>
+      <div id="routine-list"></div>
+      <p id="routine-empty" class="muted" hidden>No routines yet. Group exercises under a "day" to run them as one workout.</p>
+
+      <h3 class="home-heading">Individual exercises</h3>
       <div id="template-list"></div>
+
       <div class="home-actions">
+        <button id="new-routine" type="button" class="secondary">New routine</button>
+        <button id="manage-routines" type="button" class="secondary">Manage routines</button>
         <button id="new-template" type="button" class="secondary">New template</button>
         <button id="manage-templates" type="button" class="secondary">Manage templates</button>
         <button id="open-history" type="button" class="secondary">View history</button>
       </div>
+    </section>
+
+    <section id="new-rt" class="view" hidden>
+      <button id="new-rt-back" type="button" class="secondary back-btn">&larr; Back</button>
+      <h2>New routine</h2>
+      <form id="new-rt-form">
+        <label class="field">
+          <span>Name</span>
+          <input id="nr-name" type="text" required maxlength="100" autocomplete="off">
+        </label>
+
+        <div class="rt-section">
+          <h3 class="rt-heading">Selected exercises</h3>
+          <div id="nr-selected"></div>
+          <p id="nr-selected-empty" class="muted">Tap an exercise below to add.</p>
+        </div>
+
+        <div class="rt-section">
+          <h3 class="rt-heading">Available</h3>
+          <div id="nr-available"></div>
+          <p id="nr-available-empty" class="muted" hidden>All exercises already added.</p>
+        </div>
+
+        <p id="nr-err" class="err" role="alert"></p>
+        <div class="form-actions">
+          <button id="nr-submit" type="submit">Save routine</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="manage-rt" class="view" hidden>
+      <button id="manage-rt-back" type="button" class="secondary back-btn">&larr; Back</button>
+      <h2>Manage routines</h2>
+      <div id="manage-rt-list"></div>
+      <p id="manage-rt-empty" class="muted" hidden>No routines yet.</p>
     </section>
 
     <section id="new-tpl" class="view" hidden>

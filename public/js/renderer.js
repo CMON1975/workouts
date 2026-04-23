@@ -230,6 +230,125 @@ export function applyPreviousHints(root, { template, prev }) {
   }
 }
 
+export function renderRoutineBuilder({
+  selectedRoot, availableRoot, emptySelectedEl, emptyAvailableEl,
+  templatesById, selectedIds,
+  onAdd, onRemove, onMoveUp, onMoveDown,
+}) {
+  selectedRoot.innerHTML = '';
+  emptySelectedEl.hidden = selectedIds.length > 0;
+  selectedIds.forEach((id, i) => {
+    const t = templatesById.get(id);
+    if (!t) return;
+    const row = document.createElement('div');
+    row.className = 'rt-row selected';
+
+    const pos = document.createElement('span');
+    pos.className = 'rt-pos';
+    pos.textContent = String(i + 1) + '.';
+    row.appendChild(pos);
+
+    const name = document.createElement('span');
+    name.className = 'rt-name';
+    name.textContent = t.name + (t.archived_at ? ' (archived)' : '');
+    row.appendChild(name);
+
+    const ctrls = document.createElement('span');
+    ctrls.className = 'rt-controls';
+    const up = document.createElement('button');
+    up.type = 'button'; up.className = 'secondary small'; up.textContent = '↑';
+    up.disabled = i === 0;
+    up.addEventListener('click', () => onMoveUp(i));
+    const down = document.createElement('button');
+    down.type = 'button'; down.className = 'secondary small'; down.textContent = '↓';
+    down.disabled = i === selectedIds.length - 1;
+    down.addEventListener('click', () => onMoveDown(i));
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.className = 'secondary small'; rm.textContent = '×';
+    rm.setAttribute('aria-label', 'Remove');
+    rm.addEventListener('click', () => onRemove(id));
+    ctrls.append(up, down, rm);
+    row.appendChild(ctrls);
+
+    selectedRoot.appendChild(row);
+  });
+
+  availableRoot.innerHTML = '';
+  const selectedSet = new Set(selectedIds);
+  const candidates = [...templatesById.values()]
+    .filter(t => !t.archived_at && !selectedSet.has(t.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  emptyAvailableEl.hidden = candidates.length > 0;
+  for (const t of candidates) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'template-btn';
+    btn.textContent = t.name;
+    btn.addEventListener('click', () => onAdd(t.id));
+    availableRoot.appendChild(btn);
+  }
+}
+
+export function renderRoutineManageList(root, { routines, onRename, onArchiveToggle }) {
+  root.innerHTML = '';
+  for (const r of routines) {
+    const card = document.createElement('div');
+    card.className = 'manage-row';
+    if (r.archived_at) card.classList.add('is-archived');
+
+    const name = document.createElement('div');
+    name.className = 'manage-name';
+    name.textContent = r.name + (r.archived_at ? ' (archived)' : '');
+    card.appendChild(name);
+
+    const meta = document.createElement('div');
+    meta.className = 'manage-meta';
+    const names = r.templates.map(t => t.name).join(', ');
+    const count = r.templates.length;
+    meta.textContent = `${count} exercise${count === 1 ? '' : 's'}: ${names || '(none)'}`;
+    card.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'manage-actions';
+
+    const renameBtn = document.createElement('button');
+    renameBtn.type = 'button';
+    renameBtn.className = 'secondary small';
+    renameBtn.textContent = 'Rename';
+    renameBtn.addEventListener('click', () => onRename(r));
+    actions.appendChild(renameBtn);
+
+    const archBtn = document.createElement('button');
+    archBtn.type = 'button';
+    archBtn.className = 'secondary small';
+    archBtn.textContent = r.archived_at ? 'Restore' : 'Archive';
+    archBtn.addEventListener('click', () => onArchiveToggle(r));
+    actions.appendChild(archBtn);
+
+    card.appendChild(actions);
+    root.appendChild(card);
+  }
+}
+
+export function renderRoutineList(root, { routines, onPick }) {
+  root.innerHTML = '';
+  for (const r of routines) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'template-btn routine-btn';
+    const name = document.createElement('span');
+    name.className = 'routine-name';
+    name.textContent = r.name;
+    const count = document.createElement('span');
+    count.className = 'routine-count';
+    const n = r.templates.length;
+    count.textContent = `${n} exercise${n === 1 ? '' : 's'}`;
+    btn.append(name, count);
+    btn.addEventListener('click', () => onPick(r));
+    root.appendChild(btn);
+  }
+}
+
 export function renderManageList(root, { templates, onRename, onArchiveToggle }) {
   root.innerHTML = '';
   for (const t of templates) {

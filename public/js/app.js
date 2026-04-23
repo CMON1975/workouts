@@ -7,6 +7,7 @@ import {
   renderSessionForm, renderStatus,
   renderHistoryList, renderSessionDetail,
   renderManageList, applyPreviousHints,
+  renderRoutineList, renderRoutineBuilder, renderRoutineManageList,
 } from './renderer.js';
 
 const els = {
@@ -49,14 +50,34 @@ const els = {
   manageBack: document.getElementById('manage-back'),
   manageList: document.getElementById('manage-list'),
   manageEmpty: document.getElementById('manage-empty'),
+  routineList: document.getElementById('routine-list'),
+  routineEmpty: document.getElementById('routine-empty'),
+  newRoutineBtn: document.getElementById('new-routine'),
+  manageRoutinesBtn: document.getElementById('manage-routines'),
+  newRt: document.getElementById('new-rt'),
+  newRtBack: document.getElementById('new-rt-back'),
+  newRtForm: document.getElementById('new-rt-form'),
+  nrName: document.getElementById('nr-name'),
+  nrSelected: document.getElementById('nr-selected'),
+  nrSelectedEmpty: document.getElementById('nr-selected-empty'),
+  nrAvailable: document.getElementById('nr-available'),
+  nrAvailableEmpty: document.getElementById('nr-available-empty'),
+  nrErr: document.getElementById('nr-err'),
+  nrSubmit: document.getElementById('nr-submit'),
+  manageRt: document.getElementById('manage-rt'),
+  manageRtBack: document.getElementById('manage-rt-back'),
+  manageRtList: document.getElementById('manage-rt-list'),
+  manageRtEmpty: document.getElementById('manage-rt-empty'),
   logout: document.getElementById('logout'),
   resumeBanner: document.getElementById('resume-banner'),
 };
 
-const VIEWS = ['home', 'session', 'history', 'detail', 'newTpl', 'manage'];
+const VIEWS = ['home', 'session', 'history', 'detail', 'newTpl', 'manage', 'newRt', 'manageRt'];
 
 let currentSession = null;
 let templates = [];
+let routines = [];
+let rtSelectedIds = [];
 
 function show(el) { el.hidden = false; }
 function hide(el) { el.hidden = true; }
@@ -175,6 +196,19 @@ function renderTemplateList() {
     btn.addEventListener('click', () => startSession(t));
     els.templateList.appendChild(btn);
   }
+}
+
+function renderHomeRoutines() {
+  const active = routines.filter(r => !r.archived_at);
+  els.routineEmpty.hidden = active.length > 0;
+  renderRoutineList(els.routineList, {
+    routines: active,
+    onPick: handleRoutinePick,
+  });
+}
+
+function handleRoutinePick(_routine) {
+  alert('Routine runner is coming in the next update.');
 }
 
 async function openHistory() {
@@ -383,6 +417,115 @@ async function handleRename(tpl) {
   }
 }
 
+function openNewRoutine() {
+  els.newRtForm.reset();
+  els.nrErr.textContent = '';
+  rtSelectedIds = [];
+  renderBuilder();
+  els.nrSubmit.disabled = false;
+  showView('newRt');
+  setTimeout(() => els.nrName.focus(), 0);
+}
+
+function renderBuilder() {
+  renderRoutineBuilder({
+    selectedRoot: els.nrSelected,
+    availableRoot: els.nrAvailable,
+    emptySelectedEl: els.nrSelectedEmpty,
+    emptyAvailableEl: els.nrAvailableEmpty,
+    templatesById: templatesById(),
+    selectedIds: rtSelectedIds,
+    onAdd: (id) => { rtSelectedIds.push(id); renderBuilder(); },
+    onRemove: (id) => { rtSelectedIds = rtSelectedIds.filter(x => x !== id); renderBuilder(); },
+    onMoveUp: (i) => {
+      if (i <= 0) return;
+      [rtSelectedIds[i - 1], rtSelectedIds[i]] = [rtSelectedIds[i], rtSelectedIds[i - 1]];
+      renderBuilder();
+    },
+    onMoveDown: (i) => {
+      if (i >= rtSelectedIds.length - 1) return;
+      [rtSelectedIds[i], rtSelectedIds[i + 1]] = [rtSelectedIds[i + 1], rtSelectedIds[i]];
+      renderBuilder();
+    },
+  });
+}
+
+async function handleNewRoutineSubmit(e) {
+  e.preventDefault();
+  els.nrErr.textContent = '';
+  const name = els.nrName.value.trim();
+  if (!name) { els.nrErr.textContent = 'Name is required.'; return; }
+  if (!rtSelectedIds.length) { els.nrErr.textContent = 'Pick at least one exercise.'; return; }
+
+  els.nrSubmit.disabled = true;
+  try {
+    const created = await api.createRoutine({ name, template_ids: rtSelectedIds });
+    routines.push(created);
+    routines.sort((a, b) => a.name.localeCompare(b.name));
+    renderHomeRoutines();
+    showView('home');
+  } catch (err) {
+    if (err.status === 409) els.nrErr.textContent = 'A routine with that name already exists.';
+    else if (err.status === 400) els.nrErr.textContent = err.body?.error || 'Invalid routine.';
+    else els.nrErr.textContent = 'Save failed — try again.';
+    els.nrSubmit.disabled = false;
+  }
+}
+
+function openManageRoutines() {
+  renderManageRoutines();
+  showView('manageRt');
+}
+
+function renderManageRoutines() {
+  els.manageRtEmpty.hidden = true;
+  if (!routines.length) {
+    els.manageRtList.innerHTML = '';
+    els.manageRtEmpty.hidden = false;
+    return;
+  }
+  const sorted = routines.slice().sort((a, b) => {
+    if (!!a.archived_at !== !!b.archived_at) return a.archived_at ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
+  renderRoutineManageList(els.manageRtList, {
+    routines: sorted,
+    onRename: handleRoutineRename,
+    onArchiveToggle: handleRoutineArchiveToggle,
+  });
+}
+
+async function handleRoutineRename(r) {
+  const next = prompt('Rename routine', r.name);
+  if (next == null) return;
+  const trimmed = next.trim();
+  if (!trimmed || trimmed === r.name) return;
+  try {
+    const updated = await api.updateRoutine(r.id, { name: trimmed });
+    const idx = routines.findIndex(x => x.id === r.id);
+    if (idx >= 0) routines[idx] = updated;
+    renderManageRoutines();
+    renderHomeRoutines();
+  } catch (err) {
+    if (err.status === 409) alert('A routine with that name already exists.');
+    else alert('Rename failed.');
+  }
+}
+
+async function handleRoutineArchiveToggle(r) {
+  const archiving = !r.archived_at;
+  if (archiving && !confirm(`Archive "${r.name}"? Past workouts are kept; it just won't appear in the list.`)) return;
+  try {
+    const updated = await api.updateRoutine(r.id, { archived: archiving });
+    const idx = routines.findIndex(x => x.id === r.id);
+    if (idx >= 0) routines[idx] = updated;
+    renderManageRoutines();
+    renderHomeRoutines();
+  } catch (err) {
+    alert(archiving ? 'Archive failed.' : 'Restore failed.');
+  }
+}
+
 async function handleArchiveToggle(tpl) {
   const archiving = !tpl.archived_at;
   if (archiving && !confirm(`Archive "${tpl.name}"? Past sessions are kept; it just won't appear in the list.`)) return;
@@ -404,6 +547,13 @@ async function enterApp() {
 
   templates = await api.templates({ includeArchived: true });
   renderTemplateList();
+  try {
+    routines = await api.routines({ includeArchived: true });
+  } catch (err) {
+    console.warn('routines fetch failed', err);
+    routines = [];
+  }
+  renderHomeRoutines();
   showView('home');
 
   const restored = await tryAutoRestore();
@@ -472,6 +622,11 @@ async function boot() {
   });
   els.manageBtn.addEventListener('click', openManage);
   els.manageBack.addEventListener('click', goHome);
+  els.newRoutineBtn.addEventListener('click', openNewRoutine);
+  els.newRtBack.addEventListener('click', goHome);
+  els.newRtForm.addEventListener('submit', handleNewRoutineSubmit);
+  els.manageRoutinesBtn.addEventListener('click', openManageRoutines);
+  els.manageRtBack.addEventListener('click', goHome);
 
   try {
     await api.templates({ includeArchived: true });

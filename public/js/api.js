@@ -33,6 +33,17 @@ export const api = {
   }),
   lastTemplateSession: (id) =>
     request('/api/templates/' + encodeURIComponent(id) + '/last-session'),
+  routines: ({ includeArchived = false } = {}) =>
+    request('/api/routines' + (includeArchived ? '?include_archived=true' : '')),
+  routine: (id) => request('/api/routines/' + encodeURIComponent(id)),
+  createRoutine: (body) => request('/api/routines', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  updateRoutine: (id, body) => request('/api/routines/' + encodeURIComponent(id), {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  }),
   listSessions: (params = {}) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {
