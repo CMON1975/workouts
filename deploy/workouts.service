@@ -1,0 +1,23 @@
+[Unit]
+Description=Workouts tracker (Fastify)
+After=network.target
+
+[Service]
+Type=simple
+User=workouts
+WorkingDirectory=/opt/workouts
+EnvironmentFile=/etc/workouts.env
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/workouts
+StandardOutput=append:/var/log/workouts/out.log
+StandardError=append:/var/log/workouts/err.log
+
+[Install]
+WantedBy=multi-user.target

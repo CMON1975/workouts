@@ -3,7 +3,11 @@ node_modules/
 .env.local
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
 .DS_Store
 .vscode/

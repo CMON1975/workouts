@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="color-scheme" content="light dark">
+<title>Workouts</title>
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <header>
+    <h1>Workouts</h1>
+    <button id="logout" type="button" hidden>Log out</button>
+  </header>
+
+  <section id="login" hidden>
+    <form id="login-form">
+      <label for="login-pw">Password</label>
+      <input id="login-pw" type="password" autocomplete="current-password" required>
+      <button type="submit">Log in</button>
+      <p id="login-err" role="alert"></p>
+    </form>
+  </section>
+
+  <main id="app" hidden>
+    <p id="resume-banner" class="banner" hidden></p>
+    <section id="templates">
+      <h2>Start a session</h2>
+      <div id="template-list"></div>
+    </section>
+    <section id="session">
+      <div id="session-root"></div>
+      <div class="session-footer">
+        <span id="status" class="status">Ready</span>
+        <button id="submit" type="button" hidden>Submit session</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
