@@ -425,6 +425,7 @@ Enable once: `sudo a2enmod ssl rewrite headers proxy proxy_http`.
     SSLEngine on
     SSLCertificateFile    /etc/letsencrypt/live/workouts.cmon1975.com/fullchain.pem
     SSLCertificateKeyFile /etc/letsencrypt/live/workouts.cmon1975.com/privkey.pem
+    Include /etc/letsencrypt/options-ssl-apache.conf
 
     <Directory /var/www/workouts/public>
         Require all granted
