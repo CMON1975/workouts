@@ -10,6 +10,7 @@ import templatesRoutes from './routes/templates.js';
 import draftsRoutes from './routes/drafts.js';
 import sessionsRoutes from './routes/sessions.js';
 import routinesRoutes from './routes/routines.js';
+import workoutsRoutes from './routes/workouts.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(__dirname, '..', 'public');
@@ -43,6 +44,7 @@ export async function buildApp(opts = {}) {
   await registerAuth(app, { sessionKey, passwordHash, isProd });
   await app.register(templatesRoutes);
   await app.register(routinesRoutes);
+  await app.register(workoutsRoutes);
   await app.register(draftsRoutes);
   await app.register(sessionsRoutes);
 

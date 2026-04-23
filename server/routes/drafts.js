@@ -12,6 +12,12 @@ const draftBodySchema = {
     updated_at: { type: 'integer' },
     client_version: { type: 'integer', minimum: 0 },
     notes: { type: ['string', 'null'], maxLength: 2000 },
+    workout_id: {
+      oneOf: [
+        { type: 'null' },
+        { type: 'string', pattern: UUIDV7_RE.source },
+      ],
+    },
     values: {
       type: 'array',
       maxItems: 1000,
@@ -64,19 +70,34 @@ export default async function draftsRoutes(app) {
         return { server_version: existing.client_version, updated_at: null, stale: true };
       }
 
+      const hasWorkoutId = Object.prototype.hasOwnProperty.call(body, 'workout_id');
+
       if (existing) {
-        db.prepare(`
-          UPDATE sessions
-             SET template_id = ?, started_at = ?, updated_at = ?,
-                 client_version = ?, notes = ?
-           WHERE id = ?
-        `).run(body.template_id, body.started_at, now, body.client_version, body.notes ?? null, id);
+        if (hasWorkoutId) {
+          db.prepare(`
+            UPDATE sessions
+               SET template_id = ?, started_at = ?, updated_at = ?,
+                   client_version = ?, notes = ?, workout_id = ?
+             WHERE id = ?
+          `).run(body.template_id, body.started_at, now, body.client_version, body.notes ?? null, body.workout_id ?? null, id);
+        } else {
+          db.prepare(`
+            UPDATE sessions
+               SET template_id = ?, started_at = ?, updated_at = ?,
+                   client_version = ?, notes = ?
+             WHERE id = ?
+          `).run(body.template_id, body.started_at, now, body.client_version, body.notes ?? null, id);
+        }
       } else {
         db.prepare(`
           INSERT INTO sessions
-            (id, template_id, started_at, updated_at, client_version, notes)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).run(id, body.template_id, body.started_at, now, body.client_version, body.notes ?? null);
+            (id, template_id, started_at, updated_at, client_version, notes, workout_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id, body.template_id, body.started_at, now, body.client_version,
+          body.notes ?? null,
+          hasWorkoutId ? (body.workout_id ?? null) : null,
+        );
       }
 
       db.prepare('DELETE FROM session_values WHERE session_id = ?').run(id);
