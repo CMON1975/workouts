@@ -30,7 +30,7 @@ export async function buildApp(opts = {}) {
     throw new Error('SESSION_SECRET must be 32 bytes hex (64 hex chars)');
   }
 
-  const app = Fastify({ logger, bodyLimit: 262144 });
+  const app = Fastify({ logger, bodyLimit: 262144, trustProxy: true });
   app.db = openDb(dbPath);
 
   await app.register(fastifyRateLimit, {

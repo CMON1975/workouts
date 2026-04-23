@@ -15,6 +15,9 @@ export async function registerAuth(app, { sessionKey, passwordHash, isProd }) {
   });
 
   app.post('/api/login', {
+    config: {
+      rateLimit: { max: 10, timeWindow: '10 minutes' },
+    },
     schema: {
       body: {
         type: 'object',
