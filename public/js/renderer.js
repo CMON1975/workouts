@@ -183,6 +183,53 @@ export function renderSessionDetail(root, { session, template }) {
   root.appendChild(table);
 }
 
+function describeAge(ms) {
+  const diffDays = Math.floor((Date.now() - ms) / 86400000);
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+  return `${Math.floor(diffDays / 365)} years ago`;
+}
+
+function shortDate(ms) {
+  const d = new Date(ms);
+  const opts = { month: 'short', day: 'numeric' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString(undefined, opts);
+}
+
+export function applyPreviousHints(root, { template, prev }) {
+  if (!prev || !Array.isArray(prev.values)) return;
+
+  if (prev.finalized_at && !root.querySelector('.prev-header')) {
+    const header = document.createElement('p');
+    header.className = 'prev-header';
+    header.textContent = `Last session: ${shortDate(prev.finalized_at)} · ${describeAge(prev.finalized_at)}`;
+    const h2 = root.querySelector('h2');
+    if (h2 && h2.nextSibling) root.insertBefore(header, h2.nextSibling);
+    else root.appendChild(header);
+  }
+
+  const colsById = new Map(template.columns.map(c => [c.id, c]));
+  for (const v of prev.values) {
+    const input = root.querySelector(
+      `input[data-row-index="${v.row_index}"][data-column-id="${v.column_id}"]`,
+    );
+    if (!input) continue;
+    const field = input.parentElement;
+    if (!field || field.querySelector('.prev-hint')) continue;
+    const col = colsById.get(v.column_id);
+    const raw = col?.value_type === 'text' ? (v.value_text ?? '') : (v.value_num ?? '');
+    if (raw === '' || raw === null || raw === undefined) continue;
+    const hint = document.createElement('span');
+    hint.className = 'prev-hint';
+    hint.textContent = 'was ' + raw;
+    field.appendChild(hint);
+  }
+}
+
 export function renderManageList(root, { templates, onRename, onArchiveToggle }) {
   root.innerHTML = '';
   for (const t of templates) {

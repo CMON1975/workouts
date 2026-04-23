@@ -31,6 +31,8 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(body),
   }),
+  lastTemplateSession: (id) =>
+    request('/api/templates/' + encodeURIComponent(id) + '/last-session'),
   listSessions: (params = {}) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {

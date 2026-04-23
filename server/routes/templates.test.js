@@ -283,6 +283,110 @@ test('PATCH with empty body returns 400', async () => {
   assert.equal(res.statusCode, 400);
 });
 
+test('GET last-session requires auth', async () => {
+  const res = await app.inject({ method: 'GET', url: '/api/templates/1/last-session' });
+  assert.equal(res.statusCode, 401);
+});
+
+test('GET last-session on unknown template returns 404', async () => {
+  const res = await app.inject({
+    method: 'GET', url: '/api/templates/999999/last-session', headers: { cookie },
+  });
+  assert.equal(res.statusCode, 404);
+});
+
+test('GET last-session with no finalized sessions returns null', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'NeverFinalized', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'x' }],
+    },
+  });
+  const tpl = create.json();
+  const colId = tpl.columns[0].id;
+  const draftId = '019dbaf6-6425-79fc-874e-df11ade61460';
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${draftId}`, headers: { cookie },
+    payload: {
+      id: draftId,
+      template_id: tpl.id,
+      started_at: Date.now(),
+      updated_at: Date.now(),
+      client_version: 1,
+      values: [{ row_index: 0, column_id: colId, value_num: 1 }],
+    },
+  });
+
+  const res = await app.inject({
+    method: 'GET', url: `/api/templates/${tpl.id}/last-session`, headers: { cookie },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body, 'null');
+});
+
+test('GET last-session returns the most recent finalized session with its values', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'BenchOne', default_rows: 3, rows_fixed: 1,
+      columns: [{ name: 'reps' }],
+    },
+  });
+  const tpl = create.json();
+  const colId = tpl.columns[0].id;
+
+  const olderId = '019dbaf6-6425-79fc-874e-df11ade61470';
+  const newerId = '019dbaf6-6425-79fc-874e-df11ade61471';
+
+  // Older session
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${olderId}`, headers: { cookie },
+    payload: {
+      id: olderId, template_id: tpl.id,
+      started_at: Date.now() - 1000, updated_at: Date.now() - 1000,
+      client_version: 1,
+      values: [
+        { row_index: 0, column_id: colId, value_num: 5 },
+        { row_index: 1, column_id: colId, value_num: 6 },
+      ],
+    },
+  });
+  await app.inject({
+    method: 'POST', url: `/api/sessions/${olderId}/finalize`, headers: { cookie },
+    payload: { client_version: 1 },
+  });
+
+  // Newer session
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${newerId}`, headers: { cookie },
+    payload: {
+      id: newerId, template_id: tpl.id,
+      started_at: Date.now(), updated_at: Date.now(),
+      client_version: 1,
+      values: [
+        { row_index: 0, column_id: colId, value_num: 7 },
+        { row_index: 1, column_id: colId, value_num: 8 },
+        { row_index: 2, column_id: colId, value_num: 9 },
+      ],
+    },
+  });
+  await app.inject({
+    method: 'POST', url: `/api/sessions/${newerId}/finalize`, headers: { cookie },
+    payload: { client_version: 1 },
+  });
+
+  const res = await app.inject({
+    method: 'GET', url: `/api/templates/${tpl.id}/last-session`, headers: { cookie },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.id, newerId, 'returns most recent finalized');
+  assert.equal(body.values.length, 3);
+  assert.equal(body.values[0].value_num, 7);
+  assert.equal(body.values[2].value_num, 9);
+});
+
 test('new template id can back a session', async () => {
   const create = await app.inject({
     method: 'POST', url: '/api/templates', headers: { cookie },

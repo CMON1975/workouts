@@ -103,6 +103,34 @@ export default async function templatesRoutes(app) {
     return templates;
   });
 
+  app.get('/api/templates/:id/last-session', {
+    schema: {
+      params: { type: 'object', properties: { id: { type: 'integer' } } },
+    },
+  }, async (req, reply) => {
+    const db = app.db;
+    const id = Number(req.params.id);
+    const tpl = db.prepare('SELECT id FROM templates WHERE id = ?').get(id);
+    if (!tpl) return reply.code(404).send({ error: 'not found' });
+
+    const session = db.prepare(`
+      SELECT id, started_at, finalized_at
+        FROM sessions
+       WHERE template_id = ? AND finalized_at IS NOT NULL
+       ORDER BY finalized_at DESC
+       LIMIT 1
+    `).get(id);
+    if (!session) return reply.code(200).send(null);
+
+    session.values = db.prepare(`
+      SELECT row_index, column_id, value_num, value_text
+        FROM session_values
+       WHERE session_id = ?
+       ORDER BY row_index, column_id
+    `).all(session.id);
+    return reply.code(200).send(session);
+  });
+
   app.post('/api/templates', {
     schema: { body: createBodySchema },
   }, async (req, reply) => {

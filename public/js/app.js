@@ -6,7 +6,7 @@ import { createSessionState } from './session-state.js';
 import {
   renderSessionForm, renderStatus,
   renderHistoryList, renderSessionDetail,
-  renderManageList,
+  renderManageList, applyPreviousHints,
 } from './renderer.js';
 
 const els = {
@@ -113,6 +113,19 @@ function bindSession(draft, template) {
   show(els.submit);
   els.submit.disabled = false;
   showView('session');
+
+  loadPreviousHints(template, draft.id);
+}
+
+async function loadPreviousHints(template, draftId) {
+  try {
+    const prev = await api.lastTemplateSession(template.id);
+    if (!prev) return;
+    if (currentSession?.getDraft()?.id !== draftId) return;
+    applyPreviousHints(els.sessionRoot, { template, prev });
+  } catch (err) {
+    console.warn('previous fetch failed', err);
+  }
 }
 
 async function reconcileWithServer(draft) {
