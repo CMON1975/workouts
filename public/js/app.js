@@ -107,6 +107,58 @@ function templatesById() {
   return new Map(templates.map(t => [t.id, t]));
 }
 
+async function tryResumeWorkout() {
+  const wid = await getActiveWorkoutId();
+  if (!wid) return false;
+
+  const local = await getWorkout(wid);
+  if (!local) {
+    await clearActiveWorkoutId();
+    return false;
+  }
+
+  let server = null;
+  try {
+    server = await api.getWorkout(wid);
+  } catch (err) {
+    if (err.status === 404) {
+      await deleteWorkout(wid);
+      return false;
+    }
+    // 401 / network: fall through on local copy.
+  }
+  if (server?.finalized_at) {
+    await deleteWorkout(wid);
+    return false;
+  }
+
+  const routine = routines.find(r => r.id === local.routine_id);
+  if (!routine || !routine.templates.length) {
+    console.warn('cannot resume workout — routine missing or empty', local.routine_id);
+    await deleteWorkout(wid);
+    return false;
+  }
+
+  const lastIdx = routine.templates.length - 1;
+  const idx = Math.max(0, Math.min(local.current_index ?? 0, lastIdx));
+
+  activeWorkout = {
+    routine,
+    workoutId: wid,
+    workoutClientVersion: local.client_version ?? 1,
+    startedAt: local.started_at,
+    currentIndex: idx,
+    sessionIds: local.session_ids || {},
+  };
+
+  els.resumeBanner.hidden = false;
+  els.resumeBanner.textContent = `Resumed ${routine.name} at exercise ${idx + 1}`;
+  setTimeout(() => { els.resumeBanner.hidden = true; }, 4000);
+
+  await bindCurrentExercise();
+  return true;
+}
+
 async function tryAutoRestore() {
   const lastId = await getLastActiveSessionId();
   if (!lastId) return false;
@@ -285,29 +337,43 @@ async function bindCurrentExercise() {
   const template = routine.templates[currentIndex];
 
   let sid = activeWorkout.sessionIds[currentIndex];
-  if (!sid) {
+  let draft = null;
+  if (sid) {
+    // Resume path: this index already has a sid; try to recover its in-progress draft.
+    const local = (await getDraft(sid)) || readShadow(sid);
+    if (local && !local.finalized_at) {
+      draft = local;
+      // workout_id may be missing from older shadows; make sure the belongs-to link is present.
+      draft.workout_id = activeWorkout.workoutId;
+    }
+  } else {
     sid = uuidv7();
     activeWorkout.sessionIds[currentIndex] = sid;
     await persistActiveWorkout();
   }
 
-  const draft = {
-    id: sid,
-    template_id: template.id,
-    started_at: Date.now(),
-    updated_at: Date.now(),
-    client_version: 0,
-    finalized_at: null,
-    notes: null,
-    workout_id: activeWorkout.workoutId,
-    values: [],
-  };
+  if (!draft) {
+    draft = {
+      id: sid,
+      template_id: template.id,
+      started_at: Date.now(),
+      updated_at: Date.now(),
+      client_version: 0,
+      finalized_at: null,
+      notes: null,
+      workout_id: activeWorkout.workoutId,
+      values: [],
+    };
+  }
   bindSessionTo({
     draft, template,
     formRoot: els.runnerRoot, statusEl: els.runnerStatus,
   });
   updateRunnerHeader();
   showView('runner');
+
+  // Reconcile in background if we restored a non-trivial local draft.
+  if (draft.client_version > 0) reconcileWithServer(draft);
 }
 
 function updateRunnerHeader() {
@@ -324,15 +390,27 @@ function updateRunnerHeader() {
 async function handleRunnerNext() {
   if (!activeWorkout || !currentSession) return;
   els.runnerNext.disabled = true;
+
+  const savedIndex = activeWorkout.currentIndex;
+  const nextIndex = savedIndex + 1;
+  const isLast = nextIndex >= activeWorkout.routine.templates.length;
+
+  // Persist the advance *before* finalizing, so a crash/lock mid-finalize
+  // doesn't leave IDB pointing at the just-finished exercise. If finalize
+  // fails, roll currentIndex back.
+  activeWorkout.currentIndex = isLast ? savedIndex : nextIndex;
+  await persistActiveWorkout();
+
   try {
     await currentSession.finalize();
   } catch (err) {
+    activeWorkout.currentIndex = savedIndex;
+    await persistActiveWorkout();
     alert('Saving this exercise failed — try again.');
     els.runnerNext.disabled = false;
     return;
   }
-  const nextIndex = activeWorkout.currentIndex + 1;
-  const isLast = nextIndex >= activeWorkout.routine.templates.length;
+
   if (isLast) {
     await finalizeActiveWorkout();
     await resetRunner();
@@ -340,8 +418,6 @@ async function handleRunnerNext() {
     goHome();
     return;
   }
-  activeWorkout.currentIndex = nextIndex;
-  await persistActiveWorkout();
   await bindCurrentExercise();
   els.runnerNext.disabled = false;
 }
@@ -746,14 +822,17 @@ async function enterApp() {
   renderHomeRoutines();
   showView('home');
 
-  const restored = await tryAutoRestore();
-  if (restored) {
-    const template = templates.find(t => t.id === restored.template_id);
-    if (template) {
-      els.resumeBanner.hidden = false;
-      els.resumeBanner.textContent = `Resumed draft for ${template.name}`;
-      resumeSession(restored);
-      setTimeout(() => { els.resumeBanner.hidden = true; }, 4000);
+  const workoutResumed = await tryResumeWorkout();
+  if (!workoutResumed) {
+    const restored = await tryAutoRestore();
+    if (restored) {
+      const template = templates.find(t => t.id === restored.template_id);
+      if (template) {
+        els.resumeBanner.hidden = false;
+        els.resumeBanner.textContent = `Resumed draft for ${template.name}`;
+        resumeSession(restored);
+        setTimeout(() => { els.resumeBanner.hidden = true; }, 4000);
+      }
     }
   }
 
