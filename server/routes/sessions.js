@@ -11,12 +11,13 @@ export default async function sessionsRoutes(app) {
           template_id: { type: 'integer' },
           limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
           finalized: { type: 'boolean' },
+          include_workout_sessions: { type: 'boolean', default: true },
         },
       },
     },
   }, async (req) => {
     const db = app.db;
-    const { template_id, limit, finalized } = req.query;
+    const { template_id, limit, finalized, include_workout_sessions } = req.query;
 
     const where = [];
     const params = [];
@@ -28,6 +29,9 @@ export default async function sessionsRoutes(app) {
       where.push('finalized_at IS NOT NULL');
     } else if (finalized === false) {
       where.push('finalized_at IS NULL');
+    }
+    if (include_workout_sessions === false) {
+      where.push('workout_id IS NULL');
     }
     const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 

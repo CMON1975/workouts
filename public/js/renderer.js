@@ -7,16 +7,16 @@ export function renderSessionForm(root, { template, draft, onInput }) {
 
   const form = document.createElement('div');
   form.className = 'session-form';
-  if (!template.rows_fixed) form.classList.add('no-row-labels');
 
   const valuesMax = draft.values.reduce((m, v) => Math.max(m, v.row_index + 1), 0);
   const rows = Math.max(template.default_rows, valuesMax);
+  if (rows <= 1) form.classList.add('no-row-labels');
 
   for (let r = 0; r < rows; r++) {
     const rowEl = document.createElement('div');
     rowEl.className = 'session-row';
 
-    if (template.rows_fixed) {
+    if (rows > 1) {
       const label = document.createElement('label');
       label.textContent = `Set ${r + 1}`;
       rowEl.appendChild(label);
@@ -95,9 +95,42 @@ function summarizeValues(session, template) {
   return firstCol.unit ? `${joined} ${firstCol.unit}` : joined;
 }
 
-export function renderHistoryList(root, { sessions, templatesById, onPick }) {
+export function renderHistoryList(root, { items, templatesById, onPickSession, onPickWorkout }) {
   root.innerHTML = '';
-  for (const s of sessions) {
+  for (const item of items) {
+    if (item.type === 'workout') {
+      const w = item.workout;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'history-row is-workout';
+      btn.dataset.workoutId = w.id;
+
+      const primary = document.createElement('div');
+      primary.className = 'history-primary';
+      primary.textContent = w.routine_name ?? 'Workout';
+
+      const meta = document.createElement('div');
+      meta.className = 'history-meta';
+      const ts = w.finalized_at ?? w.started_at;
+      meta.textContent = formatDate(ts);
+
+      const summary = document.createElement('div');
+      summary.className = 'history-summary';
+      const n = w.sessions?.length ?? 0;
+      const names = (w.sessions ?? [])
+        .map(s => templatesById.get(s.template_id)?.name)
+        .filter(Boolean)
+        .join(', ');
+      summary.textContent = `${n} exercise${n === 1 ? '' : 's'}${names ? ': ' + names : ''}`;
+
+      btn.appendChild(primary);
+      btn.appendChild(summary);
+      btn.appendChild(meta);
+      btn.addEventListener('click', () => onPickWorkout(w));
+      root.appendChild(btn);
+      continue;
+    }
+    const s = item.session;
     const template = templatesById.get(s.template_id);
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -106,7 +139,7 @@ export function renderHistoryList(root, { sessions, templatesById, onPick }) {
 
     const primary = document.createElement('div');
     primary.className = 'history-primary';
-    primary.textContent = template?.name ?? `Template #${s.template_id}`;
+    primary.textContent = template?.name ?? `Exercise #${s.template_id}`;
 
     const meta = document.createElement('div');
     meta.className = 'history-meta';
@@ -120,38 +153,28 @@ export function renderHistoryList(root, { sessions, templatesById, onPick }) {
     btn.appendChild(primary);
     btn.appendChild(summary);
     btn.appendChild(meta);
-    btn.addEventListener('click', () => onPick(s));
+    btn.addEventListener('click', () => onPickSession(s));
     root.appendChild(btn);
   }
 }
 
-export function renderSessionDetail(root, { session, template }) {
-  root.innerHTML = '';
-  const h = document.createElement('h2');
-  h.textContent = template?.name ?? 'Session';
-  root.appendChild(h);
-
-  const ts = session.finalized_at ?? session.started_at;
-  const meta = document.createElement('p');
-  meta.className = 'muted';
-  meta.textContent = (session.finalized_at ? 'Submitted ' : 'Started ') + formatDate(ts);
-  root.appendChild(meta);
-
+function renderSessionTable(root, { session, template }) {
   if (!template) {
     const warn = document.createElement('p');
-    warn.textContent = 'Template definition not available.';
+    warn.textContent = 'Exercise definition not available.';
     root.appendChild(warn);
     return;
   }
 
   const maxRow = session.values.reduce((m, v) => Math.max(m, v.row_index), 0);
-  const rows = maxRow + 1;
+  const rows = Math.max(maxRow + 1, 1);
   const table = document.createElement('table');
   table.className = 'detail-table';
 
+  const showRowLabels = rows > 1;
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
-  headRow.appendChild(document.createElement('th'));
+  if (showRowLabels) headRow.appendChild(document.createElement('th'));
   for (const col of template.columns) {
     const th = document.createElement('th');
     th.textContent = col.name + (col.unit ? ` (${col.unit})` : '');
@@ -163,10 +186,12 @@ export function renderSessionDetail(root, { session, template }) {
   const tbody = document.createElement('tbody');
   for (let r = 0; r < rows; r++) {
     const tr = document.createElement('tr');
-    const label = document.createElement('th');
-    label.scope = 'row';
-    label.textContent = template.rows_fixed ? `Set ${r + 1}` : `Row ${r + 1}`;
-    tr.appendChild(label);
+    if (showRowLabels) {
+      const label = document.createElement('th');
+      label.scope = 'row';
+      label.textContent = `Set ${r + 1}`;
+      tr.appendChild(label);
+    }
     for (const col of template.columns) {
       const td = document.createElement('td');
       const v = session.values.find(x => x.row_index === r && x.column_id === col.id);
@@ -181,6 +206,52 @@ export function renderSessionDetail(root, { session, template }) {
   }
   table.appendChild(tbody);
   root.appendChild(table);
+}
+
+export function renderSessionDetail(root, { session, template }) {
+  root.innerHTML = '';
+  const h = document.createElement('h2');
+  h.textContent = template?.name ?? 'Session';
+  root.appendChild(h);
+
+  const ts = session.finalized_at ?? session.started_at;
+  const meta = document.createElement('p');
+  meta.className = 'muted';
+  meta.textContent = (session.finalized_at ? 'Submitted ' : 'Started ') + formatDate(ts);
+  root.appendChild(meta);
+
+  renderSessionTable(root, { session, template });
+}
+
+export function renderWorkoutDetail(root, { workout, templatesById }) {
+  root.innerHTML = '';
+  const h = document.createElement('h2');
+  h.textContent = workout.routine_name ?? 'Workout';
+  root.appendChild(h);
+
+  const ts = workout.finalized_at ?? workout.started_at;
+  const meta = document.createElement('p');
+  meta.className = 'muted';
+  meta.textContent = (workout.finalized_at ? 'Submitted ' : 'Started ') + formatDate(ts);
+  root.appendChild(meta);
+
+  const sessions = workout.sessions ?? [];
+  if (!sessions.length) {
+    const p = document.createElement('p');
+    p.className = 'muted';
+    p.textContent = 'No exercises recorded.';
+    root.appendChild(p);
+    return;
+  }
+
+  for (const session of sessions) {
+    const template = templatesById.get(session.template_id);
+    const sub = document.createElement('h3');
+    sub.className = 'workout-exercise-name';
+    sub.textContent = template?.name ?? `Exercise #${session.template_id}`;
+    root.appendChild(sub);
+    renderSessionTable(root, { session, template });
+  }
 }
 
 function describeAge(ms) {

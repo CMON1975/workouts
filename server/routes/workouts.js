@@ -32,6 +32,13 @@ function loadWorkout(db, id) {
      WHERE s.workout_id = ?
      ORDER BY rt.position
   `).all(w.routine_id, id);
+  const valsStmt = db.prepare(`
+    SELECT row_index, column_id, value_num, value_text
+      FROM session_values
+     WHERE session_id = ?
+     ORDER BY row_index, column_id
+  `);
+  for (const s of w.sessions) s.values = valsStmt.all(s.id);
   return w;
 }
 

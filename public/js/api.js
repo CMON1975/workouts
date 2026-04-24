@@ -61,6 +61,14 @@ export const api = {
     const s = qs.toString();
     return request('/api/sessions' + (s ? '?' + s : ''));
   },
+  listWorkouts: (params = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null) qs.set(k, String(v));
+    }
+    const s = qs.toString();
+    return request('/api/workouts' + (s ? '?' + s : ''));
+  },
   getSession: (id) => request('/api/sessions/' + encodeURIComponent(id)),
   patchDraft: (id, draft) => request('/api/drafts/' + encodeURIComponent(id), {
     method: 'PATCH',

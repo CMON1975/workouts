@@ -9,7 +9,7 @@ import { installHideFlush, installOutboxDrainers, drainOutbox, readShadow } from
 import { createSessionState } from './session-state.js';
 import {
   renderSessionForm, renderStatus,
-  renderHistoryList, renderSessionDetail,
+  renderHistoryList, renderSessionDetail, renderWorkoutDetail,
   renderManageList, applyPreviousHints,
   renderRoutineList, renderRoutineBuilder, renderRoutineManageList,
 } from './renderer.js';
@@ -41,10 +41,6 @@ const els = {
   newTplBack: document.getElementById('new-tpl-back'),
   newTplForm: document.getElementById('new-tpl-form'),
   ntName: document.getElementById('nt-name'),
-  ntSetsPanel: document.getElementById('nt-sets'),
-  ntRowsPanel: document.getElementById('nt-rows'),
-  ntMetric: document.getElementById('nt-metric'),
-  ntUnit: document.getElementById('nt-unit'),
   ntSetsCount: document.getElementById('nt-sets-count'),
   ntAddCol: document.getElementById('nt-add-col'),
   ntColBuilder: document.getElementById('nt-col-builder'),
@@ -255,7 +251,7 @@ function renderTemplateList() {
   if (!active.length) {
     const hint = document.createElement('p');
     hint.className = 'muted';
-    hint.textContent = 'No active templates. Tap "New template" to add one.';
+    hint.textContent = 'No exercises yet. Tap "New exercise" to add one.';
     els.templateList.appendChild(hint);
     return;
   }
@@ -481,15 +477,24 @@ async function openHistory() {
   els.historyList.innerHTML = '';
   hide(els.historyEmpty);
   try {
-    const sessions = await api.listSessions({ finalized: true, limit: 100 });
-    if (!sessions.length) {
+    const [sessions, workouts] = await Promise.all([
+      api.listSessions({ finalized: true, include_workout_sessions: false, limit: 100 }),
+      api.listWorkouts({ finalized: true, limit: 100 }),
+    ]);
+    const items = [
+      ...sessions.map(s => ({ type: 'session', session: s, ts: s.finalized_at ?? s.started_at })),
+      ...workouts.map(w => ({ type: 'workout', workout: w, ts: w.finalized_at ?? w.started_at })),
+    ].sort((a, b) => b.ts - a.ts);
+
+    if (!items.length) {
       show(els.historyEmpty);
       return;
     }
     renderHistoryList(els.historyList, {
-      sessions,
+      items,
       templatesById: templatesById(),
-      onPick: (s) => openDetail(s),
+      onPickSession: (s) => openDetail(s),
+      onPickWorkout: (w) => openWorkoutDetail(w),
     });
   } catch (err) {
     console.error(err);
@@ -504,6 +509,18 @@ function openDetail(session) {
   showView('detail');
 }
 
+async function openWorkoutDetail(summary) {
+  try {
+    const full = await api.getWorkout(summary.id);
+    detailOrigin = 'history';
+    renderWorkoutDetail(els.detailRoot, { workout: full, templatesById: templatesById() });
+    showView('detail');
+  } catch (err) {
+    console.error(err);
+    alert('Could not load workout.');
+  }
+}
+
 function goHome() {
   currentSession = null;
   showView('home');
@@ -514,22 +531,11 @@ let rowColumns = [];
 function openNewTemplate() {
   els.newTplForm.reset();
   els.ntErr.textContent = '';
-  rowColumns = [{ name: '', value_type: 'text' }];
+  rowColumns = [{ name: '', value_type: 'number', unit: '' }];
   renderColBuilder();
-  setModePanels('sets');
   els.ntSubmit.disabled = false;
   showView('newTpl');
   setTimeout(() => els.ntName.focus(), 0);
-}
-
-function setModePanels(mode) {
-  els.ntSetsPanel.hidden = mode !== 'sets';
-  els.ntRowsPanel.hidden = mode !== 'rows';
-}
-
-function currentMode() {
-  const checked = els.newTplForm.querySelector('input[name="nt-mode"]:checked');
-  return checked ? checked.value : 'sets';
 }
 
 function renderColBuilder() {
@@ -540,15 +546,16 @@ function renderColBuilder() {
 
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
+    nameInput.className = 'col-name';
     nameInput.maxLength = 50;
-    nameInput.placeholder = 'Column name';
+    nameInput.placeholder = 'Column name (e.g. reps, weight)';
     nameInput.autocomplete = 'off';
     nameInput.value = col.name;
     nameInput.addEventListener('input', () => { rowColumns[i].name = nameInput.value; });
     row.appendChild(nameInput);
 
     const typeSel = document.createElement('select');
-    for (const t of ['text', 'number']) {
+    for (const t of ['number', 'text']) {
       const opt = document.createElement('option');
       opt.value = t;
       opt.textContent = t;
@@ -557,6 +564,16 @@ function renderColBuilder() {
     }
     typeSel.addEventListener('change', () => { rowColumns[i].value_type = typeSel.value; });
     row.appendChild(typeSel);
+
+    const unitInput = document.createElement('input');
+    unitInput.type = 'text';
+    unitInput.className = 'col-unit';
+    unitInput.maxLength = 20;
+    unitInput.placeholder = 'unit';
+    unitInput.autocomplete = 'off';
+    unitInput.value = col.unit || '';
+    unitInput.addEventListener('input', () => { rowColumns[i].unit = unitInput.value; });
+    row.appendChild(unitInput);
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
@@ -576,31 +593,13 @@ function renderColBuilder() {
 
 function buildTemplateBody() {
   const name = els.ntName.value.trim();
-  if (!name) return { error: 'Template name is required.' };
-  const mode = currentMode();
-  if (mode === 'sets') {
-    const metric = els.ntMetric.value.trim();
-    if (!metric) return { error: 'Metric name is required.' };
-    const unit = els.ntUnit.value.trim();
-    const count = Number(els.ntSetsCount.value);
-    if (!Number.isInteger(count) || count < 1 || count > 100) {
-      return { error: 'Sets must be between 1 and 100.' };
-    }
-    return {
-      body: {
-        name,
-        default_rows: count,
-        rows_fixed: 1,
-        columns: [{
-          name: metric,
-          unit: unit || null,
-          value_type: 'number',
-        }],
-      },
-    };
-  }
+  if (!name) return { error: 'Exercise name is required.' };
   const cols = rowColumns
-    .map(c => ({ name: c.name.trim(), value_type: c.value_type }))
+    .map(c => ({
+      name: c.name.trim(),
+      value_type: c.value_type,
+      unit: (c.unit || '').trim() || null,
+    }))
     .filter(c => c.name);
   if (!cols.length) return { error: 'At least one column is required.' };
   if (cols.length > 16) return { error: 'At most 16 columns.' };
@@ -608,11 +607,15 @@ function buildTemplateBody() {
   if (new Set(lower).size !== lower.length) {
     return { error: 'Column names must be unique.' };
   }
+  const count = Number(els.ntSetsCount.value);
+  if (!Number.isInteger(count) || count < 1 || count > 100) {
+    return { error: 'Sets must be between 1 and 100.' };
+  }
   return {
     body: {
       name,
-      default_rows: 1,
-      rows_fixed: 0,
+      default_rows: count,
+      rows_fixed: 1,
       columns: cols,
     },
   };
@@ -633,9 +636,9 @@ async function handleNewTemplateSubmit(e) {
     showView('home');
   } catch (err) {
     if (err.status === 409) {
-      els.ntErr.textContent = 'A template with that name already exists.';
+      els.ntErr.textContent = 'An exercise with that name already exists.';
     } else if (err.status === 400) {
-      els.ntErr.textContent = err.body?.error || 'Invalid template.';
+      els.ntErr.textContent = err.body?.error || 'Invalid exercise.';
     } else {
       els.ntErr.textContent = 'Save failed — try again.';
     }
@@ -667,7 +670,7 @@ function renderManage() {
 }
 
 async function handleRename(tpl) {
-  const next = prompt('Rename template', tpl.name);
+  const next = prompt('Rename exercise', tpl.name);
   if (next == null) return;
   const trimmed = next.trim();
   if (!trimmed || trimmed === tpl.name) return;
@@ -678,7 +681,7 @@ async function handleRename(tpl) {
     renderManage();
     renderTemplateList();
   } catch (err) {
-    if (err.status === 409) alert('A template with that name already exists.');
+    if (err.status === 409) alert('An exercise with that name already exists.');
     else alert('Rename failed.');
   }
 }
@@ -888,12 +891,9 @@ async function boot() {
   els.newTemplateBtn.addEventListener('click', openNewTemplate);
   els.newTplBack.addEventListener('click', goHome);
   els.newTplForm.addEventListener('submit', handleNewTemplateSubmit);
-  els.newTplForm.querySelectorAll('input[name="nt-mode"]').forEach(r => {
-    r.addEventListener('change', () => setModePanels(currentMode()));
-  });
   els.ntAddCol.addEventListener('click', () => {
     if (rowColumns.length >= 16) return;
-    rowColumns.push({ name: '', value_type: 'text' });
+    rowColumns.push({ name: '', value_type: 'number', unit: '' });
     renderColBuilder();
   });
   els.manageBtn.addEventListener('click', openManage);

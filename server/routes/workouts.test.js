@@ -343,6 +343,92 @@ test('PATCH /api/drafts with unknown workout_id returns 400 (FK)', async () => {
   assert.equal(res.statusCode, 400);
 });
 
+test('GET /api/workouts/:id includes values for each child session', async () => {
+  // Build a fresh workout with one sub-session that has values we can identify.
+  const rt = await app.inject({
+    method: 'POST', url: '/api/routines', headers: { cookie },
+    payload: { name: 'WithValues', template_ids: [bicepTplId] },
+  });
+  const routId = rt.json().id;
+  const wid = wuuid(30);
+  const sid = suuid(30);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`, headers: { cookie },
+    payload: { id: wid, routine_id: routId, started_at: Date.now(), updated_at: Date.now(), client_version: 1 },
+  });
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${sid}`, headers: { cookie },
+    payload: {
+      id: sid, template_id: bicepTplId, workout_id: wid,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+      values: [
+        { row_index: 0, column_id: bicepColId, value_num: 10 },
+        { row_index: 1, column_id: bicepColId, value_num: 12 },
+      ],
+    },
+  });
+
+  const res = await app.inject({
+    method: 'GET', url: `/api/workouts/${wid}`, headers: { cookie },
+  });
+  assert.equal(res.statusCode, 200);
+  const child = res.json().sessions[0];
+  assert.ok(Array.isArray(child.values));
+  assert.equal(child.values.length, 2);
+  assert.equal(child.values[0].value_num, 10);
+  assert.equal(child.values[1].value_num, 12);
+});
+
+test('GET /api/sessions?include_workout_sessions=false excludes workout-linked sessions', async () => {
+  // Create an ad-hoc (no workout_id) finalized session and a workout-linked finalized session.
+  const adHocSid = suuid(40);
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${adHocSid}`, headers: { cookie },
+    payload: {
+      id: adHocSid, template_id: bicepTplId,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+      values: [{ row_index: 0, column_id: bicepColId, value_num: 7 }],
+    },
+  });
+  await app.inject({
+    method: 'POST', url: `/api/sessions/${adHocSid}/finalize`, headers: { cookie },
+    payload: { client_version: 1 },
+  });
+
+  const wid = wuuid(40);
+  const workoutSid = suuid(41);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`, headers: { cookie },
+    payload: { id: wid, routine_id: armsRoutineId, started_at: Date.now(), updated_at: Date.now(), client_version: 1 },
+  });
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${workoutSid}`, headers: { cookie },
+    payload: {
+      id: workoutSid, template_id: bicepTplId, workout_id: wid,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+      values: [{ row_index: 0, column_id: bicepColId, value_num: 9 }],
+    },
+  });
+  await app.inject({
+    method: 'POST', url: `/api/sessions/${workoutSid}/finalize`, headers: { cookie },
+    payload: { client_version: 1 },
+  });
+
+  const included = await app.inject({
+    method: 'GET', url: '/api/sessions?finalized=true', headers: { cookie },
+  });
+  const includedIds = included.json().map(s => s.id);
+  assert.ok(includedIds.includes(adHocSid));
+  assert.ok(includedIds.includes(workoutSid), 'default includes workout-linked');
+
+  const excluded = await app.inject({
+    method: 'GET', url: '/api/sessions?finalized=true&include_workout_sessions=false', headers: { cookie },
+  });
+  const excludedIds = excluded.json().map(s => s.id);
+  assert.ok(excludedIds.includes(adHocSid), 'ad-hoc still included');
+  assert.ok(!excludedIds.includes(workoutSid), 'workout-linked excluded');
+});
+
 test('PATCH /api/drafts omitting workout_id defaults to NULL on insert', async () => {
   const sid = suuid(22);
   const res = await app.inject({
