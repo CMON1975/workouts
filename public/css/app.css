@@ -453,6 +453,46 @@ button.small {
   font-size: 1rem;
 }
 
+/* Runner */
+
+.runner-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.runner-header .back-btn { margin-bottom: 0; }
+
+.runner-progress {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+#runner-routine-name {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+#runner-step {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.runner-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.runner-actions button:not(.small) {
+  min-width: 96px;
+}
+
 /* History list */
 
 #history-list {

@@ -1,5 +1,5 @@
 const DB_NAME = 'workouts';
-const DB_VER = 1;
+const DB_VER = 2;
 
 let _dbPromise = null;
 
@@ -18,6 +18,9 @@ export function openDB() {
       }
       if (!db.objectStoreNames.contains('outbox')) {
         db.createObjectStore('outbox', { keyPath: 'id', autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains('workouts')) {
+        db.createObjectStore('workouts', { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -108,5 +111,48 @@ export async function updateOutbox(entry) {
   const db = await openDB();
   const t = tx(db, 'outbox', 'readwrite');
   t.objectStore('outbox').put(entry);
+  await awaitTx(t);
+}
+
+// --- Workouts (routine-run wrappers) ---
+
+export async function putWorkout(workout) {
+  const db = await openDB();
+  const t = tx(db, ['workouts', 'meta'], 'readwrite');
+  t.objectStore('workouts').put(workout);
+  t.objectStore('meta').put({ k: 'activeWorkoutId', v: workout.id });
+  await awaitTx(t);
+}
+
+export async function getWorkout(id) {
+  const db = await openDB();
+  return awaitReq(tx(db, 'workouts').objectStore('workouts').get(id));
+}
+
+export async function deleteWorkout(id) {
+  const db = await openDB();
+  const t = tx(db, ['workouts', 'meta'], 'readwrite');
+  t.objectStore('workouts').delete(id);
+  const metaReq = t.objectStore('meta').get('activeWorkoutId');
+  await new Promise((res) => {
+    metaReq.onsuccess = () => {
+      if (metaReq.result?.v === id) t.objectStore('meta').delete('activeWorkoutId');
+      res();
+    };
+    metaReq.onerror = () => res();
+  });
+  await awaitTx(t);
+}
+
+export async function getActiveWorkoutId() {
+  const db = await openDB();
+  const r = await awaitReq(tx(db, 'meta').objectStore('meta').get('activeWorkoutId'));
+  return r?.v ?? null;
+}
+
+export async function clearActiveWorkoutId() {
+  const db = await openDB();
+  const t = tx(db, 'meta', 'readwrite');
+  t.objectStore('meta').delete('activeWorkoutId');
   await awaitTx(t);
 }

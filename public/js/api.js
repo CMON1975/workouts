@@ -44,6 +44,15 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(body),
   }),
+  patchWorkout: (id, body) => request('/api/workouts/' + encodeURIComponent(id), {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  }),
+  finalizeWorkout: (id, clientVersion) => request('/api/workouts/' + encodeURIComponent(id) + '/finalize', {
+    method: 'POST',
+    body: JSON.stringify({ client_version: clientVersion }),
+  }),
+  getWorkout: (id) => request('/api/workouts/' + encodeURIComponent(id)),
   listSessions: (params = {}) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {

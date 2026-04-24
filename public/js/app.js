@@ -1,6 +1,10 @@
 import { api } from './api.js';
 import { uuidv7 } from './uuidv7.js';
-import { getDraft, getLastActiveSessionId } from './idb.js';
+import {
+  getDraft, getLastActiveSessionId,
+  putWorkout, getWorkout, deleteWorkout,
+  getActiveWorkoutId, clearActiveWorkoutId,
+} from './idb.js';
 import { installHideFlush, installOutboxDrainers, drainOutbox, readShadow } from './persistence.js';
 import { createSessionState } from './session-state.js';
 import {
@@ -68,16 +72,26 @@ const els = {
   manageRtBack: document.getElementById('manage-rt-back'),
   manageRtList: document.getElementById('manage-rt-list'),
   manageRtEmpty: document.getElementById('manage-rt-empty'),
+  runner: document.getElementById('runner'),
+  runnerBack: document.getElementById('runner-back'),
+  runnerRoot: document.getElementById('runner-root'),
+  runnerStatus: document.getElementById('runner-status'),
+  runnerRoutineName: document.getElementById('runner-routine-name'),
+  runnerStep: document.getElementById('runner-step'),
+  runnerNext: document.getElementById('runner-next'),
+  runnerEnd: document.getElementById('runner-end'),
   logout: document.getElementById('logout'),
   resumeBanner: document.getElementById('resume-banner'),
 };
 
-const VIEWS = ['home', 'session', 'history', 'detail', 'newTpl', 'manage', 'newRt', 'manageRt'];
+const VIEWS = ['home', 'session', 'history', 'detail', 'newTpl', 'manage', 'newRt', 'manageRt', 'runner'];
 
 let currentSession = null;
 let templates = [];
 let routines = [];
 let rtSelectedIds = [];
+let activeWorkout = null;       // { routine, workoutId, workoutClientVersion, startedAt, currentIndex, sessionIds: {0: uuid, ...} }
+let detailOrigin = 'history';   // 'history' | 'runner'
 
 function show(el) { el.hidden = false; }
 function hide(el) { el.hidden = true; }
@@ -115,35 +129,40 @@ function emptyDraft(template) {
   };
 }
 
-function bindSession(draft, template) {
+function bindSessionTo({ draft, template, formRoot, statusEl }) {
   const session = createSessionState({
     draft,
-    onChange: ({ state }) => renderStatus(els.status, { state }),
+    onChange: ({ state }) => renderStatus(statusEl, { state }),
   });
   currentSession = session;
 
-  renderSessionForm(els.sessionRoot, {
+  renderSessionForm(formRoot, {
     template,
     draft: session.getDraft(),
     onInput: session.onInput,
   });
-  renderStatus(els.status, { state: session.getState() });
+  renderStatus(statusEl, { state: session.getState() });
 
-  installHideFlush(() => currentSession?.getDraft());
+  loadPreviousHints(template, draft.id, formRoot);
+  return session;
+}
 
+function bindSession(draft, template) {
+  bindSessionTo({
+    draft, template,
+    formRoot: els.sessionRoot, statusEl: els.status,
+  });
   show(els.submit);
   els.submit.disabled = false;
   showView('session');
-
-  loadPreviousHints(template, draft.id);
 }
 
-async function loadPreviousHints(template, draftId) {
+async function loadPreviousHints(template, draftId, formRoot) {
   try {
     const prev = await api.lastTemplateSession(template.id);
     if (!prev) return;
     if (currentSession?.getDraft()?.id !== draftId) return;
-    applyPreviousHints(els.sessionRoot, { template, prev });
+    applyPreviousHints(formRoot, { template, prev });
   } catch (err) {
     console.warn('previous fetch failed', err);
   }
@@ -207,8 +226,178 @@ function renderHomeRoutines() {
   });
 }
 
-function handleRoutinePick(_routine) {
-  alert('Routine runner is coming in the next update.');
+async function handleRoutinePick(routine) {
+  if (!routine.templates.length) {
+    alert('This routine has no exercises.');
+    return;
+  }
+  if (activeWorkout) {
+    alert('Finish or End early on the current workout first.');
+    return;
+  }
+  const workoutId = uuidv7();
+  const startedAt = Date.now();
+  activeWorkout = {
+    routine,
+    workoutId,
+    workoutClientVersion: 1,
+    startedAt,
+    currentIndex: 0,
+    sessionIds: {},
+  };
+  try {
+    await api.patchWorkout(workoutId, {
+      id: workoutId,
+      routine_id: routine.id,
+      started_at: startedAt,
+      updated_at: startedAt,
+      client_version: 1,
+    });
+  } catch (err) {
+    console.error('start workout failed', err);
+    alert('Could not start workout — check connection and try again.');
+    activeWorkout = null;
+    return;
+  }
+  await persistActiveWorkout();
+  await bindCurrentExercise();
+}
+
+async function persistActiveWorkout() {
+  if (!activeWorkout) return;
+  try {
+    await putWorkout({
+      id: activeWorkout.workoutId,
+      routine_id: activeWorkout.routine.id,
+      started_at: activeWorkout.startedAt,
+      current_index: activeWorkout.currentIndex,
+      client_version: activeWorkout.workoutClientVersion,
+      session_ids: activeWorkout.sessionIds,
+    });
+  } catch (err) {
+    console.warn('workout IDB put failed', err);
+  }
+}
+
+async function bindCurrentExercise() {
+  if (!activeWorkout) return;
+  const { routine, currentIndex } = activeWorkout;
+  const template = routine.templates[currentIndex];
+
+  let sid = activeWorkout.sessionIds[currentIndex];
+  if (!sid) {
+    sid = uuidv7();
+    activeWorkout.sessionIds[currentIndex] = sid;
+    await persistActiveWorkout();
+  }
+
+  const draft = {
+    id: sid,
+    template_id: template.id,
+    started_at: Date.now(),
+    updated_at: Date.now(),
+    client_version: 0,
+    finalized_at: null,
+    notes: null,
+    workout_id: activeWorkout.workoutId,
+    values: [],
+  };
+  bindSessionTo({
+    draft, template,
+    formRoot: els.runnerRoot, statusEl: els.runnerStatus,
+  });
+  updateRunnerHeader();
+  showView('runner');
+}
+
+function updateRunnerHeader() {
+  if (!activeWorkout) return;
+  const { routine, currentIndex } = activeWorkout;
+  const n = routine.templates.length;
+  const template = routine.templates[currentIndex];
+  els.runnerRoutineName.textContent = routine.name;
+  els.runnerStep.textContent = `${currentIndex + 1} / ${n} · ${template.name}`;
+  els.runnerBack.hidden = currentIndex === 0;
+  els.runnerNext.textContent = currentIndex === n - 1 ? 'Finish' : 'Next';
+}
+
+async function handleRunnerNext() {
+  if (!activeWorkout || !currentSession) return;
+  els.runnerNext.disabled = true;
+  try {
+    await currentSession.finalize();
+  } catch (err) {
+    alert('Saving this exercise failed — try again.');
+    els.runnerNext.disabled = false;
+    return;
+  }
+  const nextIndex = activeWorkout.currentIndex + 1;
+  const isLast = nextIndex >= activeWorkout.routine.templates.length;
+  if (isLast) {
+    await finalizeActiveWorkout();
+    await resetRunner();
+    els.runnerNext.disabled = false;
+    goHome();
+    return;
+  }
+  activeWorkout.currentIndex = nextIndex;
+  await persistActiveWorkout();
+  await bindCurrentExercise();
+  els.runnerNext.disabled = false;
+}
+
+async function handleRunnerEnd() {
+  if (!activeWorkout) return;
+  if (!confirm('End this workout now? Past exercises are saved; remaining ones are skipped.')) return;
+  if (currentSession) {
+    const draft = currentSession.getDraft();
+    const hasValues = draft.values.some(
+      v => v.value_num != null || (v.value_text != null && v.value_text !== ''),
+    );
+    if (hasValues) {
+      try { await currentSession.finalize(); } catch (err) {
+        console.warn('finalizing current exercise failed on end-early', err);
+      }
+    }
+  }
+  await finalizeActiveWorkout();
+  await resetRunner();
+  goHome();
+}
+
+async function finalizeActiveWorkout() {
+  if (!activeWorkout) return;
+  try {
+    activeWorkout.workoutClientVersion += 1;
+    await api.finalizeWorkout(activeWorkout.workoutId, activeWorkout.workoutClientVersion);
+  } catch (err) {
+    console.warn('finalize workout failed', err);
+  }
+}
+
+async function resetRunner() {
+  if (activeWorkout) {
+    try { await deleteWorkout(activeWorkout.workoutId); } catch (_) {}
+    try { await clearActiveWorkoutId(); } catch (_) {}
+  }
+  activeWorkout = null;
+  currentSession = null;
+}
+
+async function handleRunnerBack() {
+  if (!activeWorkout || activeWorkout.currentIndex === 0) return;
+  const prevIndex = activeWorkout.currentIndex - 1;
+  const prevSid = activeWorkout.sessionIds[prevIndex];
+  const template = activeWorkout.routine.templates[prevIndex];
+  if (!prevSid) return;
+  try {
+    const session = await api.getSession(prevSid);
+    detailOrigin = 'runner';
+    renderSessionDetail(els.detailRoot, { session, template });
+    showView('detail');
+  } catch (err) {
+    alert('Could not load previous exercise.');
+  }
 }
 
 async function openHistory() {
@@ -234,6 +423,7 @@ async function openHistory() {
 
 function openDetail(session) {
   const template = templates.find(t => t.id === session.template_id);
+  detailOrigin = 'history';
   renderSessionDetail(els.detailRoot, { session, template });
   showView('detail');
 }
@@ -567,6 +757,7 @@ async function enterApp() {
     }
   }
 
+  installHideFlush(() => currentSession?.getDraft());
   installOutboxDrainers();
   drainOutbox();
 }
@@ -608,7 +799,13 @@ async function boot() {
   els.openHistory.addEventListener('click', openHistory);
   els.sessionBack.addEventListener('click', goHome);
   els.historyBack.addEventListener('click', goHome);
-  els.detailBack.addEventListener('click', openHistory);
+  els.detailBack.addEventListener('click', () => {
+    if (detailOrigin === 'runner' && activeWorkout) showView('runner');
+    else openHistory();
+  });
+  els.runnerBack.addEventListener('click', handleRunnerBack);
+  els.runnerNext.addEventListener('click', handleRunnerNext);
+  els.runnerEnd.addEventListener('click', handleRunnerEnd);
   els.newTemplateBtn.addEventListener('click', openNewTemplate);
   els.newTplBack.addEventListener('click', goHome);
   els.newTplForm.addEventListener('submit', handleNewTemplateSubmit);
