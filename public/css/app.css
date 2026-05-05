@@ -167,6 +167,35 @@ button:disabled { opacity: 0.5; }
   color: var(--muted);
 }
 
+.checkbox-row { padding: 12px 0; }
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 1.15rem;
+  color: var(--fg);
+  cursor: pointer;
+}
+.checkbox-field input[type="checkbox"] {
+  width: 28px;
+  height: 28px;
+}
+.checkbox-description {
+  margin: 8px 0 4px 0;
+  white-space: pre-wrap;
+}
+.detail-description {
+  margin: 0 0 4px 0;
+  white-space: pre-wrap;
+}
+#nt-description { width: 100%; min-height: 60px; resize: vertical; }
+.detail-checkbox {
+  font-size: 1.1rem;
+  margin: 0 0 8px 0;
+}
+.nt-kind { display: flex; flex-direction: column; gap: 4px; }
+.nt-kind label { font-weight: normal; }
+
 .session-footer {
   display: flex;
   align-items: center;

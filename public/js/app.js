@@ -44,6 +44,10 @@ const els = {
   ntSetsCount: document.getElementById('nt-sets-count'),
   ntAddCol: document.getElementById('nt-add-col'),
   ntColBuilder: document.getElementById('nt-col-builder'),
+  ntStandardFields: document.getElementById('nt-standard-fields'),
+  ntDescriptionField: document.getElementById('nt-description-field'),
+  ntDescription: document.getElementById('nt-description'),
+  ntKindRadios: document.querySelectorAll('input[name="nt-kind"]'),
   ntErr: document.getElementById('nt-err'),
   ntSubmit: document.getElementById('nt-submit'),
   manage: document.getElementById('manage'),
@@ -536,9 +540,21 @@ function openNewTemplate() {
   els.ntErr.textContent = '';
   rowColumns = [{ name: '', value_type: 'number', unit: '' }];
   renderColBuilder();
+  applyKindVisibility();
   els.ntSubmit.disabled = false;
   showView('newTpl');
   setTimeout(() => els.ntName.focus(), 0);
+}
+
+function selectedKind() {
+  for (const r of els.ntKindRadios) if (r.checked) return r.value;
+  return 'standard';
+}
+
+function applyKindVisibility() {
+  const kind = selectedKind();
+  els.ntStandardFields.hidden = kind !== 'standard';
+  els.ntDescriptionField.hidden = kind !== 'checkbox';
 }
 
 function renderColBuilder() {
@@ -597,6 +613,12 @@ function renderColBuilder() {
 function buildTemplateBody() {
   const name = els.ntName.value.trim();
   if (!name) return { error: 'Exercise name is required.' };
+  const kind = selectedKind();
+  if (kind === 'checkbox') {
+    const description = els.ntDescription.value.trim();
+    if (!description) return { error: 'Description is required.' };
+    return { body: { name, kind: 'checkbox', description } };
+  }
   const cols = rowColumns
     .map(c => ({
       name: c.name.trim(),
@@ -942,6 +964,7 @@ async function boot() {
     rowColumns.push({ name: '', value_type: 'number', unit: '' });
     renderColBuilder();
   });
+  for (const r of els.ntKindRadios) r.addEventListener('change', applyKindVisibility);
   els.manageBtn.addEventListener('click', openManage);
   els.manageBack.addEventListener('click', goHome);
   els.newRoutineBtn.addEventListener('click', openNewRoutine);

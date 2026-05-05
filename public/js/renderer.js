@@ -8,6 +8,12 @@ export function renderSessionForm(root, { template, draft, onInput }) {
   const form = document.createElement('div');
   form.className = 'session-form';
 
+  if (template.kind === 'checkbox') {
+    renderCheckboxField(form, { template, draft, onInput });
+    root.appendChild(form);
+    return;
+  }
+
   const valuesMax = draft.values.reduce((m, v) => Math.max(m, v.row_index + 1), 0);
   const rows = Math.max(template.default_rows, valuesMax);
   if (rows <= 1) form.classList.add('no-row-labels');
@@ -71,6 +77,53 @@ export function renderSessionForm(root, { template, draft, onInput }) {
   root.appendChild(form);
 }
 
+function renderCheckboxField(form, { template, draft, onInput }) {
+  const col = template.columns.find(c => c.name === 'completed');
+  if (!col) return;
+
+  if (template.description) {
+    const desc = document.createElement('p');
+    desc.className = 'checkbox-description';
+    desc.textContent = template.description;
+    form.appendChild(desc);
+  }
+
+  const existing = draft.values.find(v => v.row_index === 0 && v.column_id === col.id);
+
+  const row = document.createElement('div');
+  row.className = 'session-row checkbox-row';
+
+  const label = document.createElement('label');
+  label.className = 'checkbox-field';
+
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.dataset.rowIndex = '0';
+  input.dataset.columnId = String(col.id);
+  input.checked = existing?.value_num === 1;
+
+  const text = document.createElement('span');
+  text.textContent = 'Completed';
+
+  input.addEventListener('change', () => {
+    onInput((d) => {
+      const idx = d.values.findIndex(v => v.row_index === 0 && v.column_id === col.id);
+      const entry = {
+        row_index: 0,
+        column_id: col.id,
+        value_num: input.checked ? 1 : 0,
+        value_text: null,
+      };
+      if (idx >= 0) d.values[idx] = entry;
+      else d.values.push(entry);
+    });
+  });
+
+  label.append(input, text);
+  row.appendChild(label);
+  form.appendChild(row);
+}
+
 function formatDate(ms) {
   try {
     return new Date(ms).toLocaleString(undefined, {
@@ -86,6 +139,11 @@ function summarizeValues(session, template) {
   if (!template) return '';
   const firstCol = template.columns[0];
   if (!firstCol) return '';
+  if (template.kind === 'checkbox') {
+    const col = template.columns.find(c => c.name === 'completed');
+    const v = col && session.values.find(x => x.row_index === 0 && x.column_id === col.id);
+    return v?.value_num === 1 ? 'Done' : 'Not done';
+  }
   const cells = session.values
     .filter(v => v.column_id === firstCol.id)
     .sort((a, b) => a.row_index - b.row_index)
@@ -163,6 +221,22 @@ function renderSessionTable(root, { session, template }) {
     const warn = document.createElement('p');
     warn.textContent = 'Exercise definition not available.';
     root.appendChild(warn);
+    return;
+  }
+
+  if (template.kind === 'checkbox') {
+    if (template.description) {
+      const desc = document.createElement('p');
+      desc.className = 'detail-description';
+      desc.textContent = template.description;
+      root.appendChild(desc);
+    }
+    const col = template.columns.find(c => c.name === 'completed');
+    const v = col && session.values.find(x => x.row_index === 0 && x.column_id === col.id);
+    const status = document.createElement('p');
+    status.className = 'detail-checkbox';
+    status.textContent = v?.value_num === 1 ? '✓ Done' : '✗ Not done';
+    root.appendChild(status);
     return;
   }
 
@@ -292,6 +366,15 @@ export function applyPreviousHints(root, { template, prev }) {
     const field = input.parentElement;
     if (!field || field.querySelector('.prev-hint')) continue;
     const col = colsById.get(v.column_id);
+    if (template.kind === 'checkbox') {
+      const row = input.closest('.checkbox-row') ?? field;
+      if (row.querySelector('.prev-hint')) continue;
+      const hint = document.createElement('span');
+      hint.className = 'prev-hint';
+      hint.textContent = v.value_num === 1 ? 'was done' : 'was not done';
+      row.appendChild(hint);
+      continue;
+    }
     const raw = col?.value_type === 'text' ? (v.value_text ?? '') : (v.value_num ?? '');
     if (raw === '' || raw === null || raw === undefined) continue;
     const hint = document.createElement('span');
@@ -444,9 +527,14 @@ export function renderManageList(root, { templates, onRename, onArchiveToggle })
 
     const meta = document.createElement('div');
     meta.className = 'manage-meta';
-    const shape = t.rows_fixed
-      ? `${t.default_rows} set${t.default_rows === 1 ? '' : 's'} · ${t.columns.map(c => c.name).join(', ')}`
-      : `${t.columns.length} column${t.columns.length === 1 ? '' : 's'}: ${t.columns.map(c => c.name).join(', ')}`;
+    let shape;
+    if (t.kind === 'checkbox') {
+      shape = 'Checkbox · done / not done';
+    } else if (t.rows_fixed) {
+      shape = `${t.default_rows} set${t.default_rows === 1 ? '' : 's'} · ${t.columns.map(c => c.name).join(', ')}`;
+    } else {
+      shape = `${t.columns.length} column${t.columns.length === 1 ? '' : 's'}: ${t.columns.map(c => c.name).join(', ')}`;
+    }
     meta.textContent = shape;
     card.appendChild(meta);
 

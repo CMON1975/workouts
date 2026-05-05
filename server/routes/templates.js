@@ -1,6 +1,7 @@
 import { requireAuth } from '../auth.js';
 
 const VALUE_TYPES = ['number', 'text', 'duration'];
+const KINDS = ['standard', 'checkbox'];
 
 const columnSchema = {
   type: 'object',
@@ -12,11 +13,16 @@ const columnSchema = {
   },
 };
 
+// `kind: 'checkbox'` records only done/not-done; the server fills in the
+// columns and defaults so the client only has to send a name (and a
+// description, which the runner displays as static "what to do" text).
 const createBodySchema = {
   type: 'object',
-  required: ['name', 'columns', 'default_rows', 'rows_fixed'],
+  required: ['name'],
   properties: {
     name: { type: 'string', minLength: 1, maxLength: 100 },
+    kind: { type: 'string', enum: KINDS, default: 'standard' },
+    description: { type: ['string', 'null'], maxLength: 1000 },
     default_rows: { type: 'integer', minimum: 1, maximum: 100 },
     rows_fixed: { type: 'integer', minimum: 0, maximum: 1 },
     columns: { type: 'array', minItems: 1, maxItems: 16, items: columnSchema },
@@ -27,6 +33,7 @@ const patchBodySchema = {
   type: 'object',
   properties: {
     name: { type: 'string', minLength: 1, maxLength: 100 },
+    description: { type: ['string', 'null'], maxLength: 1000 },
     archived: { type: 'boolean' },
     default_rows: { type: 'integer', minimum: 1, maximum: 100 },
     rows_fixed: { type: 'integer', minimum: 0, maximum: 1 },
@@ -36,7 +43,7 @@ const patchBodySchema = {
 
 function loadTemplate(db, id) {
   const t = db.prepare(`
-    SELECT t.id, t.name, t.created_at, t.archived_at,
+    SELECT t.id, t.name, t.kind, t.description, t.created_at, t.archived_at,
            d.default_rows, d.rows_fixed
       FROM templates t
       LEFT JOIN template_defaults d ON d.template_id = t.id
@@ -82,7 +89,7 @@ export default async function templatesRoutes(app) {
     const includeArchived = req.query?.include_archived === true;
     const where = includeArchived ? '' : 'WHERE t.archived_at IS NULL';
     const templates = db.prepare(`
-      SELECT t.id, t.name, t.created_at, t.archived_at,
+      SELECT t.id, t.name, t.kind, t.description, t.created_at, t.archived_at,
              d.default_rows, d.rows_fixed
         FROM templates t
         LEFT JOIN template_defaults d ON d.template_id = t.id
@@ -138,8 +145,32 @@ export default async function templatesRoutes(app) {
     const body = req.body;
     const name = body.name.trim();
     if (!name) return reply.code(400).send({ error: 'name cannot be blank' });
-    if (!uniqueColumnNames(body.columns)) {
-      return reply.code(400).send({ error: 'column names must be unique and non-blank' });
+
+    const kind = body.kind || 'standard';
+    const description = body.description != null ? String(body.description).trim() : null;
+    let columns, defaultRows, rowsFixed;
+    if (kind === 'checkbox') {
+      // Checkbox templates record only done/not-done. The description is a
+      // template-level prose label rendered above the tickbox at run time.
+      if (!description) {
+        return reply.code(400).send({ error: 'description is required for checkbox templates' });
+      }
+      columns = [{ name: 'completed', unit: null, value_type: 'number' }];
+      defaultRows = 1;
+      rowsFixed = 1;
+    } else {
+      if (!Array.isArray(body.columns) || body.columns.length < 1) {
+        return reply.code(400).send({ error: 'columns required for standard templates' });
+      }
+      if (body.default_rows == null || body.rows_fixed == null) {
+        return reply.code(400).send({ error: 'default_rows and rows_fixed required for standard templates' });
+      }
+      if (!uniqueColumnNames(body.columns)) {
+        return reply.code(400).send({ error: 'column names must be unique and non-blank' });
+      }
+      columns = body.columns;
+      defaultRows = body.default_rows;
+      rowsFixed = body.rows_fixed;
     }
 
     const now = Date.now();
@@ -147,14 +178,14 @@ export default async function templatesRoutes(app) {
     try {
       newId = db.transaction(() => {
         const info = db.prepare(
-          'INSERT INTO templates (name, created_at) VALUES (?, ?)'
-        ).run(name, now);
+          'INSERT INTO templates (name, kind, description, created_at) VALUES (?, ?, ?, ?)'
+        ).run(name, kind, description, now);
         const id = info.lastInsertRowid;
         const colIns = db.prepare(`
           INSERT INTO template_columns (template_id, name, unit, position, value_type)
           VALUES (?, ?, ?, ?, ?)
         `);
-        body.columns.forEach((c, i) => {
+        columns.forEach((c, i) => {
           colIns.run(
             id,
             c.name.trim(),
@@ -166,7 +197,7 @@ export default async function templatesRoutes(app) {
         db.prepare(`
           INSERT INTO template_defaults (template_id, default_rows, rows_fixed)
           VALUES (?, ?, ?)
-        `).run(id, body.default_rows, body.rows_fixed);
+        `).run(id, defaultRows, rowsFixed);
         return id;
       })();
     } catch (err) {
@@ -204,6 +235,10 @@ export default async function templatesRoutes(app) {
           const name = body.name.trim();
           if (!name) throw new Error('BLANK_NAME');
           db.prepare('UPDATE templates SET name = ? WHERE id = ?').run(name, id);
+        }
+        if (body.description !== undefined) {
+          const desc = body.description == null ? null : String(body.description).trim() || null;
+          db.prepare('UPDATE templates SET description = ? WHERE id = ?').run(desc, id);
         }
         if (body.archived !== undefined) {
           const val = body.archived ? Date.now() : null;

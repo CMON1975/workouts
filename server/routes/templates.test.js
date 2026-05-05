@@ -417,3 +417,107 @@ test('new template id can back a session', async () => {
   });
   assert.equal(get.json().values[0].value_num, 1.5);
 });
+
+test('POST kind=checkbox stores description and synthesizes a completed column', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'Stretch routine',
+      kind: 'checkbox',
+      description: '10 min full-body stretch',
+    },
+  });
+  assert.equal(res.statusCode, 201);
+  const body = res.json();
+  assert.equal(body.kind, 'checkbox');
+  assert.equal(body.description, '10 min full-body stretch');
+  assert.equal(body.default_rows, 1);
+  assert.equal(body.rows_fixed, 1);
+  assert.deepEqual(body.columns.map(c => c.name), ['completed']);
+  assert.equal(body.columns[0].value_type, 'number');
+});
+
+test('POST kind=checkbox without description returns 400', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: { name: 'Cooldown', kind: 'checkbox' },
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('POST kind=checkbox with blank description returns 400', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: { name: 'Cooldown blank', kind: 'checkbox', description: '   ' },
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('POST kind=checkbox ignores client-supplied columns/defaults', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'Cooldown',
+      kind: 'checkbox',
+      description: 'Easy spin',
+      default_rows: 7,
+      rows_fixed: 0,
+      columns: [{ name: 'irrelevant' }, { name: 'also bad' }],
+    },
+  });
+  assert.equal(res.statusCode, 201);
+  const body = res.json();
+  assert.equal(body.default_rows, 1);
+  assert.equal(body.rows_fixed, 1);
+  assert.deepEqual(body.columns.map(c => c.name), ['completed']);
+});
+
+test('PATCH updates a template description', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'CheckboxRename',
+      kind: 'checkbox',
+      description: 'Initial copy',
+    },
+  });
+  const id = create.json().id;
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${id}`, headers: { cookie },
+    payload: { description: 'Updated copy' },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().description, 'Updated copy');
+});
+
+test('POST defaults kind to standard and surfaces it on GET', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'KindDefault', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'reps' }],
+    },
+  });
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.json().kind, 'standard');
+
+  const list = await app.inject({ method: 'GET', url: '/api/templates', headers: { cookie } });
+  const found = list.json().find(t => t.name === 'KindDefault');
+  assert.equal(found?.kind, 'standard');
+});
+
+test('POST standard with no columns is rejected', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: { name: 'NoColsStandard' },
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('POST with bad kind is rejected by schema', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: { name: 'BadKind', kind: 'whatever' },
+  });
+  assert.equal(res.statusCode, 400);
+});
