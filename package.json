@@ -12,7 +12,8 @@
     "dev": "node --env-file=.env --watch server/index.js",
     "dev:mobile": "bash scripts/dev-tunnel.sh",
     "test": "node --test --test-reporter=spec server/*.test.js server/**/*.test.js",
-    "hash-password": "node scripts/hash-password.js"
+    "hash-password": "node scripts/hash-password.js",
+    "seed": "node --env-file=.env scripts/seed-dev.js"
   },
   "dependencies": {
     "@fastify/rate-limit": "^10.2.2",
