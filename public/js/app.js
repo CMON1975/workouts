@@ -55,11 +55,13 @@ const els = {
   newRoutineBtn: document.getElementById('new-routine'),
   manageRoutinesBtn: document.getElementById('manage-routines'),
   newRt: document.getElementById('new-rt'),
+  newRtHeading: document.getElementById('new-rt-heading'),
   newRtBack: document.getElementById('new-rt-back'),
   newRtForm: document.getElementById('new-rt-form'),
   nrName: document.getElementById('nr-name'),
   nrSelected: document.getElementById('nr-selected'),
   nrSelectedEmpty: document.getElementById('nr-selected-empty'),
+  nrAvailableSection: document.getElementById('nr-available-section'),
   nrAvailable: document.getElementById('nr-available'),
   nrAvailableEmpty: document.getElementById('nr-available-empty'),
   nrErr: document.getElementById('nr-err'),
@@ -86,6 +88,7 @@ let currentSession = null;
 let templates = [];
 let routines = [];
 let rtSelectedIds = [];
+let rtEditingId = null;         // null = creating; routine id = editing existing
 let activeWorkout = null;       // { routine, workoutId, workoutClientVersion, startedAt, currentIndex, sessionIds: {0: uuid, ...} }
 let detailOrigin = 'history';   // 'history' | 'runner'
 
@@ -687,9 +690,46 @@ async function handleRename(tpl) {
 }
 
 function openNewRoutine() {
+  rtEditingId = null;
   els.newRtForm.reset();
   els.nrErr.textContent = '';
   rtSelectedIds = [];
+  els.newRtHeading.textContent = 'New routine';
+  els.nrSubmit.textContent = 'Save routine';
+  renderBuilder();
+  els.nrSubmit.disabled = false;
+  showView('newRt');
+  setTimeout(() => els.nrName.focus(), 0);
+}
+
+async function openEditRoutine(routine) {
+  // Pre-check: server will also enforce this on PATCH, but failing fast is nicer.
+  try {
+    const active = await api.listWorkouts({ routine_id: routine.id, finalized: false, limit: 1 });
+    if (active.length) {
+      alert('Finish or end the active workout before editing this routine.');
+      return;
+    }
+  } catch (err) {
+    console.warn('active-workout check failed', err);
+    // Fall through; the server will still refuse if there's a race.
+  }
+
+  let full;
+  try {
+    full = await api.routine(routine.id);
+  } catch (err) {
+    alert('Could not load routine.');
+    return;
+  }
+
+  rtEditingId = routine.id;
+  rtSelectedIds = full.templates.map(t => t.id);
+  els.newRtForm.reset();
+  els.nrErr.textContent = '';
+  els.nrName.value = full.name;
+  els.newRtHeading.textContent = 'Edit routine';
+  els.nrSubmit.textContent = 'Save changes';
   renderBuilder();
   els.nrSubmit.disabled = false;
   showView('newRt');
@@ -697,6 +737,8 @@ function openNewRoutine() {
 }
 
 function renderBuilder() {
+  const editing = rtEditingId != null;
+  els.nrAvailableSection.hidden = editing;
   renderRoutineBuilder({
     selectedRoot: els.nrSelected,
     availableRoot: els.nrAvailable,
@@ -704,6 +746,7 @@ function renderBuilder() {
     emptyAvailableEl: els.nrAvailableEmpty,
     templatesById: templatesById(),
     selectedIds: rtSelectedIds,
+    editing,
     onAdd: (id) => { rtSelectedIds.push(id); renderBuilder(); },
     onRemove: (id) => { rtSelectedIds = rtSelectedIds.filter(x => x !== id); renderBuilder(); },
     onMoveUp: (i) => {
@@ -719,7 +762,7 @@ function renderBuilder() {
   });
 }
 
-async function handleNewRoutineSubmit(e) {
+async function handleRoutineFormSubmit(e) {
   e.preventDefault();
   els.nrErr.textContent = '';
   const name = els.nrName.value.trim();
@@ -728,15 +771,35 @@ async function handleNewRoutineSubmit(e) {
 
   els.nrSubmit.disabled = true;
   try {
-    const created = await api.createRoutine({ name, template_ids: rtSelectedIds });
-    routines.push(created);
-    routines.sort((a, b) => a.name.localeCompare(b.name));
-    renderHomeRoutines();
-    showView('home');
+    if (rtEditingId != null) {
+      const updated = await api.updateRoutine(rtEditingId, { name, template_ids: rtSelectedIds });
+      const idx = routines.findIndex(r => r.id === rtEditingId);
+      if (idx >= 0) routines[idx] = updated; else routines.push(updated);
+      routines.sort((a, b) => a.name.localeCompare(b.name));
+      rtEditingId = null;
+      renderHomeRoutines();
+      renderManageRoutines();
+      showView('manageRt');
+    } else {
+      const created = await api.createRoutine({ name, template_ids: rtSelectedIds });
+      routines.push(created);
+      routines.sort((a, b) => a.name.localeCompare(b.name));
+      renderHomeRoutines();
+      showView('home');
+    }
   } catch (err) {
-    if (err.status === 409) els.nrErr.textContent = 'A routine with that name already exists.';
-    else if (err.status === 400) els.nrErr.textContent = err.body?.error || 'Invalid routine.';
-    else els.nrErr.textContent = 'Save failed — try again.';
+    if (err.status === 409) {
+      const msg = err.body?.error || '';
+      if (/active workout/i.test(msg)) {
+        els.nrErr.textContent = 'A workout was started on this routine. Finish or end it, then try again.';
+      } else {
+        els.nrErr.textContent = 'A routine with that name already exists.';
+      }
+    } else if (err.status === 400) {
+      els.nrErr.textContent = err.body?.error || 'Invalid routine.';
+    } else {
+      els.nrErr.textContent = 'Save failed — try again.';
+    }
     els.nrSubmit.disabled = false;
   }
 }
@@ -759,26 +822,9 @@ function renderManageRoutines() {
   });
   renderRoutineManageList(els.manageRtList, {
     routines: sorted,
-    onRename: handleRoutineRename,
+    onEdit: openEditRoutine,
     onArchiveToggle: handleRoutineArchiveToggle,
   });
-}
-
-async function handleRoutineRename(r) {
-  const next = prompt('Rename routine', r.name);
-  if (next == null) return;
-  const trimmed = next.trim();
-  if (!trimmed || trimmed === r.name) return;
-  try {
-    const updated = await api.updateRoutine(r.id, { name: trimmed });
-    const idx = routines.findIndex(x => x.id === r.id);
-    if (idx >= 0) routines[idx] = updated;
-    renderManageRoutines();
-    renderHomeRoutines();
-  } catch (err) {
-    if (err.status === 409) alert('A routine with that name already exists.');
-    else alert('Rename failed.');
-  }
 }
 
 async function handleRoutineArchiveToggle(r) {
@@ -900,7 +946,7 @@ async function boot() {
   els.manageBack.addEventListener('click', goHome);
   els.newRoutineBtn.addEventListener('click', openNewRoutine);
   els.newRtBack.addEventListener('click', goHome);
-  els.newRtForm.addEventListener('submit', handleNewRoutineSubmit);
+  els.newRtForm.addEventListener('submit', handleRoutineFormSubmit);
   els.manageRoutinesBtn.addEventListener('click', openManageRoutines);
   els.manageRtBack.addEventListener('click', goHome);
 

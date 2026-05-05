@@ -265,3 +265,100 @@ test('templates shared across routines map to same row', async () => {
   const delRes = app.db.prepare('SELECT COUNT(*) AS n FROM routine_templates WHERE template_id = ?').get(bicepId);
   assert.ok(delRes.n > 1, 'same template referenced by multiple routines');
 });
+
+function wuuid(n) {
+  return `019dbaf7-0002-7000-8000-${String(n).padStart(12, '0')}`;
+}
+
+test('PATCH template_ids returns 409 when an active workout exists', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/routines', headers: { cookie },
+    payload: { name: 'LiveRoutine', template_ids: [bicepId, otherId] },
+  });
+  const routineId = create.json().id;
+
+  const wid = wuuid(1);
+  const start = await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`, headers: { cookie },
+    payload: {
+      id: wid, routine_id: routineId,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+    },
+  });
+  assert.equal(start.statusCode, 200);
+
+  const blocked = await app.inject({
+    method: 'PATCH', url: `/api/routines/${routineId}`, headers: { cookie },
+    payload: { template_ids: [otherId, bicepId] },
+  });
+  assert.equal(blocked.statusCode, 409);
+  assert.equal(blocked.json().workout_id, wid);
+
+  // Original order preserved (transaction rolled back the guard).
+  const after = await app.inject({
+    method: 'GET', url: `/api/routines/${routineId}`, headers: { cookie },
+  });
+  assert.deepEqual(after.json().templates.map(t => t.id), [bicepId, otherId]);
+});
+
+test('PATCH name-only is allowed during an active workout', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/routines', headers: { cookie },
+    payload: { name: 'LiveRename', template_ids: [bicepId] },
+  });
+  const routineId = create.json().id;
+
+  const wid = wuuid(2);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`, headers: { cookie },
+    payload: {
+      id: wid, routine_id: routineId,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+    },
+  });
+
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/routines/${routineId}`, headers: { cookie },
+    payload: { name: 'LiveRenamed' },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().name, 'LiveRenamed');
+});
+
+test('PATCH template_ids succeeds once the active workout is finalized', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/routines', headers: { cookie },
+    payload: { name: 'PostFinalize', template_ids: [bicepId, otherId] },
+  });
+  const routineId = create.json().id;
+
+  const wid = wuuid(3);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`, headers: { cookie },
+    payload: {
+      id: wid, routine_id: routineId,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+    },
+  });
+
+  // Reorder blocked while active.
+  const blocked = await app.inject({
+    method: 'PATCH', url: `/api/routines/${routineId}`, headers: { cookie },
+    payload: { template_ids: [otherId, bicepId] },
+  });
+  assert.equal(blocked.statusCode, 409);
+
+  // Finalize, retry — succeeds.
+  const fin = await app.inject({
+    method: 'POST', url: `/api/workouts/${wid}/finalize`, headers: { cookie },
+    payload: { client_version: 1 },
+  });
+  assert.equal(fin.statusCode, 200);
+
+  const ok = await app.inject({
+    method: 'PATCH', url: `/api/routines/${routineId}`, headers: { cookie },
+    payload: { template_ids: [otherId, bicepId] },
+  });
+  assert.equal(ok.statusCode, 200);
+  assert.deepEqual(ok.json().templates.map(t => t.id), [otherId, bicepId]);
+});

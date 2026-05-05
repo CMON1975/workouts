@@ -51,7 +51,7 @@
 
     <section id="new-rt" class="view" hidden>
       <button id="new-rt-back" type="button" class="secondary back-btn">&larr; Back</button>
-      <h2>New routine</h2>
+      <h2 id="new-rt-heading">New routine</h2>
       <form id="new-rt-form">
         <label class="field">
           <span>Name</span>
@@ -64,7 +64,7 @@
           <p id="nr-selected-empty" class="muted">Tap an exercise below to add.</p>
         </div>
 
-        <div class="rt-section">
+        <div class="rt-section" id="nr-available-section">
           <h3 class="rt-heading">Available</h3>
           <div id="nr-available"></div>
           <p id="nr-available-empty" class="muted" hidden>All exercises already added.</p>

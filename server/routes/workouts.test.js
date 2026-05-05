@@ -230,8 +230,9 @@ test('POST finalize on unknown workout returns 404', async () => {
   assert.equal(res.statusCode, 404);
 });
 
-test('GET /api/workouts/:id returns workout with child sessions in routine order', async () => {
-  // Create a routine with two templates so we can verify ordering.
+test('GET /api/workouts/:id returns child sessions in started_at order, not routine order', async () => {
+  // Create a routine with two templates where the routine order is the OPPOSITE
+  // of the order we'll start the children — proves we order by start time, not position.
   const t2 = await app.inject({
     method: 'POST', url: '/api/templates', headers: { cookie },
     payload: { name: 'PullUps', default_rows: 3, rows_fixed: 1, columns: [{ name: 'reps' }] },
@@ -251,7 +252,8 @@ test('GET /api/workouts/:id returns workout with child sessions in routine order
     payload: workoutBody(wid, 1, upperId),
   });
 
-  // Add the Bicep child first, PullUps second — routine order is PullUps THEN Bicep.
+  // Routine position order: [PullUps, Bicep]. We start Bicep FIRST (earlier started_at).
+  // Expectation: sessions come back as [Bicep, PullUps] — chronological, not position.
   const bicepSid = suuid(10);
   const pullSid = suuid(11);
   await app.inject({
@@ -279,8 +281,7 @@ test('GET /api/workouts/:id returns workout with child sessions in routine order
   assert.equal(res.statusCode, 200);
   const body = res.json();
   assert.equal(body.routine_name, 'UpperBody');
-  // Routine position: PullUps (0), Bicep (1).
-  assert.deepEqual(body.sessions.map(s => s.template_id), [pullId, bicepTplId]);
+  assert.deepEqual(body.sessions.map(s => s.template_id), [bicepTplId, pullId]);
 });
 
 test('GET /api/workouts/:id on unknown returns 404', async () => {

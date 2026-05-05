@@ -176,6 +176,14 @@ export default async function routinesRoutes(app) {
           db.prepare('UPDATE routines SET archived_at = ? WHERE id = ?').run(val, id);
         }
         if (body.template_ids !== undefined) {
+          const active = db.prepare(
+            'SELECT id FROM workouts WHERE routine_id = ? AND finalized_at IS NULL LIMIT 1'
+          ).get(id);
+          if (active) {
+            const err = new Error('ACTIVE_WORKOUT');
+            err.workoutId = active.id;
+            throw err;
+          }
           replaceRoutineTemplates(db, id, body.template_ids);
         }
         return true;
@@ -189,6 +197,12 @@ export default async function routinesRoutes(app) {
       }
       if (err.message === 'TEMPLATE_NOT_FOUND') {
         return reply.code(400).send({ error: `template ${err.templateId} not found` });
+      }
+      if (err.message === 'ACTIVE_WORKOUT') {
+        return reply.code(409).send({
+          error: 'active workout exists; finish or end it before reordering',
+          workout_id: err.workoutId,
+        });
       }
       if (/UNIQUE constraint failed: routines\.name/i.test(err.message)) {
         return reply.code(409).send({ error: 'routine name already exists' });

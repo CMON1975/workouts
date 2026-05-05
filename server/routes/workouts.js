@@ -27,11 +27,9 @@ function loadWorkout(db, id) {
     SELECT s.id, s.template_id, s.started_at, s.updated_at,
            s.finalized_at, s.client_version
       FROM sessions s
-      JOIN routine_templates rt
-        ON rt.routine_id = ? AND rt.template_id = s.template_id
      WHERE s.workout_id = ?
-     ORDER BY rt.position
-  `).all(w.routine_id, id);
+     ORDER BY s.started_at, s.id
+  `).all(id);
   const valsStmt = db.prepare(`
     SELECT row_index, column_id, value_num, value_text
       FROM session_values
@@ -84,12 +82,10 @@ export default async function workoutsRoutes(app) {
       SELECT s.id, s.template_id, s.started_at, s.updated_at,
              s.finalized_at, s.client_version
         FROM sessions s
-        JOIN routine_templates rt
-          ON rt.routine_id = ? AND rt.template_id = s.template_id
        WHERE s.workout_id = ?
-       ORDER BY rt.position
+       ORDER BY s.started_at, s.id
     `);
-    for (const w of rows) w.sessions = childStmt.all(w.routine_id, w.id);
+    for (const w of rows) w.sessions = childStmt.all(w.id);
     return rows;
   });
 
