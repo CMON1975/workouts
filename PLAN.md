@@ -6,7 +6,7 @@ Here is a draft plan to refine:
 
 Greenfield personal workout tracker for a single user, deployed at
 `workouts.cmon1975.com` on an existing Digital Ocean droplet that already
-runs nginx + certbot for other subdomains. The repo currently contains
+runs Apache + certbot for other subdomains. The repo currently contains
 only `CLAUDE.md`, `README.md`, and `.gitignore` — no code.
 
 The **load-bearing requirement** is that an in-progress session on an
@@ -72,7 +72,7 @@ workouts/
 │   └── hash-password.js         # stdin → bcrypt → stdout, paste into .env
 └── deploy/
     ├── workouts.service         # systemd unit
-    ├── nginx-workouts.conf      # server block
+    ├── apache-workouts.conf     # vhost
     └── logrotate-workouts       # /etc/logrotate.d fragment
 ```
 
@@ -357,7 +357,7 @@ Never block step 3 on step 4. This is how we beat cold-network iPhone boot.
 
 ---
 
-## Deployment (existing DO droplet, nginx + certbot already set up)
+## Deployment (existing DO droplet, Apache + certbot already set up)
 
 ### systemd unit — `/etc/systemd/system/workouts.service`
 
@@ -529,7 +529,7 @@ sets, lock phone for 2 minutes, unlock → data is still there.
 
 ### M2 — Deploy + history listing
 
-- nginx config, systemd unit, logrotate, certbot issuance.
+- Apache vhost, systemd unit, logrotate, certbot issuance.
 - `GET /api/sessions?template_id=` list view on the client.
 - Minimum-viable CSS (mobile-first, big tap targets, no framework).
 - Web app manifest + `apple-mobile-web-app-capable` meta (cheap, as approved).
