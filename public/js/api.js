@@ -78,4 +78,6 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ client_version: clientVersion }),
   }),
+  deleteSession: (id) => request('/api/sessions/' + encodeURIComponent(id), { method: 'DELETE' }),
+  deleteWorkout: (id) => request('/api/workouts/' + encodeURIComponent(id), { method: 'DELETE' }),
 };

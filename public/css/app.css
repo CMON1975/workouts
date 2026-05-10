@@ -573,3 +573,57 @@ button.small {
   font-size: 0.9rem;
   width: 64px;
 }
+
+/* Swipe-to-reveal row action (history list, workout detail children) */
+
+.row-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  touch-action: pan-y;
+}
+
+.row-foreground {
+  position: relative;
+  z-index: 1;
+  transition: transform 180ms ease-out;
+  will-change: transform;
+}
+
+.history-row.row-foreground {
+  background: var(--bg);
+  width: 100%;
+  display: grid;
+}
+
+.workout-child.row-foreground {
+  background: var(--bg);
+  padding-right: 4px;
+}
+
+.row-action {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 88px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--danger);
+  color: #fff;
+  font-size: 1.6rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 44px;
+  font-weight: normal;
+}
+
+.row-action:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: -3px;
+}

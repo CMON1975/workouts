@@ -3,6 +3,7 @@ import { uuidv7 } from './uuidv7.js';
 import {
   getDraft, getLastActiveSessionId,
   putWorkout, getWorkout, deleteWorkout,
+  deleteDraft, deleteOutboxByDraftId,
   getActiveWorkoutId, clearActiveWorkoutId,
 } from './idb.js';
 import { installHideFlush, installOutboxDrainers, drainOutbox, readShadow } from './persistence.js';
@@ -502,11 +503,59 @@ async function openHistory() {
       templatesById: templatesById(),
       onPickSession: (s) => openDetail(s),
       onPickWorkout: (w) => openWorkoutDetail(w),
+      onDeleteSession: (s, wrap) => handleDeleteHistorySession(s, wrap),
+      onDeleteWorkout: (w, wrap) => handleDeleteHistoryWorkout(w, wrap),
     });
   } catch (err) {
     console.error(err);
     els.historyList.textContent = 'Failed to load history.';
   }
+}
+
+async function handleDeleteHistorySession(s, wrap) {
+  const tplName = templatesById().get(s.template_id)?.name ?? 'this exercise';
+  if (!confirm(`Delete this ${tplName} session? This cannot be undone.`)) return;
+  try {
+    await api.deleteSession(s.id);
+  } catch (err) {
+    if (err.status === 409) {
+      alert('Cannot delete: this session is part of an active workout.');
+    } else {
+      alert('Could not delete session.');
+    }
+    return;
+  }
+  try { await deleteDraft(s.id); } catch (_) {}
+  try { await deleteOutboxByDraftId(s.id); } catch (_) {}
+  removeRowFromHistory(wrap);
+}
+
+async function handleDeleteHistoryWorkout(w, wrap) {
+  const n = w.sessions?.length ?? 0;
+  const label = w.routine_name ?? 'this workout';
+  const exLabel = `${n} exercise${n === 1 ? '' : 's'}`;
+  if (!confirm(`Delete the "${label}" workout and ${exLabel}? This cannot be undone.`)) return;
+  try {
+    await api.deleteWorkout(w.id);
+  } catch (err) {
+    if (err.status === 409) {
+      alert('Cannot delete an active workout. Finish or end it first.');
+    } else {
+      alert('Could not delete workout.');
+    }
+    return;
+  }
+  try { await deleteWorkout(w.id); } catch (_) {}
+  for (const s of w.sessions ?? []) {
+    try { await deleteDraft(s.id); } catch (_) {}
+    try { await deleteOutboxByDraftId(s.id); } catch (_) {}
+  }
+  removeRowFromHistory(wrap);
+}
+
+function removeRowFromHistory(wrap) {
+  wrap.remove();
+  if (!els.historyList.children.length) show(els.historyEmpty);
 }
 
 function openDetail(session) {
@@ -516,15 +565,47 @@ function openDetail(session) {
   showView('detail');
 }
 
+let currentWorkoutDetail = null;
+
 async function openWorkoutDetail(summary) {
   try {
     const full = await api.getWorkout(summary.id);
     detailOrigin = 'history';
-    renderWorkoutDetail(els.detailRoot, { workout: full, templatesById: templatesById() });
+    currentWorkoutDetail = full;
+    renderWorkoutDetail(els.detailRoot, {
+      workout: full,
+      templatesById: templatesById(),
+      onDeleteChildSession: (s, wrap) => handleDeleteChildSession(s, wrap),
+    });
     showView('detail');
   } catch (err) {
     console.error(err);
     alert('Could not load workout.');
+  }
+}
+
+async function handleDeleteChildSession(s, wrap) {
+  const tplName = templatesById().get(s.template_id)?.name ?? 'this exercise';
+  if (!confirm(`Delete the ${tplName} entry from this workout? This cannot be undone.`)) return;
+  try {
+    await api.deleteSession(s.id);
+  } catch (err) {
+    if (err.status === 409) {
+      alert('Cannot delete: this session is part of an active workout.');
+    } else {
+      alert('Could not delete session.');
+    }
+    return;
+  }
+  try { await deleteDraft(s.id); } catch (_) {}
+  try { await deleteOutboxByDraftId(s.id); } catch (_) {}
+  wrap.remove();
+  if (currentWorkoutDetail) {
+    currentWorkoutDetail.sessions = (currentWorkoutDetail.sessions ?? []).filter(x => x.id !== s.id);
+    if (!currentWorkoutDetail.sessions.length) {
+      // No exercises left in this workout — go back to history.
+      openHistory();
+    }
   }
 }
 

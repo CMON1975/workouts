@@ -114,6 +114,17 @@ export async function updateOutbox(entry) {
   await awaitTx(t);
 }
 
+export async function deleteOutboxByDraftId(draftId) {
+  const db = await openDB();
+  const t = tx(db, 'outbox', 'readwrite');
+  const store = t.objectStore('outbox');
+  const all = await awaitReq(store.getAll());
+  for (const entry of all) {
+    if (entry.draftId === draftId) store.delete(entry.id);
+  }
+  await awaitTx(t);
+}
+
 // --- Workouts (routine-run wrappers) ---
 
 export async function putWorkout(workout) {

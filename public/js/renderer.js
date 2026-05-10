@@ -1,3 +1,16 @@
+import { attachSwipeReveal } from './swipe.js';
+
+const TRASH_GLYPH = '🗑';
+
+function makeTrashAction() {
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = 'row-action row-action-trash';
+  action.setAttribute('aria-label', 'Delete');
+  action.textContent = TRASH_GLYPH;
+  return action;
+}
+
 export function renderSessionForm(root, { template, draft, onInput }) {
   root.innerHTML = '';
 
@@ -153,15 +166,22 @@ function summarizeValues(session, template) {
   return firstCol.unit ? `${joined} ${firstCol.unit}` : joined;
 }
 
-export function renderHistoryList(root, { items, templatesById, onPickSession, onPickWorkout }) {
+export function renderHistoryList(root, {
+  items, templatesById,
+  onPickSession, onPickWorkout,
+  onDeleteSession, onDeleteWorkout,
+}) {
   root.innerHTML = '';
   for (const item of items) {
     if (item.type === 'workout') {
       const w = item.workout;
+      const wrap = document.createElement('div');
+      wrap.className = 'row-wrap';
+      wrap.dataset.workoutId = w.id;
+
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'history-row is-workout';
-      btn.dataset.workoutId = w.id;
+      btn.className = 'history-row row-foreground is-workout';
 
       const primary = document.createElement('div');
       primary.className = 'history-primary';
@@ -185,15 +205,23 @@ export function renderHistoryList(root, { items, templatesById, onPickSession, o
       btn.appendChild(summary);
       btn.appendChild(meta);
       btn.addEventListener('click', () => onPickWorkout(w));
-      root.appendChild(btn);
+
+      const action = makeTrashAction();
+      wrap.appendChild(btn);
+      wrap.appendChild(action);
+      root.appendChild(wrap);
+      attachSwipeReveal(wrap, { onAction: () => onDeleteWorkout(w, wrap) });
       continue;
     }
     const s = item.session;
     const template = templatesById.get(s.template_id);
+    const wrap = document.createElement('div');
+    wrap.className = 'row-wrap';
+    wrap.dataset.sessionId = s.id;
+
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'history-row';
-    btn.dataset.sessionId = s.id;
+    btn.className = 'history-row row-foreground';
 
     const primary = document.createElement('div');
     primary.className = 'history-primary';
@@ -212,7 +240,12 @@ export function renderHistoryList(root, { items, templatesById, onPickSession, o
     btn.appendChild(summary);
     btn.appendChild(meta);
     btn.addEventListener('click', () => onPickSession(s));
-    root.appendChild(btn);
+
+    const action = makeTrashAction();
+    wrap.appendChild(btn);
+    wrap.appendChild(action);
+    root.appendChild(wrap);
+    attachSwipeReveal(wrap, { onAction: () => onDeleteSession(s, wrap) });
   }
 }
 
@@ -297,7 +330,7 @@ export function renderSessionDetail(root, { session, template }) {
   renderSessionTable(root, { session, template });
 }
 
-export function renderWorkoutDetail(root, { workout, templatesById }) {
+export function renderWorkoutDetail(root, { workout, templatesById, onDeleteChildSession }) {
   root.innerHTML = '';
   const h = document.createElement('h2');
   h.textContent = workout.routine_name ?? 'Workout';
@@ -320,11 +353,28 @@ export function renderWorkoutDetail(root, { workout, templatesById }) {
 
   for (const session of sessions) {
     const template = templatesById.get(session.template_id);
+    const wrap = document.createElement('div');
+    wrap.className = 'row-wrap workout-child-wrap';
+    wrap.dataset.sessionId = session.id;
+
+    const fg = document.createElement('div');
+    fg.className = 'row-foreground workout-child';
+
     const sub = document.createElement('h3');
     sub.className = 'workout-exercise-name';
     sub.textContent = template?.name ?? `Exercise #${session.template_id}`;
-    root.appendChild(sub);
-    renderSessionTable(root, { session, template });
+    fg.appendChild(sub);
+    renderSessionTable(fg, { session, template });
+
+    const action = makeTrashAction();
+    wrap.appendChild(fg);
+    wrap.appendChild(action);
+    root.appendChild(wrap);
+    if (onDeleteChildSession) {
+      attachSwipeReveal(wrap, {
+        onAction: () => onDeleteChildSession(session, wrap),
+      });
+    }
   }
 }
 

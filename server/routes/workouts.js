@@ -150,6 +150,31 @@ export default async function workoutsRoutes(app) {
     return reply.code(result.status).send(result.body);
   });
 
+  app.delete('/api/workouts/:id', async (req, reply) => {
+    const db = app.db;
+    const { id } = req.params;
+
+    const result = db.transaction(() => {
+      const row = db.prepare(
+        'SELECT id, finalized_at FROM workouts WHERE id = ?'
+      ).get(id);
+      if (!row) return { status: 404, body: { error: 'not found' } };
+      if (row.finalized_at == null) {
+        return { status: 409, body: { error: 'cannot delete active workout' } };
+      }
+
+      // FK is ON DELETE SET NULL on sessions.workout_id, which would orphan
+      // children. Explicitly delete children first so their session_values
+      // cascade away too.
+      db.prepare('DELETE FROM sessions WHERE workout_id = ?').run(id);
+      db.prepare('DELETE FROM workouts WHERE id = ?').run(id);
+      return { status: 204 };
+    })();
+
+    if (result.status === 204) return reply.code(204).send();
+    return reply.code(result.status).send(result.body);
+  });
+
   app.post('/api/workouts/:id/finalize', {
     schema: {
       body: {

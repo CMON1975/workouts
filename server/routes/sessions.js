@@ -70,6 +70,36 @@ export default async function sessionsRoutes(app) {
     return session;
   });
 
+  app.delete('/api/sessions/:id', async (req, reply) => {
+    const db = app.db;
+    const { id } = req.params;
+
+    const result = db.transaction(() => {
+      const row = db.prepare(
+        'SELECT id, workout_id FROM sessions WHERE id = ?'
+      ).get(id);
+      if (!row) return { status: 404, body: { error: 'not found' } };
+
+      if (row.workout_id) {
+        const w = db.prepare(
+          'SELECT finalized_at FROM workouts WHERE id = ?'
+        ).get(row.workout_id);
+        if (w && w.finalized_at == null) {
+          return {
+            status: 409,
+            body: { error: 'cannot delete session from active workout', workout_id: row.workout_id },
+          };
+        }
+      }
+
+      db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+      return { status: 204 };
+    })();
+
+    if (result.status === 204) return reply.code(204).send();
+    return reply.code(result.status).send(result.body);
+  });
+
   app.post('/api/sessions/:id/finalize', {
     schema: {
       body: {

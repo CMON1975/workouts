@@ -445,3 +445,108 @@ test('PATCH /api/drafts omitting workout_id defaults to NULL on insert', async (
   const row = app.db.prepare('SELECT workout_id FROM sessions WHERE id = ?').get(sid);
   assert.equal(row.workout_id, null);
 });
+
+test('DELETE /api/workouts/:id requires auth', async () => {
+  const wid = wuuid(50);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`, headers: { cookie },
+    payload: workoutBody(wid, 1),
+  });
+  await app.inject({
+    method: 'POST', url: `/api/workouts/${wid}/finalize`, headers: { cookie },
+    payload: { client_version: 1 },
+  });
+
+  const res = await app.inject({
+    method: 'DELETE', url: `/api/workouts/${wid}`,
+  });
+  assert.equal(res.statusCode, 401);
+
+  const row = app.db.prepare('SELECT id FROM workouts WHERE id = ?').get(wid);
+  assert.ok(row, 'workout must not be deleted on unauthorized call');
+});
+
+test('DELETE /api/workouts/:id returns 404 for unknown id', async () => {
+  const res = await app.inject({
+    method: 'DELETE', url: `/api/workouts/${wuuid(998)}`, headers: { cookie },
+  });
+  assert.equal(res.statusCode, 404);
+});
+
+test('DELETE /api/workouts/:id returns 409 when workout is unfinalized', async () => {
+  const wid = wuuid(51);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`, headers: { cookie },
+    payload: workoutBody(wid, 1),
+  });
+
+  const res = await app.inject({
+    method: 'DELETE', url: `/api/workouts/${wid}`, headers: { cookie },
+  });
+  assert.equal(res.statusCode, 409);
+
+  const row = app.db.prepare('SELECT id FROM workouts WHERE id = ?').get(wid);
+  assert.ok(row, 'unfinalized workout must remain');
+});
+
+test('DELETE /api/workouts/:id removes the workout, all child sessions, and their values', async () => {
+  const wid = wuuid(52);
+  const sidA = suuid(52);
+  const sidB = suuid(53);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`, headers: { cookie },
+    payload: workoutBody(wid, 1),
+  });
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${sidA}`, headers: { cookie },
+    payload: {
+      id: sidA, template_id: bicepTplId, workout_id: wid,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+      values: [
+        { row_index: 0, column_id: bicepColId, value_num: 10 },
+        { row_index: 1, column_id: bicepColId, value_num: 12 },
+      ],
+    },
+  });
+  await app.inject({
+    method: 'POST', url: `/api/sessions/${sidA}/finalize`, headers: { cookie },
+    payload: { client_version: 1 },
+  });
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${sidB}`, headers: { cookie },
+    payload: {
+      id: sidB, template_id: bicepTplId, workout_id: wid,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+      values: [{ row_index: 0, column_id: bicepColId, value_num: 5 }],
+    },
+  });
+  await app.inject({
+    method: 'POST', url: `/api/sessions/${sidB}/finalize`, headers: { cookie },
+    payload: { client_version: 1 },
+  });
+  await app.inject({
+    method: 'POST', url: `/api/workouts/${wid}/finalize`, headers: { cookie },
+    payload: { client_version: 1 },
+  });
+
+  const valsBefore = app.db.prepare(
+    'SELECT COUNT(*) AS n FROM session_values WHERE session_id IN (?, ?)'
+  ).get(sidA, sidB).n;
+  assert.equal(valsBefore, 3);
+
+  const res = await app.inject({
+    method: 'DELETE', url: `/api/workouts/${wid}`, headers: { cookie },
+  });
+  assert.equal(res.statusCode, 204);
+
+  const wRow = app.db.prepare('SELECT id FROM workouts WHERE id = ?').get(wid);
+  assert.equal(wRow, undefined);
+  const sRows = app.db.prepare(
+    'SELECT id FROM sessions WHERE id IN (?, ?)'
+  ).all(sidA, sidB);
+  assert.equal(sRows.length, 0, 'child sessions must be gone');
+  const valsAfter = app.db.prepare(
+    'SELECT COUNT(*) AS n FROM session_values WHERE session_id IN (?, ?)'
+  ).get(sidA, sidB).n;
+  assert.equal(valsAfter, 0, 'session_values must cascade');
+});
