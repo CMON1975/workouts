@@ -41,7 +41,7 @@ test('empty input renders header with zero totals', () => {
   assert.match(md, /^# Workout history$/m);
   assert.match(md, /Exported 2026-05-10 14:32 UTC from data\/workouts\.db/);
   assert.match(md, /All times below are in UTC/);
-  assert.match(md, /\*\*Totals:\*\* 0 workouts · 0 standalone sessions · 0 finalized sets/);
+  assert.match(md, /\*\*Totals:\*\* 0 sessions · 0 finalized sets/);
 });
 
 test('single standalone standard session renders a table with column header and rows', () => {
@@ -70,7 +70,7 @@ test('single standalone standard session renders a table with column header and 
   assert.match(md, /\| Set \| reps \(pounds\) \|/);
   assert.match(md, /\| 1 \| 25 \|/);
   assert.match(md, /\| 4 \| 30 \|/);
-  assert.match(md, /\*\*Totals:\*\* 0 workouts · 1 standalone sessions · 4 finalized sets/);
+  assert.match(md, /\*\*Totals:\*\* 1 sessions · 4 finalized sets/);
 });
 
 test('checkbox session renders description and status', () => {
@@ -114,7 +114,7 @@ test('checkbox session not done renders ✗ Not done', () => {
   assert.match(md, /\*\*Status:\*\* ✗ Not done/);
 });
 
-test('workout with two child sessions renders heading + nested sub-sessions in started_at order', () => {
+test('workout children render as flat top-level entries tagged with routine name', () => {
   const md = renderMarkdown({
     ...baseExport,
     workouts: [{
@@ -151,19 +151,22 @@ test('workout with two child sessions renders heading + nested sub-sessions in s
     }],
   });
 
-  assert.match(md, /## 2026-05-08 18:42 — Arms \(workout\)/);
-  assert.match(md, /_Routine: Arms · 2 exercises_/);
-  assert.match(md, /### Bicep Curls/);
-  assert.match(md, /### Tricep Pushdowns/);
-  // Child session table column header has unit when present, omits parens when null.
+  // Each child session is its own top-level entry, tagged with routine.
+  // (fmtDate truncates to minutes: Tricep at 18:42:00 → "18:42", Bicep at 18:41:30 → "18:41".)
+  assert.match(md, /## 2026-05-08 18:42 — Tricep Pushdowns \(Arms workout\)/);
+  assert.match(md, /## 2026-05-08 18:41 — Bicep Curls \(Arms workout\)/);
+  // No workout-level heading anymore.
+  assert.doesNotMatch(md, /— Arms \(workout\)/);
+  // No nested ### subheadings.
+  assert.doesNotMatch(md, /^### Bicep Curls/m);
   assert.match(md, /\| Set \| reps \(pounds\) \|/);
   assert.match(md, /\| Set \| reps \|/);
-  assert.match(md, /\*\*Totals:\*\* 1 workouts · 0 standalone sessions · 2 finalized sets/);
+  assert.match(md, /\*\*Totals:\*\* 2 sessions · 2 finalized sets/);
 
-  // Order check: Bicep heading must come BEFORE Tricep heading.
-  const bicepIdx = md.indexOf('### Bicep Curls');
-  const tricepIdx = md.indexOf('### Tricep Pushdowns');
-  assert.ok(bicepIdx > 0 && tricepIdx > bicepIdx, 'children render in started_at order');
+  // Order: Tricep (finalized later) appears before Bicep.
+  const tricepIdx = md.indexOf('Tricep Pushdowns (Arms workout)');
+  const bicepIdx = md.indexOf('Bicep Curls (Arms workout)');
+  assert.ok(tricepIdx > 0 && bicepIdx > tricepIdx, 'sessions sort by finalized_at desc');
 });
 
 test('mixed workouts and standalones interleave by finalized_at desc', () => {
@@ -197,7 +200,7 @@ test('mixed workouts and standalones interleave by finalized_at desc', () => {
   });
 
   const newIdx = md.indexOf('Pull-ups (standalone)');
-  const oldIdx = md.indexOf('Arms (workout)');
+  const oldIdx = md.indexOf('Bicep Curls (Arms workout)');
   assert.ok(newIdx > 0 && oldIdx > newIdx, 'newer entry appears first');
 });
 
@@ -334,13 +337,13 @@ test('CLI runs against a real DB and writes workouts.md with expected counts', a
     const mdPath = join(outDir, 'workouts.md');
     assert.ok(existsSync(mdPath), 'workouts.md must exist after export');
     const md = readFileSync(mdPath, 'utf8');
-    assert.match(md, /\*\*Totals:\*\* 1 workouts · 1 standalone sessions · 3 finalized sets/);
-    assert.match(md, /## 2026-05-09 12:30 — Arms \(workout\)/);
+    assert.match(md, /\*\*Totals:\*\* 2 sessions · 3 finalized sets/);
+    // Workout's child Bicep Curls (finalized at tWorkout, 2026-05-09 12:30) is newer.
+    assert.match(md, /## 2026-05-09 12:30 — Bicep Curls \(Arms workout\)/);
     assert.match(md, /## 2026-05-08 18:42 — Bicep Curls \(standalone\)/);
-    // Standalone (newer order check): Arms (workout, 05-09) before Bicep (standalone, 05-08).
-    const armsIdx = md.indexOf('Arms (workout)');
-    const bicepIdx = md.indexOf('Bicep Curls (standalone)');
-    assert.ok(armsIdx > 0 && bicepIdx > armsIdx, 'newer first');
+    const workoutChildIdx = md.indexOf('Bicep Curls (Arms workout)');
+    const standaloneIdx = md.indexOf('Bicep Curls (standalone)');
+    assert.ok(workoutChildIdx > 0 && standaloneIdx > workoutChildIdx, 'newer first');
   } finally {
     if (existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
   }

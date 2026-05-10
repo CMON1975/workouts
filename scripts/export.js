@@ -60,26 +60,16 @@ function nameWithArchived(session) {
     : session.template_name;
 }
 
-function renderStandalone(s) {
-  const kindTag = s.template_kind === 'checkbox' ? 'standalone, checkbox' : 'standalone';
-  const parts = [`## ${fmtDate(s.finalized_at)} — ${nameWithArchived(s)} (${kindTag})`];
+function renderSession(s, { workoutRoutineName }) {
+  const contextParts = [];
+  if (workoutRoutineName) contextParts.push(`${workoutRoutineName} workout`);
+  else contextParts.push('standalone');
+  if (s.template_kind === 'checkbox') contextParts.push('checkbox');
+  const tag = contextParts.join(', ');
+
+  const parts = [`## ${fmtDate(s.finalized_at)} — ${nameWithArchived(s)} (${tag})`];
   if (s.notes) parts.push(`**Notes:** ${s.notes}`);
   parts.push(s.template_kind === 'checkbox' ? renderCheckbox(s) : renderTable(s));
-  return parts.join('\n\n');
-}
-
-function renderChildSession(child) {
-  const parts = [`### ${nameWithArchived(child)}`];
-  if (child.notes) parts.push(`**Notes:** ${child.notes}`);
-  parts.push(child.template_kind === 'checkbox' ? renderCheckbox(child) : renderTable(child));
-  return parts.join('\n\n');
-}
-
-function renderWorkout(w) {
-  const sessions = [...(w.sessions ?? [])].sort((a, b) => a.started_at - b.started_at);
-  const parts = [`## ${fmtDate(w.finalized_at)} — ${w.routine_name} (workout)`];
-  parts.push(`_Routine: ${w.routine_name} · ${sessions.length} exercise${sessions.length === 1 ? '' : 's'}_`);
-  for (const c of sessions) parts.push(renderChildSession(c));
   return parts.join('\n\n');
 }
 
@@ -89,9 +79,20 @@ function countSets(s) {
 }
 
 export function renderMarkdown({ workouts, standalone, exportedAt, dbPath }) {
-  const totalSets =
-    workouts.reduce((acc, w) => acc + (w.sessions ?? []).reduce((a, s) => a + countSets(s), 0), 0) +
-    standalone.reduce((a, s) => a + countSets(s), 0);
+  // Flatten: every finalized session becomes a top-level entry. Workouts contribute
+  // their child sessions tagged with the workout's routine name.
+  const items = [];
+  for (const w of workouts) {
+    for (const s of (w.sessions ?? [])) {
+      items.push({ session: s, workoutRoutineName: w.routine_name });
+    }
+  }
+  for (const s of standalone) {
+    items.push({ session: s, workoutRoutineName: null });
+  }
+  items.sort((a, b) => (b.session.finalized_at ?? 0) - (a.session.finalized_at ?? 0));
+
+  const totalSets = items.reduce((a, it) => a + countSets(it.session), 0);
 
   const header = [
     '# Workout history',
@@ -99,21 +100,13 @@ export function renderMarkdown({ workouts, standalone, exportedAt, dbPath }) {
     `_Exported ${fmtDate(exportedAt)} UTC from ${dbPath}_  `,
     '_All times below are in UTC._',
     '',
-    `**Totals:** ${workouts.length} workouts · ${standalone.length} standalone sessions · ${totalSets} finalized sets`,
+    `**Totals:** ${items.length} sessions · ${totalSets} finalized sets`,
     '',
     '---',
     '',
   ];
 
-  const items = [
-    ...workouts.map(w => ({ ts: w.finalized_at ?? 0, type: 'workout', data: w })),
-    ...standalone.map(s => ({ ts: s.finalized_at ?? 0, type: 'standalone', data: s })),
-  ].sort((a, b) => b.ts - a.ts);
-
-  const blocks = items.map(it =>
-    it.type === 'workout' ? renderWorkout(it.data) : renderStandalone(it.data)
-  );
-
+  const blocks = items.map(it => renderSession(it.session, { workoutRoutineName: it.workoutRoutineName }));
   return header.join('\n') + blocks.join('\n\n---\n\n') + (blocks.length ? '\n' : '');
 }
 
@@ -261,9 +254,11 @@ function main() {
     writeFileSync(jsonPath, JSON.stringify({ workouts, standalone, exportedAt, dbPath }, null, 2), 'utf8');
   }
 
-  const setCount = workouts.reduce((a, w) => a + w.sessions.reduce((b, s) => b + countSets(s), 0), 0)
+  const sessionCount = workouts.reduce((a, w) => a + (w.sessions ?? []).length, 0)
+                     + standalone.length;
+  const setCount = workouts.reduce((a, w) => a + (w.sessions ?? []).reduce((b, s) => b + countSets(s), 0), 0)
                  + standalone.reduce((a, s) => a + countSets(s), 0);
-  console.log(`→ exported ${workouts.length} workouts + ${standalone.length} standalone sessions (${setCount} sets) to ${mdPath}${jsonPath ? ' and ' + jsonPath : ''}`);
+  console.log(`→ exported ${sessionCount} sessions (${setCount} sets) to ${mdPath}${jsonPath ? ' and ' + jsonPath : ''}`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
