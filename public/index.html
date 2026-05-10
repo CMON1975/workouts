@@ -15,7 +15,15 @@
 <body>
   <header>
     <h1>Workouts</h1>
-    <button id="logout" type="button" hidden>Log out</button>
+    <div class="header-actions">
+      <button id="open-history" type="button" class="icon-btn" hidden aria-label="View history">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/>
+          <polyline points="12 7 12 12 15 14"/>
+        </svg>
+      </button>
+      <button id="logout" type="button" hidden>Log out</button>
+    </div>
   </header>
 
   <section id="login" hidden>
@@ -36,17 +44,19 @@
       <h3 class="home-heading">Routines</h3>
       <div id="routine-list"></div>
       <p id="routine-empty" class="muted" hidden>No routines yet. Group exercises under a "day" to run them as one workout.</p>
-
-      <h3 class="home-heading">Individual exercises</h3>
-      <div id="template-list"></div>
-
-      <div class="home-actions">
-        <button id="new-routine" type="button" class="secondary">New routine</button>
-        <button id="manage-routines" type="button" class="secondary">Manage routines</button>
-        <button id="new-template" type="button" class="secondary">New exercise</button>
-        <button id="manage-templates" type="button" class="secondary">Manage exercises</button>
-        <button id="open-history" type="button" class="secondary">View history</button>
+      <div class="home-admin-row">
+        <button id="new-routine" type="button" class="admin-btn">+ New routine</button>
+        <button id="manage-routines" type="button" class="admin-btn">Manage</button>
       </div>
+
+      <details id="exercises-disclosure" class="home-disclosure">
+        <summary class="home-heading home-disclosure-summary">Individual exercises</summary>
+        <div class="home-admin-row">
+          <button id="new-template" type="button" class="admin-btn">+ New exercise</button>
+          <button id="manage-templates" type="button" class="admin-btn">Manage</button>
+        </div>
+        <div id="template-list"></div>
+      </details>
     </section>
 
     <section id="new-rt" class="view" hidden>

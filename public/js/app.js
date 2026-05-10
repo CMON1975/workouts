@@ -85,6 +85,7 @@ const els = {
   runnerEnd: document.getElementById('runner-end'),
   logout: document.getElementById('logout'),
   resumeBanner: document.getElementById('resume-banner'),
+  exercisesDisclosure: document.getElementById('exercises-disclosure'),
 };
 
 const VIEWS = ['home', 'session', 'history', 'detail', 'newTpl', 'manage', 'newRt', 'manageRt', 'runner'];
@@ -280,6 +281,15 @@ function renderHomeRoutines() {
     routines: active,
     onPick: handleRoutinePick,
   });
+  // Onboarding: when there are no routines yet but at least one template,
+  // auto-open the exercises disclosure so the user has an obvious next step.
+  // Only on the very first render after login (open === false by default);
+  // we never force-close, so the user's manual toggle is preserved.
+  if (els.exercisesDisclosure && !els.exercisesDisclosure.open) {
+    if (!active.length && activeTemplates().length) {
+      els.exercisesDisclosure.open = true;
+    }
+  }
 }
 
 async function handleRoutinePick(routine) {
@@ -962,6 +972,7 @@ async function enterApp() {
   hide(els.login);
   show(els.app);
   show(els.logout);
+  show(els.openHistory);
 
   templates = await api.templates({ includeArchived: true });
   renderTemplateList();
