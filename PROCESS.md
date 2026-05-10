@@ -12,3 +12,15 @@ Running log of work done with Claude Code.
 **What:** `npm test` failed with `NODE_MODULE_VERSION 127` vs `137` on `better-sqlite3`. `npm rebuild` fixed it; all 88 tests pass.
 **Why:** WSL ran Node 22 (ABI 127); Arch on the_box runs Node 24 (ABI 137). Prebuilt `.node` binaries shipped over from WSL were ABI-incompatible.
 **Notes:** `npm rebuild` was sufficient — no need for the full `rm -rf node_modules && npm install` from the prior entry. Lighter touch: keeps lockfile and tree intact, just recompiles natives. Worth trying first whenever a port hits ABI mismatch.
+
+---
+## 2026-05-10 — First end-to-end deploy from the_box; documented in DEPLOY.md
+**What:** Shipped three features (swipe-to-delete, home-screen cleanup, markdown export) as four commits to `main`, pushed to GitHub, and synced the droplet. Service is `active` at workouts.cmon1975.com. 110/110 tests green.
+**Why:** Features were ready and the prior deploy path was undocumented; the_box is the new dev machine post-WSL.
+**Notes:** Several surprises that are now captured in DEPLOY.md so future-me doesn't re-derive them:
+- Droplet's `/var/www/workouts` had no `.git` (was originally `scp`'d in). Bootstrapped with `git init -b main` + `git remote add origin … github.com:CMON1975/workouts.git` + `git fetch` + `git reset --hard origin/main`.
+- No GitHub deploy key existed for the `c` user on the droplet. Generated `~/.ssh/id_ed25519`, added the pubkey to the repo's Deploy Keys (read-only).
+- ACL had to grant **both** `c` (rwx for deploys) **and** `workouts` (rX for the systemd service). First attempt only added `c`; new files post-reset locked out the service and it crash-looped 50+ times until `setfacl -R -m u:workouts:rX -d -m u:workouts:rX` landed.
+- Prod DB is at `/var/lib/workouts/workouts.db`, not `/var/www/workouts/data/` (the latter is empty on the droplet — `DB_PATH` in `/etc/workouts.env` points at `/var/lib/...`, and the systemd unit's `ReadWritePaths` matches). So git operations on the working tree *cannot* affect prod data.
+- SQLite backup gotcha: with WAL mode and an uncheckpointed WAL (large `.db-wal` vs small `.db`), plain `cp` and `sqlite3 .backup` both produced empty backup files. **`VACUUM INTO` worked** — produces an atomic consistent snapshot regardless of WAL state.
+- `err.log` is append-only; we wasted ~20 min chasing old EACCES entries that had been resolved by the ACL fix. `systemctl status` for current state is the source of truth.
