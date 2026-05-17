@@ -25,7 +25,7 @@ function loadWorkout(db, id) {
   if (!w) return null;
   w.sessions = db.prepare(`
     SELECT s.id, s.template_id, s.started_at, s.updated_at,
-           s.finalized_at, s.client_version
+           s.finalized_at, s.client_version, s.notes
       FROM sessions s
      WHERE s.workout_id = ?
      ORDER BY s.started_at, s.id
@@ -80,7 +80,7 @@ export default async function workoutsRoutes(app) {
 
     const childStmt = db.prepare(`
       SELECT s.id, s.template_id, s.started_at, s.updated_at,
-             s.finalized_at, s.client_version
+             s.finalized_at, s.client_version, s.notes
         FROM sessions s
        WHERE s.workout_id = ?
        ORDER BY s.started_at, s.id

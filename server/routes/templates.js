@@ -121,7 +121,7 @@ export default async function templatesRoutes(app) {
     if (!tpl) return reply.code(404).send({ error: 'not found' });
 
     const session = db.prepare(`
-      SELECT id, started_at, finalized_at
+      SELECT id, started_at, finalized_at, notes
         FROM sessions
        WHERE template_id = ? AND finalized_at IS NOT NULL
        ORDER BY finalized_at DESC

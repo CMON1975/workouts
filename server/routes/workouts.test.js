@@ -284,6 +284,64 @@ test('GET /api/workouts/:id returns child sessions in started_at order, not rout
   assert.deepEqual(body.sessions.map(s => s.template_id), [bicepTplId, pullId]);
 });
 
+test('GET /api/workouts/:id includes notes on child sessions', async () => {
+  const wid = wuuid(80);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`, headers: { cookie },
+    payload: workoutBody(wid, 1),
+  });
+  const sid = suuid(80);
+  const noteText = 'pump felt great — try +2 reps next time';
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${sid}`, headers: { cookie },
+    payload: {
+      id: sid, template_id: bicepTplId, workout_id: wid,
+      started_at: Date.now(), updated_at: Date.now(),
+      client_version: 1,
+      notes: noteText,
+      values: [{ row_index: 0, column_id: bicepColId, value_num: 10 }],
+    },
+  });
+
+  const res = await app.inject({
+    method: 'GET', url: `/api/workouts/${wid}`, headers: { cookie },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.sessions.length, 1);
+  assert.equal(body.sessions[0].notes, noteText);
+});
+
+test('GET /api/workouts?routine_id includes notes on child sessions', async () => {
+  const wid = wuuid(81);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`, headers: { cookie },
+    payload: workoutBody(wid, 1),
+  });
+  const sid = suuid(81);
+  const noteText = 'list-route note check';
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${sid}`, headers: { cookie },
+    payload: {
+      id: sid, template_id: bicepTplId, workout_id: wid,
+      started_at: Date.now(), updated_at: Date.now(),
+      client_version: 1,
+      notes: noteText,
+      values: [{ row_index: 0, column_id: bicepColId, value_num: 9 }],
+    },
+  });
+
+  const res = await app.inject({
+    method: 'GET', url: `/api/workouts?routine_id=${armsRoutineId}`, headers: { cookie },
+  });
+  assert.equal(res.statusCode, 200);
+  const found = res.json().find(w => w.id === wid);
+  assert.ok(found, 'workout listed');
+  const child = found.sessions.find(s => s.id === sid);
+  assert.ok(child, 'child session listed');
+  assert.equal(child.notes, noteText);
+});
+
 test('GET /api/workouts/:id on unknown returns 404', async () => {
   const res = await app.inject({
     method: 'GET', url: `/api/workouts/${wuuid(999)}`, headers: { cookie },

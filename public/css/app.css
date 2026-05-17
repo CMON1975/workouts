@@ -720,3 +720,43 @@ button.small {
   outline: 2px solid var(--fg);
   outline-offset: -3px;
 }
+
+/* Per-session notes */
+
+.notes-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+.notes-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.notes-label > span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.session-notes {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+}
+.prev-note-hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0.25rem 0 0;
+}
+.detail-notes {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin: 0 0 0.5rem;
+}

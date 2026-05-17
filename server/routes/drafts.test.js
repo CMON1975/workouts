@@ -321,6 +321,28 @@ test('GET /api/sessions?limit=0 is rejected', async () => {
   assert.equal(res.statusCode, 400);
 });
 
+test('PATCH then GET round-trips notes verbatim', async () => {
+  const id = uuidv7Fixture(50);
+  const noteText = 'leg day — back off 5kg next time';
+  const patch = await app.inject({
+    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    payload: {
+      id, template_id: bicepTemplateId,
+      started_at: Date.now(), updated_at: Date.now(),
+      client_version: 1,
+      notes: noteText,
+      values: [{ row_index: 0, column_id: bicepColumnId, value_num: 8 }],
+    },
+  });
+  assert.equal(patch.statusCode, 200);
+
+  const get = await app.inject({
+    method: 'GET', url: `/api/sessions/${id}`, headers: { cookie },
+  });
+  assert.equal(get.statusCode, 200);
+  assert.equal(get.json().notes, noteText);
+});
+
 test('malformed uuid is rejected by schema', async () => {
   const res = await app.inject({
     method: 'PATCH', url: '/api/drafts/not-a-uuid', headers: { cookie },

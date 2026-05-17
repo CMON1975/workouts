@@ -364,6 +364,7 @@ test('GET last-session returns the most recent finalized session with its values
       id: newerId, template_id: tpl.id,
       started_at: Date.now(), updated_at: Date.now(),
       client_version: 1,
+      notes: 'increase weight next time',
       values: [
         { row_index: 0, column_id: colId, value_num: 7 },
         { row_index: 1, column_id: colId, value_num: 8 },
@@ -385,6 +386,7 @@ test('GET last-session returns the most recent finalized session with its values
   assert.equal(body.values.length, 3);
   assert.equal(body.values[0].value_num, 7);
   assert.equal(body.values[2].value_num, 9);
+  assert.equal(body.notes, 'increase weight next time');
 });
 
 test('new template id can back a session', async () => {

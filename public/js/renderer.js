@@ -87,7 +87,37 @@ export function renderSessionForm(root, { template, draft, onInput }) {
     form.appendChild(rowEl);
   }
 
+  renderNotesField(form, { draft, onInput });
   root.appendChild(form);
+}
+
+function renderNotesField(form, { draft, onInput }) {
+  const wrap = document.createElement('div');
+  wrap.className = 'notes-field';
+
+  const label = document.createElement('label');
+  label.className = 'notes-label';
+  const labelText = document.createElement('span');
+  labelText.textContent = 'Notes';
+  label.appendChild(labelText);
+
+  const ta = document.createElement('textarea');
+  ta.className = 'session-notes';
+  ta.rows = 2;
+  ta.maxLength = 2000;
+  ta.placeholder = 'Optional note for next time';
+  ta.setAttribute('aria-label', 'Session notes');
+  ta.value = draft.notes ?? '';
+  if (draft.finalized_at) ta.readOnly = true;
+  ta.addEventListener('input', () => {
+    onInput((d) => {
+      const v = ta.value.trim();
+      d.notes = v === '' ? null : ta.value;
+    });
+  });
+  label.appendChild(ta);
+  wrap.appendChild(label);
+  form.appendChild(wrap);
 }
 
 function renderCheckboxField(form, { template, draft, onInput }) {
@@ -135,6 +165,8 @@ function renderCheckboxField(form, { template, draft, onInput }) {
   label.append(input, text);
   row.appendChild(label);
   form.appendChild(row);
+
+  renderNotesField(form, { draft, onInput });
 }
 
 function formatDate(ms) {
@@ -255,6 +287,16 @@ function renderSessionTable(root, { session, template }) {
     warn.textContent = 'Exercise definition not available.';
     root.appendChild(warn);
     return;
+  }
+
+  if (typeof session.notes === 'string' && session.notes.trim() !== '') {
+    const p = document.createElement('p');
+    p.className = 'detail-notes';
+    const label = document.createElement('strong');
+    label.textContent = 'Notes: ';
+    p.appendChild(label);
+    p.appendChild(document.createTextNode(session.notes));
+    root.appendChild(p);
   }
 
   if (template.kind === 'checkbox') {
@@ -431,6 +473,17 @@ export function applyPreviousHints(root, { template, prev }) {
     hint.className = 'prev-hint';
     hint.textContent = 'was ' + raw;
     field.appendChild(hint);
+  }
+
+  const notesField = root.querySelector('.notes-field');
+  if (notesField && !notesField.querySelector('.prev-note-hint')) {
+    const noteHint = document.createElement('p');
+    noteHint.className = 'prev-note-hint';
+    const text = typeof prev.notes === 'string' && prev.notes.trim() !== ''
+      ? `Last note: ${prev.notes}`
+      : 'No previous note.';
+    noteHint.textContent = text;
+    notesField.appendChild(noteHint);
   }
 }
 
