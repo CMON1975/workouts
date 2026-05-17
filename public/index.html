@@ -203,6 +203,14 @@
           <input id="te-rows-fixed" type="checkbox">
           <span>Lock the number of sets when running</span>
         </label>
+        <div class="field" id="te-columns-field">
+          <div class="col-builder-header">
+            <span>Columns</span>
+            <button id="te-add-col" type="button" class="secondary small">+ Add column</button>
+          </div>
+          <div id="te-col-builder"></div>
+          <p class="muted">Edit existing column names and units, reorder, or add new columns. (Removing columns and changing a column's type are not supported here.)</p>
+        </div>
         <p id="te-err" class="err" role="alert"></p>
         <div class="form-actions">
           <button type="button" id="te-cancel" class="secondary">Cancel</button>

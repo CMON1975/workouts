@@ -29,6 +29,17 @@ const createBodySchema = {
   },
 };
 
+const patchColumnSchema = {
+  type: 'object',
+  required: ['name'],
+  properties: {
+    id: { type: 'integer' },
+    name: { type: 'string', minLength: 1, maxLength: 50 },
+    unit: { type: ['string', 'null'], maxLength: 20 },
+    value_type: { type: 'string', enum: VALUE_TYPES },
+  },
+};
+
 const patchBodySchema = {
   type: 'object',
   properties: {
@@ -37,6 +48,7 @@ const patchBodySchema = {
     archived: { type: 'boolean' },
     default_rows: { type: 'integer', minimum: 1, maximum: 100 },
     rows_fixed: { type: 'integer', minimum: 0, maximum: 1 },
+    columns: { type: 'array', minItems: 1, maxItems: 16, items: patchColumnSchema },
   },
   additionalProperties: false,
 };
@@ -258,6 +270,60 @@ export default async function templatesRoutes(app) {
                   rows_fixed = excluded.rows_fixed
           `).run(id, nextRows, nextFixed);
         }
+        if (body.columns !== undefined) {
+          if (!uniqueColumnNames(body.columns)) throw new Error('DUP_COLUMN_NAMES');
+
+          const active = db.prepare(`
+            SELECT w.id FROM workouts w
+            JOIN routine_templates rt ON rt.routine_id = w.routine_id
+            WHERE rt.template_id = ? AND w.finalized_at IS NULL
+            LIMIT 1
+          `).get(id);
+          if (active) throw new Error('ACTIVE_WORKOUT');
+
+          const existingCols = db.prepare(
+            'SELECT id FROM template_columns WHERE template_id = ?'
+          ).all(id);
+          const existingIds = new Set(existingCols.map(c => c.id));
+
+          for (const c of body.columns) {
+            if (c.id !== undefined && !existingIds.has(c.id)) throw new Error('FOREIGN_COLUMN_ID');
+          }
+          const sentIds = new Set();
+          for (const c of body.columns) {
+            if (c.id !== undefined) {
+              if (sentIds.has(c.id)) throw new Error('DUP_COLUMN_ID');
+              sentIds.add(c.id);
+            }
+          }
+
+          // Shift kept columns to a non-colliding range first so the unique
+          // (template_id, position) index doesn't fire mid-update.
+          db.prepare(
+            'UPDATE template_columns SET position = position + 10000 WHERE template_id = ?'
+          ).run(id);
+
+          const updateExisting = db.prepare(`
+            UPDATE template_columns
+               SET name = ?, unit = ?, position = ?
+             WHERE id = ? AND template_id = ?
+          `);
+          const insertNew = db.prepare(`
+            INSERT INTO template_columns (template_id, name, unit, position, value_type)
+            VALUES (?, ?, ?, ?, ?)
+          `);
+
+          body.columns.forEach((c, i) => {
+            const name = c.name.trim();
+            if (!name) throw new Error('BLANK_COLUMN_NAME');
+            const unit = c.unit == null ? null : String(c.unit).trim() || null;
+            if (c.id !== undefined) {
+              updateExisting.run(name, unit, i, c.id, id);
+            } else {
+              insertNew.run(id, name, unit, i, c.value_type || 'number');
+            }
+          });
+        }
         return true;
       })();
 
@@ -266,6 +332,21 @@ export default async function templatesRoutes(app) {
     } catch (err) {
       if (err.message === 'BLANK_NAME') {
         return reply.code(400).send({ error: 'name cannot be blank' });
+      }
+      if (err.message === 'BLANK_COLUMN_NAME') {
+        return reply.code(400).send({ error: 'column name cannot be blank' });
+      }
+      if (err.message === 'DUP_COLUMN_NAMES') {
+        return reply.code(400).send({ error: 'column names must be unique' });
+      }
+      if (err.message === 'DUP_COLUMN_ID') {
+        return reply.code(400).send({ error: 'duplicate column id in payload' });
+      }
+      if (err.message === 'FOREIGN_COLUMN_ID') {
+        return reply.code(400).send({ error: 'column id does not belong to this template' });
+      }
+      if (err.message === 'ACTIVE_WORKOUT') {
+        return reply.code(409).send({ error: 'finish or end the active workout before editing columns' });
       }
       if (/UNIQUE constraint failed: templates\.name/i.test(err.message)) {
         return reply.code(409).send({ error: 'template name already exists' });

@@ -96,6 +96,9 @@ const els = {
   teDefaultRows: document.getElementById('te-default-rows'),
   teRowsFixedField: document.getElementById('te-rows-fixed-field'),
   teRowsFixed: document.getElementById('te-rows-fixed'),
+  teColumnsField: document.getElementById('te-columns-field'),
+  teColBuilder: document.getElementById('te-col-builder'),
+  teAddCol: document.getElementById('te-add-col'),
   teCancel: document.getElementById('te-cancel'),
   teSave: document.getElementById('te-save'),
   teErr: document.getElementById('te-err'),
@@ -799,6 +802,7 @@ function renderManage() {
 }
 
 let tplEditing = null;
+let tplEditColumns = []; // { id?, name, unit, value_type, isNew, origName?, origUnit? }
 
 function openTemplateEdit(tpl) {
   tplEditing = tpl;
@@ -809,12 +813,110 @@ function openTemplateEdit(tpl) {
   els.teDescription.required = isCheckbox;
   els.teDefaultRowsField.hidden = isCheckbox;
   els.teRowsFixedField.hidden = isCheckbox;
+  els.teColumnsField.hidden = isCheckbox;
   if (!isCheckbox) {
     els.teDefaultRows.value = String(tpl.default_rows ?? 1);
     els.teRowsFixed.checked = !!tpl.rows_fixed;
+    tplEditColumns = (tpl.columns || []).map(c => ({
+      id: c.id,
+      name: c.name,
+      unit: c.unit || '',
+      value_type: c.value_type || 'number',
+      isNew: false,
+      origName: c.name,
+      origUnit: c.unit || '',
+    }));
+    renderTeColBuilder();
+  } else {
+    tplEditColumns = [];
   }
   els.tplEditDialog.showModal();
   setTimeout(() => els.teName.focus(), 0);
+}
+
+function renderTeColBuilder() {
+  els.teColBuilder.innerHTML = '';
+  tplEditColumns.forEach((col, i) => {
+    const row = document.createElement('div');
+    row.className = 'col-row';
+
+    const up = document.createElement('button');
+    up.type = 'button'; up.className = 'secondary small'; up.textContent = '↑';
+    up.disabled = i === 0;
+    up.addEventListener('click', () => {
+      [tplEditColumns[i - 1], tplEditColumns[i]] = [tplEditColumns[i], tplEditColumns[i - 1]];
+      renderTeColBuilder();
+    });
+    row.appendChild(up);
+
+    const down = document.createElement('button');
+    down.type = 'button'; down.className = 'secondary small'; down.textContent = '↓';
+    down.disabled = i === tplEditColumns.length - 1;
+    down.addEventListener('click', () => {
+      [tplEditColumns[i], tplEditColumns[i + 1]] = [tplEditColumns[i + 1], tplEditColumns[i]];
+      renderTeColBuilder();
+    });
+    row.appendChild(down);
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'col-name';
+    nameInput.maxLength = 50;
+    nameInput.placeholder = 'Column name';
+    nameInput.autocomplete = 'off';
+    nameInput.value = col.name;
+    nameInput.addEventListener('input', () => { tplEditColumns[i].name = nameInput.value; });
+    row.appendChild(nameInput);
+
+    if (col.isNew) {
+      const typeSel = document.createElement('select');
+      for (const t of ['number', 'text']) {
+        const opt = document.createElement('option');
+        opt.value = t; opt.textContent = t;
+        if (col.value_type === t) opt.selected = true;
+        typeSel.appendChild(opt);
+      }
+      typeSel.addEventListener('change', () => { tplEditColumns[i].value_type = typeSel.value; });
+      row.appendChild(typeSel);
+    } else {
+      const typeLabel = document.createElement('span');
+      typeLabel.className = 'col-type-label muted';
+      typeLabel.textContent = col.value_type;
+      row.appendChild(typeLabel);
+    }
+
+    const unitInput = document.createElement('input');
+    unitInput.type = 'text';
+    unitInput.className = 'col-unit';
+    unitInput.maxLength = 20;
+    unitInput.placeholder = 'unit';
+    unitInput.autocomplete = 'off';
+    unitInput.value = col.unit || '';
+    unitInput.addEventListener('input', () => { tplEditColumns[i].unit = unitInput.value; });
+    row.appendChild(unitInput);
+
+    if (col.isNew) {
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'secondary small col-del';
+      delBtn.textContent = '×';
+      delBtn.setAttribute('aria-label', 'Remove column');
+      delBtn.addEventListener('click', () => {
+        tplEditColumns.splice(i, 1);
+        renderTeColBuilder();
+      });
+      row.appendChild(delBtn);
+    }
+
+    els.teColBuilder.appendChild(row);
+  });
+}
+
+function handleTeAddCol() {
+  tplEditColumns.push({
+    name: '', unit: '', value_type: 'number', isNew: true,
+  });
+  renderTeColBuilder();
 }
 
 async function handleTemplateEditSubmit(evt) {
@@ -840,6 +942,20 @@ async function handleTemplateEditSubmit(evt) {
     if (defaultRows !== tpl.default_rows) patch.default_rows = defaultRows;
     const rowsFixed = els.teRowsFixed.checked;
     if (rowsFixed !== !!tpl.rows_fixed) patch.rows_fixed = rowsFixed;
+
+    const colsResult = buildEditColumnsPatch(tpl);
+    if (colsResult.error) { els.teErr.textContent = colsResult.error; return; }
+    if (colsResult.unitChanges.length > 0) {
+      const lines = colsResult.unitChanges.map(c =>
+        `${c.name}: ${c.from || '(none)'} → ${c.to || '(none)'}`
+      );
+      const ok = confirm(
+        'Changing a unit does not convert past values. Past entries will be displayed under the new unit:\n\n' +
+        lines.join('\n') + '\n\nContinue?'
+      );
+      if (!ok) return;
+    }
+    if (colsResult.columns) patch.columns = colsResult.columns;
   }
   if (Object.keys(patch).length === 0) {
     els.tplEditDialog.close();
@@ -855,11 +971,57 @@ async function handleTemplateEditSubmit(evt) {
     renderManage();
     renderTemplateList();
   } catch (err) {
-    if (err.status === 409) els.teErr.textContent = 'An exercise with that name already exists.';
-    else els.teErr.textContent = 'Save failed — try again.';
+    if (err.status === 409) {
+      const msg = err.body?.error || '';
+      els.teErr.textContent = msg.includes('workout')
+        ? 'Finish or end the active workout before editing columns.'
+        : 'An exercise with that name already exists.';
+    } else if (err.status === 400) {
+      els.teErr.textContent = err.body?.error || 'Some fields are invalid.';
+    } else {
+      els.teErr.textContent = 'Save failed — try again.';
+    }
   } finally {
     els.teSave.disabled = false;
   }
+}
+
+function buildEditColumnsPatch(tpl) {
+  const cleaned = tplEditColumns.map(c => ({
+    ...c,
+    name: c.name.trim(),
+    unit: (c.unit || '').trim(),
+  }));
+  for (const c of cleaned) {
+    if (!c.name) return { error: 'Column names cannot be blank.' };
+  }
+  const lowerNames = cleaned.map(c => c.name.toLowerCase());
+  if (new Set(lowerNames).size !== lowerNames.length) {
+    return { error: 'Column names must be unique.' };
+  }
+
+  const origIds = (tpl.columns || []).map(c => c.id);
+  const sameOrder = cleaned.length === origIds.length
+    && cleaned.every((c, i) => c.id === origIds[i] && !c.isNew);
+  const renamed = cleaned.some(c => !c.isNew && c.name !== c.origName);
+  const unitChanged = cleaned.some(c => !c.isNew && c.unit !== c.origUnit);
+  const added = cleaned.some(c => c.isNew);
+  if (sameOrder && !renamed && !unitChanged && !added) {
+    return { unitChanges: [] };
+  }
+
+  const unitChanges = cleaned
+    .filter(c => !c.isNew && c.unit !== c.origUnit)
+    .map(c => ({ name: c.name, from: c.origUnit, to: c.unit }));
+
+  const columns = cleaned.map(c => {
+    const out = { name: c.name, unit: c.unit || null };
+    if (c.id !== undefined) out.id = c.id;
+    else out.value_type = c.value_type;
+    return out;
+  });
+
+  return { columns, unitChanges };
 }
 
 function openNewRoutine() {
@@ -1125,6 +1287,7 @@ async function boot() {
   els.manageRtBack.addEventListener('click', goHome);
   els.tplEditForm.addEventListener('submit', handleTemplateEditSubmit);
   els.teCancel.addEventListener('click', () => els.tplEditDialog.close());
+  els.teAddCol.addEventListener('click', handleTeAddCol);
 
   try {
     await api.templates({ includeArchived: true });

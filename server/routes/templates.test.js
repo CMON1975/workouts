@@ -283,6 +283,243 @@ test('PATCH with empty body returns 400', async () => {
   assert.equal(res.statusCode, 400);
 });
 
+test('PATCH columns renames a column and preserves session_values', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'ColRename', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'reps' }, { name: 'weight', unit: 'kg' }],
+    },
+  });
+  const tpl = create.json();
+  const repsId = tpl.columns[0].id;
+  const weightId = tpl.columns[1].id;
+
+  // Record a session against the original column ids.
+  const sid = '019dbaf6-6425-79fc-874e-df11ade615a0';
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${sid}`, headers: { cookie },
+    payload: {
+      id: sid, template_id: tpl.id,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+      values: [
+        { row_index: 0, column_id: repsId, value_num: 10 },
+        { row_index: 0, column_id: weightId, value_num: 50 },
+      ],
+    },
+  });
+
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`, headers: { cookie },
+    payload: {
+      columns: [
+        { id: repsId, name: 'repetitions' },
+        { id: weightId, name: 'weight', unit: 'kg' },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.columns[0].name, 'repetitions');
+  assert.equal(body.columns[0].id, repsId, 'id stable after rename');
+
+  // session_values still attached to the same column_id
+  const get = await app.inject({
+    method: 'GET', url: `/api/sessions/${sid}`, headers: { cookie },
+  });
+  const vals = get.json().values;
+  assert.equal(vals.length, 2);
+  assert.ok(vals.some(v => v.column_id === repsId && v.value_num === 10));
+});
+
+test('PATCH columns changes unit on an existing column', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'UnitFlip', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'weight', unit: 'kg' }],
+    },
+  });
+  const tpl = create.json();
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`, headers: { cookie },
+    payload: { columns: [{ id: tpl.columns[0].id, name: 'weight', unit: 'lb' }] },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().columns[0].unit, 'lb');
+});
+
+test('PATCH columns adds a new column at the end', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'ColAdd', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'reps' }],
+    },
+  });
+  const tpl = create.json();
+  const repsId = tpl.columns[0].id;
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`, headers: { cookie },
+    payload: {
+      columns: [
+        { id: repsId, name: 'reps' },
+        { name: 'weight', unit: 'kg', value_type: 'number' },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  const cols = res.json().columns;
+  assert.equal(cols.length, 2);
+  assert.equal(cols[0].id, repsId);
+  assert.equal(cols[1].name, 'weight');
+  assert.equal(cols[1].unit, 'kg');
+  assert.equal(cols[1].position, 1);
+});
+
+test('PATCH columns reorders existing columns', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'ColReorder', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'a' }, { name: 'b' }, { name: 'c' }],
+    },
+  });
+  const tpl = create.json();
+  const [a, b, c] = tpl.columns;
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`, headers: { cookie },
+    payload: {
+      columns: [
+        { id: c.id, name: 'c' },
+        { id: a.id, name: 'a' },
+        { id: b.id, name: 'b' },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json().columns.map(x => x.id), [c.id, a.id, b.id]);
+  assert.deepEqual(res.json().columns.map(x => x.position), [0, 1, 2]);
+});
+
+test('PATCH columns omitting an existing column does NOT delete it', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'NoImplicitDelete', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'a' }, { name: 'b' }],
+    },
+  });
+  const tpl = create.json();
+  const aId = tpl.columns[0].id;
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`, headers: { cookie },
+    payload: { columns: [{ id: aId, name: 'a-renamed' }] },
+  });
+  assert.equal(res.statusCode, 200);
+  const cols = res.json().columns;
+  assert.equal(cols.length, 2, 'omitted column survives');
+  assert.ok(cols.some(c => c.name === 'a-renamed'));
+  assert.ok(cols.some(c => c.name === 'b'));
+});
+
+test('PATCH columns with empty name returns 400', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'BlankCol', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'reps' }],
+    },
+  });
+  const tpl = create.json();
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`, headers: { cookie },
+    payload: { columns: [{ id: tpl.columns[0].id, name: '   ' }] },
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('PATCH columns rejects id referencing a different template', async () => {
+  const t1 = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: { name: 'ForeignA', default_rows: 1, rows_fixed: 0, columns: [{ name: 'a' }] },
+  });
+  const t2 = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: { name: 'ForeignB', default_rows: 1, rows_fixed: 0, columns: [{ name: 'b' }] },
+  });
+  const foreignColId = t2.json().columns[0].id;
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${t1.json().id}`, headers: { cookie },
+    payload: { columns: [{ id: foreignColId, name: 'borrowed' }] },
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('PATCH columns rejects duplicate names in payload', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'DupCol', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'reps' }, { name: 'weight' }],
+    },
+  });
+  const tpl = create.json();
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`, headers: { cookie },
+    payload: {
+      columns: [
+        { id: tpl.columns[0].id, name: 'same' },
+        { id: tpl.columns[1].id, name: 'same' },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('PATCH columns returns 409 when an active workout uses this template', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: {
+      name: 'ActiveGuard', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'reps' }],
+    },
+  });
+  const tpl = create.json();
+
+  const rt = await app.inject({
+    method: 'POST', url: '/api/routines', headers: { cookie },
+    payload: { name: 'ActiveGuardRoutine', template_ids: [tpl.id] },
+  });
+  const routineId = rt.json().id;
+
+  const wid = '019dbaf7-9000-7000-8000-000000000001';
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`, headers: { cookie },
+    payload: {
+      id: wid, routine_id: routineId,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+    },
+  });
+
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`, headers: { cookie },
+    payload: { columns: [{ id: tpl.columns[0].id, name: 'repetitions' }] },
+  });
+  assert.equal(res.statusCode, 409);
+
+  // After finalizing the workout, the same patch succeeds.
+  await app.inject({
+    method: 'POST', url: `/api/workouts/${wid}/finalize`, headers: { cookie },
+    payload: { client_version: 1 },
+  });
+  const ok = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`, headers: { cookie },
+    payload: { columns: [{ id: tpl.columns[0].id, name: 'repetitions' }] },
+  });
+  assert.equal(ok.statusCode, 200);
+});
+
 test('GET last-session requires auth', async () => {
   const res = await app.inject({ method: 'GET', url: '/api/templates/1/last-session' });
   assert.equal(res.statusCode, 401);

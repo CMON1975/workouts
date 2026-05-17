@@ -437,10 +437,17 @@ button.small {
   color: var(--muted);
 }
 
-#nt-col-builder {
+#nt-col-builder,
+#te-col-builder {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.col-type-label {
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+  padding: 0 4px;
 }
 
 .col-row {
