@@ -30,3 +30,9 @@ Running log of work done with Claude Code.
 **What:** Extended `scripts/export.js` with `--since <Nd>` (e.g. `--since 7d`) to limit the rendered Markdown to sessions finalized within the last N days. Window is also printed in the header as `_Window: last 7 days_` so the consuming LLM knows what it's looking at. 114/114 tests green.
 **Why:** The export script previously dumped all finalized sessions, which was fine when the prod DB only held a few days of data but no longer matches how I want to feed weekly snapshots to an LLM.
 **Notes:** TDD'd — added failing tests for the renderer header, CLI happy path, and invalid-duration rejection before implementing. Parser intentionally accepts only `Nd` (whole days); didn't add `Nh`/`Nw`/absolute dates since YAGNI. Filter applied in SQL (`finalized_at >= @since`); workouts with no in-window children just produce no output since the renderer flattens children to top-level entries anyway.
+
+---
+## 2026-05-17 — Export filenames now dated; same-day re-run overwrites only that day
+**What:** Changed `scripts/export.js` to write `workouts-YYYY-MM-DD.md` (UTC) instead of a fixed `workouts.md`. JSON output (`--with-json`) gets the same date suffix. Updated top-of-file doc + CLI usage string.
+**Why:** Avoid silently destroying older snapshots when running the export weekly. Each run becomes a new dated file; only re-runs within the same UTC day overwrite.
+**Notes:** No flag — replaced the default outright. Same-day re-runs intentionally still clobber (typical case is "redo, I made a mistake"). Consumer side is just a Claude Code instance pointed at the directory, no script update needed there.

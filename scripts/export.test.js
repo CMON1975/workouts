@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -281,7 +281,7 @@ test('text column renders raw value, omits unit', () => {
   assert.match(md, /\| 1 \| 1:30 \|/);
 });
 
-test('CLI runs against a real DB and writes workouts.md with expected counts', async () => {
+test('CLI runs against a real DB and writes a dated workouts-YYYY-MM-DD.md with expected counts', async () => {
   const tmp = mkdtempSync(join(tmpdir(), 'workouts-export-'));
   const dbPath = join(tmp, 'test.db');
   const outDir = join(tmp, 'out');
@@ -334,9 +334,9 @@ test('CLI runs against a real DB and writes workouts.md with expected counts', a
       stdio: 'pipe',
     });
 
-    const mdPath = join(outDir, 'workouts.md');
-    assert.ok(existsSync(mdPath), 'workouts.md must exist after export');
-    const md = readFileSync(mdPath, 'utf8');
+    const mdFiles = readdirSync(outDir).filter(f => /^workouts-\d{4}-\d{2}-\d{2}\.md$/.test(f));
+    assert.equal(mdFiles.length, 1, 'exactly one dated workouts-YYYY-MM-DD.md must exist');
+    const md = readFileSync(join(outDir, mdFiles[0]), 'utf8');
     assert.match(md, /\*\*Totals:\*\* 2 sessions · 3 finalized sets/);
     // Workout's child Bicep Curls (finalized at tWorkout, 2026-05-09 12:30) is newer.
     assert.match(md, /## 2026-05-09 12:30 — Bicep Curls \(Arms workout\)/);
@@ -407,7 +407,9 @@ test('CLI --since 7d filters out sessions older than 7 days', async () => {
       stdio: 'pipe',
     });
 
-    const md = readFileSync(join(outDir, 'workouts.md'), 'utf8');
+    const mdFiles = readdirSync(outDir).filter(f => /^workouts-\d{4}-\d{2}-\d{2}\.md$/.test(f));
+    assert.equal(mdFiles.length, 1);
+    const md = readFileSync(join(outDir, mdFiles[0]), 'utf8');
     assert.match(md, /_Window: last 7 days_/);
     assert.match(md, /\*\*Totals:\*\* 1 sessions · 1 finalized sets/);
     // Recent session was finalized within 7d, old one was not. Spot-check by id

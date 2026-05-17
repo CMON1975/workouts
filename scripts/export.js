@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Reads finalized workouts + standalone sessions from the workouts SQLite DB
-// and writes a single Markdown snapshot to <out>/workouts.md (always
-// overwriting). Designed for an LLM in another project to scan and analyze.
+// and writes a Markdown snapshot to <out>/workouts-YYYY-MM-DD.md (UTC date).
+// Same-day re-runs overwrite that day's file; different days produce new files.
+// Designed for an LLM in another project to scan and analyze.
 //
 // Usage: npm run export -- --out <dir> [--with-json] [--since <Nd>]
 
@@ -14,6 +15,11 @@ function pad2(n) { return String(n).padStart(2, '0'); }
 function fmtDate(ms) {
   const d = new Date(ms);
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+}
+
+function ymdUTC(ms) {
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
 }
 
 function colHeader(col) {
@@ -267,12 +273,13 @@ function main() {
   const exportedAt = Date.now();
   const md = renderMarkdown({ workouts, standalone, exportedAt, dbPath, sinceLabel });
 
-  const mdPath = join(outDir, 'workouts.md');
+  const datestamp = ymdUTC(exportedAt);
+  const mdPath = join(outDir, `workouts-${datestamp}.md`);
   writeFileSync(mdPath, md, 'utf8');
 
   let jsonPath = null;
   if (args.withJson) {
-    jsonPath = join(outDir, 'workouts.json');
+    jsonPath = join(outDir, `workouts-${datestamp}.json`);
     writeFileSync(jsonPath, JSON.stringify({ workouts, standalone, exportedAt, dbPath }, null, 2), 'utf8');
   }
 
