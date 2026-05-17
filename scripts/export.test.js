@@ -360,6 +360,78 @@ test('CLI exits non-zero when --out directory does not exist', () => {
   }
 });
 
+test('renderMarkdown includes window label when sinceLabel provided', () => {
+  const md = renderMarkdown({ ...baseExport, sinceLabel: 'last 7 days' });
+  assert.match(md, /_Window: last 7 days_/);
+});
+
+test('renderMarkdown omits window label when sinceLabel absent', () => {
+  const md = renderMarkdown(baseExport);
+  assert.doesNotMatch(md, /Window:/);
+});
+
+test('CLI --since 7d filters out sessions older than 7 days', async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'workouts-export-since-'));
+  const dbPath = join(tmp, 'test.db');
+  const outDir = join(tmp, 'out');
+  const { mkdirSync } = await import('node:fs');
+  mkdirSync(outDir);
+  try {
+    const { openDb } = await import('../server/db.js');
+    const db = openDb(dbPath);
+    const tplId = db.prepare(`SELECT id FROM templates WHERE name='Bicep Curls'`).get().id;
+    const colId = db.prepare(`SELECT id FROM template_columns WHERE template_id=?`).get(tplId).id;
+
+    const now = Date.now();
+    const recent = now - 1 * 86_400_000;   // 1 day ago — inside window
+    const old    = now - 10 * 86_400_000;  // 10 days ago — outside window
+
+    const recentId = '019dbaf9-0010-7000-8000-000000000001';
+    const oldId    = '019dbaf9-0011-7000-8000-000000000001';
+    const ins = db.prepare(`
+      INSERT INTO sessions (id, template_id, started_at, updated_at, finalized_at, client_version)
+      VALUES (?, ?, ?, ?, ?, 1)
+    `);
+    ins.run(recentId, tplId, recent - 60000, recent, recent);
+    ins.run(oldId,    tplId, old - 60000,    old,    old);
+    const insVal = db.prepare(`
+      INSERT INTO session_values (session_id, row_index, column_id, value_num, value_text)
+      VALUES (?, 0, ?, 42, NULL)
+    `);
+    insVal.run(recentId, colId);
+    insVal.run(oldId, colId);
+    db.close();
+
+    execFileSync(process.execPath, [exportScript, '--out', outDir, '--since', '7d'], {
+      env: { ...process.env, DB_PATH: dbPath },
+      stdio: 'pipe',
+    });
+
+    const md = readFileSync(join(outDir, 'workouts.md'), 'utf8');
+    assert.match(md, /_Window: last 7 days_/);
+    assert.match(md, /\*\*Totals:\*\* 1 sessions · 1 finalized sets/);
+    // Recent session was finalized within 7d, old one was not. Spot-check by id
+    // via the only count we can pin: exactly one heading.
+    const headings = md.match(/^## /gm) ?? [];
+    assert.equal(headings.length, 1, 'only the in-window session renders');
+  } finally {
+    if (existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('CLI --since rejects invalid duration', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'workouts-export-bad-since-'));
+  try {
+    execFileSync(process.execPath, [exportScript, '--out', tmp, '--since', '7x'], { stdio: 'pipe' });
+    assert.fail('expected non-zero exit');
+  } catch (err) {
+    assert.notEqual(err.status, 0);
+    assert.match(err.stderr.toString(), /invalid --since/);
+  } finally {
+    if (existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test('multi-column standard session renders all columns in position order', () => {
   const md = renderMarkdown({
     ...baseExport,

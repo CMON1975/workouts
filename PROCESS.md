@@ -24,3 +24,9 @@ Running log of work done with Claude Code.
 - Prod DB is at `/var/lib/workouts/workouts.db`, not `/var/www/workouts/data/` (the latter is empty on the droplet — `DB_PATH` in `/etc/workouts.env` points at `/var/lib/...`, and the systemd unit's `ReadWritePaths` matches). So git operations on the working tree *cannot* affect prod data.
 - SQLite backup gotcha: with WAL mode and an uncheckpointed WAL (large `.db-wal` vs small `.db`), plain `cp` and `sqlite3 .backup` both produced empty backup files. **`VACUUM INTO` worked** — produces an atomic consistent snapshot regardless of WAL state.
 - `err.log` is append-only; we wasted ~20 min chasing old EACCES entries that had been resolved by the ACL fix. `systemctl status` for current state is the source of truth.
+
+---
+## 2026-05-17 — Added `--since Nd` flag to markdown export
+**What:** Extended `scripts/export.js` with `--since <Nd>` (e.g. `--since 7d`) to limit the rendered Markdown to sessions finalized within the last N days. Window is also printed in the header as `_Window: last 7 days_` so the consuming LLM knows what it's looking at. 114/114 tests green.
+**Why:** The export script previously dumped all finalized sessions, which was fine when the prod DB only held a few days of data but no longer matches how I want to feed weekly snapshots to an LLM.
+**Notes:** TDD'd — added failing tests for the renderer header, CLI happy path, and invalid-duration rejection before implementing. Parser intentionally accepts only `Nd` (whole days); didn't add `Nh`/`Nw`/absolute dates since YAGNI. Filter applied in SQL (`finalized_at >= @since`); workouts with no in-window children just produce no output since the renderer flattens children to top-level entries anyway.

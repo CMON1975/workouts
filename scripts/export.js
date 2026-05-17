@@ -3,7 +3,7 @@
 // and writes a single Markdown snapshot to <out>/workouts.md (always
 // overwriting). Designed for an LLM in another project to scan and analyze.
 //
-// Usage: npm run export -- --out <dir> [--with-json]
+// Usage: npm run export -- --out <dir> [--with-json] [--since <Nd>]
 
 import { writeFileSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -78,7 +78,7 @@ function countSets(s) {
   return s.values.reduce((m, v) => Math.max(m, v.row_index), -1) + 1;
 }
 
-export function renderMarkdown({ workouts, standalone, exportedAt, dbPath }) {
+export function renderMarkdown({ workouts, standalone, exportedAt, dbPath, sinceLabel }) {
   // Flatten: every finalized session becomes a top-level entry. Workouts contribute
   // their child sessions tagged with the workout's routine name.
   const items = [];
@@ -99,6 +99,7 @@ export function renderMarkdown({ workouts, standalone, exportedAt, dbPath }) {
     '',
     `_Exported ${fmtDate(exportedAt)} UTC from ${dbPath}_  `,
     '_All times below are in UTC._',
+    ...(sinceLabel ? ['', `_Window: ${sinceLabel}_`] : []),
     '',
     `**Totals:** ${items.length} sessions · ${totalSets} finalized sets`,
     '',
@@ -112,7 +113,13 @@ export function renderMarkdown({ workouts, standalone, exportedAt, dbPath }) {
 
 // --- DB read ---------------------------------------------------------------
 
-export function loadExportData(dbPath) {
+export function parseSince(s) {
+  const m = /^(\d+)d$/.exec(s);
+  if (!m) throw new Error(`invalid --since value: ${s} (expected e.g. "7d")`);
+  return Number(m[1]);
+}
+
+export function loadExportData(dbPath, { since = null } = {}) {
   const db = new Database(dbPath, { readonly: true, fileMustExist: true });
   try {
     const colsByTpl = new Map();
@@ -143,7 +150,7 @@ export function loadExportData(dbPath) {
       });
     }
 
-    const sessionRows = db.prepare(`
+    const sessionSql = `
       SELECT s.id, s.template_id, s.workout_id,
              s.started_at, s.finalized_at, s.notes,
              t.name AS template_name, t.kind AS template_kind,
@@ -152,8 +159,12 @@ export function loadExportData(dbPath) {
         FROM sessions s
         JOIN templates t ON t.id = s.template_id
        WHERE s.finalized_at IS NOT NULL
+         ${since != null ? 'AND s.finalized_at >= @since' : ''}
        ORDER BY s.finalized_at DESC, s.started_at DESC
-    `).all();
+    `;
+    const sessionRows = since != null
+      ? db.prepare(sessionSql).all({ since })
+      : db.prepare(sessionSql).all();
 
     const shapeSession = (r) => ({
       id: r.id,
@@ -206,11 +217,12 @@ export function loadExportData(dbPath) {
 // --- CLI -------------------------------------------------------------------
 
 function parseArgs(argv) {
-  const args = { out: null, withJson: false };
+  const args = { out: null, withJson: false, since: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--out') { args.out = argv[++i]; continue; }
     if (a === '--with-json') { args.withJson = true; continue; }
+    if (a === '--since') { args.since = argv[++i]; continue; }
     if (a === '-h' || a === '--help') { args.help = true; continue; }
     throw new Error(`unknown arg: ${a}`);
   }
@@ -231,7 +243,7 @@ function main() {
     process.exit(2);
   }
   if (args.help || !args.out) {
-    console.error('usage: npm run export -- --out <dir> [--with-json]');
+    console.error('usage: npm run export -- --out <dir> [--with-json] [--since <Nd>]');
     process.exit(args.help ? 0 : 2);
   }
   const outDir = resolve(args.out);
@@ -241,9 +253,19 @@ function main() {
   }
   const dbPath = resolve(process.env.DB_PATH || './data/workouts.db');
 
-  const { workouts, standalone } = loadExportData(dbPath);
+  let sinceCutoff = null;
+  let sinceLabel = null;
+  if (args.since) {
+    let days;
+    try { days = parseSince(args.since); }
+    catch (err) { console.error(err.message); process.exit(2); }
+    sinceCutoff = Date.now() - days * 86_400_000;
+    sinceLabel = `last ${days} day${days === 1 ? '' : 's'}`;
+  }
+
+  const { workouts, standalone } = loadExportData(dbPath, { since: sinceCutoff });
   const exportedAt = Date.now();
-  const md = renderMarkdown({ workouts, standalone, exportedAt, dbPath });
+  const md = renderMarkdown({ workouts, standalone, exportedAt, dbPath, sinceLabel });
 
   const mdPath = join(outDir, 'workouts.md');
   writeFileSync(mdPath, md, 'utf8');
