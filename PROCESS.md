@@ -36,3 +36,9 @@ Running log of work done with Claude Code.
 **What:** Changed `scripts/export.js` to write `workouts-YYYY-MM-DD.md` (UTC) instead of a fixed `workouts.md`. JSON output (`--with-json`) gets the same date suffix. Updated top-of-file doc + CLI usage string.
 **Why:** Avoid silently destroying older snapshots when running the export weekly. Each run becomes a new dated file; only re-runs within the same UTC day overwrite.
 **Notes:** No flag — replaced the default outright. Same-day re-runs intentionally still clobber (typical case is "redo, I made a mistake"). Consumer side is just a Claude Code instance pointed at the directory, no script update needed there.
+
+---
+## 2026-05-17 — Edit-routine add/remove parity + template safe-field edit dialog
+**What:** Edit-routine view now exposes the available-exercises picker and the per-row remove button in edit mode (previously create-only). Added an inert info banner explaining that past workouts keep their original exercises. Replaced the Rename prompt in Manage with an Edit dialog covering name, description, default_rows, and rows_fixed (hidden for checkbox kind). 114/114 tests green.
+**Why:** Routines were effectively frozen post-create; only reordering was possible. The user needs to iterate routine membership between workouts. Template metadata (description, default sets, locked-sets) was patchable via the server but had no UI.
+**Notes:** Pure frontend change. Server PATCH /api/routines/:id and PATCH /api/templates/:id already covered everything; existing 409 guard on active workouts still applies. History stays safe because sessions reference live template_id and FK RESTRICT blocks hard deletes; removing a template from a routine never touches past finalized workouts. Column-level edits (rename/remove/value_type) deferred — would need a snapshot/versioning scheme to keep historical session_values interpretable.

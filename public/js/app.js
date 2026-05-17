@@ -69,6 +69,7 @@ const els = {
   nrAvailableSection: document.getElementById('nr-available-section'),
   nrAvailable: document.getElementById('nr-available'),
   nrAvailableEmpty: document.getElementById('nr-available-empty'),
+  nrEditBanner: document.getElementById('nr-edit-banner'),
   nrErr: document.getElementById('nr-err'),
   nrSubmit: document.getElementById('nr-submit'),
   manageRt: document.getElementById('manage-rt'),
@@ -86,6 +87,18 @@ const els = {
   logout: document.getElementById('logout'),
   resumeBanner: document.getElementById('resume-banner'),
   exercisesDisclosure: document.getElementById('exercises-disclosure'),
+  tplEditDialog: document.getElementById('tpl-edit-dialog'),
+  tplEditForm: document.getElementById('tpl-edit-form'),
+  teName: document.getElementById('te-name'),
+  teDescriptionField: document.getElementById('te-description-field'),
+  teDescription: document.getElementById('te-description'),
+  teDefaultRowsField: document.getElementById('te-default-rows-field'),
+  teDefaultRows: document.getElementById('te-default-rows'),
+  teRowsFixedField: document.getElementById('te-rows-fixed-field'),
+  teRowsFixed: document.getElementById('te-rows-fixed'),
+  teCancel: document.getElementById('te-cancel'),
+  teSave: document.getElementById('te-save'),
+  teErr: document.getElementById('te-err'),
 };
 
 const VIEWS = ['home', 'session', 'history', 'detail', 'newTpl', 'manage', 'newRt', 'manageRt', 'runner'];
@@ -780,25 +793,72 @@ function renderManage() {
   });
   renderManageList(els.manageList, {
     templates: sorted,
-    onRename: handleRename,
+    onEdit: openTemplateEdit,
     onArchiveToggle: handleArchiveToggle,
   });
 }
 
-async function handleRename(tpl) {
-  const next = prompt('Rename exercise', tpl.name);
-  if (next == null) return;
-  const trimmed = next.trim();
-  if (!trimmed || trimmed === tpl.name) return;
+let tplEditing = null;
+
+function openTemplateEdit(tpl) {
+  tplEditing = tpl;
+  els.teErr.textContent = '';
+  els.teName.value = tpl.name;
+  els.teDescription.value = tpl.description || '';
+  const isCheckbox = tpl.kind === 'checkbox';
+  els.teDescription.required = isCheckbox;
+  els.teDefaultRowsField.hidden = isCheckbox;
+  els.teRowsFixedField.hidden = isCheckbox;
+  if (!isCheckbox) {
+    els.teDefaultRows.value = String(tpl.default_rows ?? 1);
+    els.teRowsFixed.checked = !!tpl.rows_fixed;
+  }
+  els.tplEditDialog.showModal();
+  setTimeout(() => els.teName.focus(), 0);
+}
+
+async function handleTemplateEditSubmit(evt) {
+  evt.preventDefault();
+  if (!tplEditing) return;
+  const tpl = tplEditing;
+  const isCheckbox = tpl.kind === 'checkbox';
+
+  const name = els.teName.value.trim();
+  if (!name) { els.teErr.textContent = 'Name is required.'; return; }
+  const description = els.teDescription.value.trim();
+  if (isCheckbox && !description) { els.teErr.textContent = 'Description is required for checkbox exercises.'; return; }
+
+  const patch = {};
+  if (name !== tpl.name) patch.name = name;
+  if (description !== (tpl.description || '')) patch.description = description;
+  if (!isCheckbox) {
+    const defaultRows = Number(els.teDefaultRows.value);
+    if (!Number.isInteger(defaultRows) || defaultRows < 1 || defaultRows > 100) {
+      els.teErr.textContent = 'Sets must be a whole number between 1 and 100.';
+      return;
+    }
+    if (defaultRows !== tpl.default_rows) patch.default_rows = defaultRows;
+    const rowsFixed = els.teRowsFixed.checked;
+    if (rowsFixed !== !!tpl.rows_fixed) patch.rows_fixed = rowsFixed;
+  }
+  if (Object.keys(patch).length === 0) {
+    els.tplEditDialog.close();
+    return;
+  }
+
+  els.teSave.disabled = true;
   try {
-    const updated = await api.updateTemplate(tpl.id, { name: trimmed });
+    const updated = await api.updateTemplate(tpl.id, patch);
     const idx = templates.findIndex(t => t.id === tpl.id);
     if (idx >= 0) templates[idx] = updated;
+    els.tplEditDialog.close();
     renderManage();
     renderTemplateList();
   } catch (err) {
-    if (err.status === 409) alert('An exercise with that name already exists.');
-    else alert('Rename failed.');
+    if (err.status === 409) els.teErr.textContent = 'An exercise with that name already exists.';
+    else els.teErr.textContent = 'Save failed — try again.';
+  } finally {
+    els.teSave.disabled = false;
   }
 }
 
@@ -806,6 +866,7 @@ function openNewRoutine() {
   rtEditingId = null;
   els.newRtForm.reset();
   els.nrErr.textContent = '';
+  els.nrEditBanner.hidden = true;
   rtSelectedIds = [];
   els.newRtHeading.textContent = 'New routine';
   els.nrSubmit.textContent = 'Save routine';
@@ -840,6 +901,7 @@ async function openEditRoutine(routine) {
   rtSelectedIds = full.templates.map(t => t.id);
   els.newRtForm.reset();
   els.nrErr.textContent = '';
+  els.nrEditBanner.hidden = false;
   els.nrName.value = full.name;
   els.newRtHeading.textContent = 'Edit routine';
   els.nrSubmit.textContent = 'Save changes';
@@ -850,8 +912,6 @@ async function openEditRoutine(routine) {
 }
 
 function renderBuilder() {
-  const editing = rtEditingId != null;
-  els.nrAvailableSection.hidden = editing;
   renderRoutineBuilder({
     selectedRoot: els.nrSelected,
     availableRoot: els.nrAvailable,
@@ -859,7 +919,6 @@ function renderBuilder() {
     emptyAvailableEl: els.nrAvailableEmpty,
     templatesById: templatesById(),
     selectedIds: rtSelectedIds,
-    editing,
     onAdd: (id) => { rtSelectedIds.push(id); renderBuilder(); },
     onRemove: (id) => { rtSelectedIds = rtSelectedIds.filter(x => x !== id); renderBuilder(); },
     onMoveUp: (i) => {
@@ -1064,6 +1123,8 @@ async function boot() {
   els.newRtForm.addEventListener('submit', handleRoutineFormSubmit);
   els.manageRoutinesBtn.addEventListener('click', openManageRoutines);
   els.manageRtBack.addEventListener('click', goHome);
+  els.tplEditForm.addEventListener('submit', handleTemplateEditSubmit);
+  els.teCancel.addEventListener('click', () => els.tplEditDialog.close());
 
   try {
     await api.templates({ includeArchived: true });

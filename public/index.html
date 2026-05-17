@@ -63,6 +63,7 @@
       <button id="new-rt-back" type="button" class="secondary back-btn">&larr; Back</button>
       <h2 id="new-rt-heading">New routine</h2>
       <form id="new-rt-form">
+        <p id="nr-edit-banner" class="banner" hidden>Past workouts keep the exercises they were run with. New workouts will use this updated list.</p>
         <label class="field">
           <span>Name</span>
           <input id="nr-name" type="text" required maxlength="100" autocomplete="off">
@@ -182,6 +183,33 @@
       <button id="detail-back" type="button" class="secondary back-btn">&larr; Back</button>
       <div id="detail-root"></div>
     </section>
+
+    <dialog id="tpl-edit-dialog" class="modal-dialog">
+      <form id="tpl-edit-form">
+        <h3>Edit exercise</h3>
+        <label class="field">
+          <span>Name</span>
+          <input id="te-name" type="text" required maxlength="100" autocomplete="off">
+        </label>
+        <label class="field" id="te-description-field">
+          <span>Description</span>
+          <textarea id="te-description" maxlength="1000" rows="2" autocomplete="off"></textarea>
+        </label>
+        <label class="field" id="te-default-rows-field">
+          <span>Default number of sets</span>
+          <input id="te-default-rows" type="number" inputmode="numeric" min="1" max="100">
+        </label>
+        <label class="field field-inline" id="te-rows-fixed-field">
+          <input id="te-rows-fixed" type="checkbox">
+          <span>Lock the number of sets when running</span>
+        </label>
+        <p id="te-err" class="err" role="alert"></p>
+        <div class="form-actions">
+          <button type="button" id="te-cancel" class="secondary">Cancel</button>
+          <button type="submit" id="te-save">Save changes</button>
+        </div>
+      </form>
+    </dialog>
   </main>
 
   <script type="module" src="/js/app.js"></script>

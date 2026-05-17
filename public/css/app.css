@@ -352,6 +352,31 @@ button.secondary {
 
 .form-actions button { width: 100%; }
 
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.field-inline > span { font-size: 1rem; color: inherit; }
+
+.modal-dialog {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0;
+  max-width: min(420px, calc(100vw - 24px));
+  width: 100%;
+  color: inherit;
+  background: var(--bg, white);
+}
+.modal-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.modal-dialog > form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+.modal-dialog h3 { margin: 0; }
+
 /* Manage templates */
 
 #manage-list {

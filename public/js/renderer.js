@@ -437,11 +437,10 @@ export function applyPreviousHints(root, { template, prev }) {
 export function renderRoutineBuilder({
   selectedRoot, availableRoot, emptySelectedEl, emptyAvailableEl,
   templatesById, selectedIds,
-  editing = false,
   onAdd, onRemove, onMoveUp, onMoveDown,
 }) {
   selectedRoot.innerHTML = '';
-  emptySelectedEl.hidden = selectedIds.length > 0 || editing;
+  emptySelectedEl.hidden = selectedIds.length > 0;
   selectedIds.forEach((id, i) => {
     const t = templatesById.get(id);
     if (!t) return;
@@ -469,23 +468,17 @@ export function renderRoutineBuilder({
     down.disabled = i === selectedIds.length - 1;
     down.addEventListener('click', () => onMoveDown(i));
     ctrls.append(up, down);
-    if (!editing) {
-      const rm = document.createElement('button');
-      rm.type = 'button'; rm.className = 'secondary small'; rm.textContent = '×';
-      rm.setAttribute('aria-label', 'Remove');
-      rm.addEventListener('click', () => onRemove(id));
-      ctrls.append(rm);
-    }
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.className = 'secondary small'; rm.textContent = '×';
+    rm.setAttribute('aria-label', 'Remove');
+    rm.addEventListener('click', () => onRemove(id));
+    ctrls.append(rm);
     row.appendChild(ctrls);
 
     selectedRoot.appendChild(row);
   });
 
   availableRoot.innerHTML = '';
-  if (editing) {
-    emptyAvailableEl.hidden = true;
-    return;
-  }
   const selectedSet = new Set(selectedIds);
   const candidates = [...templatesById.values()]
     .filter(t => !t.archived_at && !selectedSet.has(t.id))
@@ -563,7 +556,7 @@ export function renderRoutineList(root, { routines, onPick }) {
   }
 }
 
-export function renderManageList(root, { templates, onRename, onArchiveToggle }) {
+export function renderManageList(root, { templates, onEdit, onArchiveToggle }) {
   root.innerHTML = '';
   for (const t of templates) {
     const card = document.createElement('div');
@@ -591,12 +584,12 @@ export function renderManageList(root, { templates, onRename, onArchiveToggle })
     const actions = document.createElement('div');
     actions.className = 'manage-actions';
 
-    const renameBtn = document.createElement('button');
-    renameBtn.type = 'button';
-    renameBtn.className = 'secondary small';
-    renameBtn.textContent = 'Rename';
-    renameBtn.addEventListener('click', () => onRename(t));
-    actions.appendChild(renameBtn);
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'secondary small';
+    editBtn.textContent = 'Edit';
+    editBtn.addEventListener('click', () => onEdit(t));
+    actions.appendChild(editBtn);
 
     const archBtn = document.createElement('button');
     archBtn.type = 'button';
