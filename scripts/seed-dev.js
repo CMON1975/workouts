@@ -271,5 +271,5 @@ finalizeWorkout({
 
 console.log('→ finalized 1 workout (Arms day, yesterday)');
 
-console.log('\nseed complete. Run `npm run dev` (or `npm run dev:mobile`) to use it.');
+console.log('\nseed complete. Run `npm run dev` to use it.');
 db.close();

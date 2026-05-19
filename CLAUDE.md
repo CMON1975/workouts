@@ -31,7 +31,6 @@ on my Digital Ocean droplet.
 - `npm run dev` — Fastify with `--watch` and `--env-file=.env`. Default port 8787.
 - `npm test` — Node's built-in test runner over `server/*.test.js` and `server/**/*.test.js`.
 - `node --test --test-name-pattern='<regex>' server/routes/templates.test.js` — run a single file or filter by name.
-- `npm run dev:mobile` — runs tests, then dev server, then exposes it via ngrok for iPhone testing (`scripts/dev-tunnel.sh`).
 - `npm run seed` — wipes `data/workouts.db` and reseeds broad fixtures. Refuses if `NODE_ENV=production` or `DB_PATH` escapes `./data`.
 `.env` only needs `DB_PATH`, `PORT`, `HOST`, `NODE_ENV` (see `.env.example`). No secrets — there is no in-app auth.
 

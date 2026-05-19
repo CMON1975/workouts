@@ -32,7 +32,7 @@ feature.
 ## Notes
 
 - **`npm install`** isn't needed unless `package.json` dependencies actually
-  changed — check the diff first. Native modules (`better-sqlite3`, `bcrypt`)
+  changed — check the diff first. The native module `better-sqlite3`
   may need `npm rebuild` if Node's major version changed on the droplet.
 - **Migrations** run idempotently on every boot via `openDb()` in
   `server/db.js`. Adding a new `server/migrations/NNN_*.sql` is enough; the
