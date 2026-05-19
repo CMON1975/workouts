@@ -1,5 +1,3 @@
-import { requireAuth } from '../auth.js';
-
 const UUIDV7_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const draftBodySchema = {
@@ -36,8 +34,6 @@ const draftBodySchema = {
 };
 
 export default async function draftsRoutes(app) {
-  app.addHook('preHandler', requireAuth);
-
   app.patch('/api/drafts/:id', {
     bodyLimit: 65536,
     schema: {

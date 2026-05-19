@@ -3,25 +3,14 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import bcrypt from 'bcrypt';
 import { buildApp } from '../index.js';
 
-const PASSWORD = 'hunter2';
 let app;
-let cookie;
 let tmpDir;
 let dbPath;
 let bicepTplId;
 let bicepColId;
 let armsRoutineId;
-
-async function login() {
-  const res = await app.inject({
-    method: 'POST', url: '/api/login', payload: { password: PASSWORD },
-  });
-  assert.equal(res.statusCode, 204);
-  cookie = res.headers['set-cookie'];
-}
 
 function suuid(n) {
   return `019dbaf8-0000-7000-8000-${String(n).padStart(12, '0')}`;
@@ -32,7 +21,7 @@ function wuuid(n) {
 
 async function createDraft(id, { workoutId = null, value = 5, clientVersion = 1 } = {}) {
   return app.inject({
-    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${id}`,
     payload: {
       id, template_id: bicepTplId,
       started_at: Date.now(), updated_at: Date.now(),
@@ -45,14 +34,14 @@ async function createDraft(id, { workoutId = null, value = 5, clientVersion = 1 
 
 async function finalizeSession(id, clientVersion = 1) {
   return app.inject({
-    method: 'POST', url: `/api/sessions/${id}/finalize`, headers: { cookie },
+    method: 'POST', url: `/api/sessions/${id}/finalize`,
     payload: { client_version: clientVersion },
   });
 }
 
 async function createWorkout(id, { finalize = false } = {}) {
   await app.inject({
-    method: 'PATCH', url: `/api/workouts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/workouts/${id}`,
     payload: {
       id, routine_id: armsRoutineId,
       started_at: Date.now(), updated_at: Date.now(), client_version: 1,
@@ -60,7 +49,7 @@ async function createWorkout(id, { finalize = false } = {}) {
   });
   if (finalize) {
     await app.inject({
-      method: 'POST', url: `/api/workouts/${id}/finalize`, headers: { cookie },
+      method: 'POST', url: `/api/workouts/${id}/finalize`,
       payload: { client_version: 1 },
     });
   }
@@ -69,20 +58,15 @@ async function createWorkout(id, { finalize = false } = {}) {
 before(async () => {
   tmpDir = mkdtempSync(join(tmpdir(), 'workouts-s-test-'));
   dbPath = join(tmpDir, 'test.db');
-  const hash = await bcrypt.hash(PASSWORD, 4);
-  app = await buildApp({
-    dbPath, passwordHash: hash, sessionSecret: 'a'.repeat(64),
-    isProd: false, logger: false,
-  });
+  app = await buildApp({ dbPath, logger: false });
   await app.ready();
-  await login();
 
   const bicep = app.db.prepare(`SELECT id FROM templates WHERE name='Bicep Curls'`).get();
   bicepTplId = bicep.id;
   bicepColId = app.db.prepare(`SELECT id FROM template_columns WHERE template_id = ?`).get(bicepTplId).id;
 
   const arms = await app.inject({
-    method: 'POST', url: '/api/routines', headers: { cookie },
+    method: 'POST', url: '/api/routines',
     payload: { name: 'Arms', template_ids: [bicepTplId] },
   });
   armsRoutineId = arms.json().id;
@@ -91,20 +75,6 @@ before(async () => {
 after(async () => {
   await app?.close();
   if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
-});
-
-test('DELETE /api/sessions/:id requires auth', async () => {
-  const id = suuid(1);
-  await createDraft(id);
-  await finalizeSession(id);
-
-  const res = await app.inject({
-    method: 'DELETE', url: `/api/sessions/${id}`,
-  });
-  assert.equal(res.statusCode, 401);
-
-  const row = app.db.prepare('SELECT id FROM sessions WHERE id = ?').get(id);
-  assert.ok(row, 'session must not be deleted on unauthorized call');
 });
 
 test('DELETE /api/sessions/:id deletes an ad-hoc finalized session and its values', async () => {
@@ -117,7 +87,7 @@ test('DELETE /api/sessions/:id deletes an ad-hoc finalized session and its value
   assert.equal(valsBefore, 1);
 
   const res = await app.inject({
-    method: 'DELETE', url: `/api/sessions/${id}`, headers: { cookie },
+    method: 'DELETE', url: `/api/sessions/${id}`,
   });
   assert.equal(res.statusCode, 204);
 
@@ -130,7 +100,7 @@ test('DELETE /api/sessions/:id deletes an ad-hoc finalized session and its value
 
 test('DELETE /api/sessions/:id returns 404 for unknown id', async () => {
   const res = await app.inject({
-    method: 'DELETE', url: `/api/sessions/${suuid(999)}`, headers: { cookie },
+    method: 'DELETE', url: `/api/sessions/${suuid(999)}`,
   });
   assert.equal(res.statusCode, 404);
 });
@@ -144,7 +114,7 @@ test('DELETE /api/sessions/:id returns 409 when session belongs to an unfinalize
   await finalizeSession(sid); // session finalized but its workout is not
 
   const res = await app.inject({
-    method: 'DELETE', url: `/api/sessions/${sid}`, headers: { cookie },
+    method: 'DELETE', url: `/api/sessions/${sid}`,
   });
   assert.equal(res.statusCode, 409);
   const body = res.json();
@@ -165,12 +135,12 @@ test('DELETE /api/sessions/:id deletes a child session of a finalized workout wi
   await finalizeSession(childB);
   // Now finalize the workout itself so the children are inside a finalized workout.
   await app.inject({
-    method: 'POST', url: `/api/workouts/${wid}/finalize`, headers: { cookie },
+    method: 'POST', url: `/api/workouts/${wid}/finalize`,
     payload: { client_version: 1 },
   });
 
   const res = await app.inject({
-    method: 'DELETE', url: `/api/sessions/${childA}`, headers: { cookie },
+    method: 'DELETE', url: `/api/sessions/${childA}`,
   });
   assert.equal(res.statusCode, 204);
 

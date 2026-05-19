@@ -1,5 +1,3 @@
-import { requireAuth } from '../auth.js';
-
 const createBodySchema = {
   type: 'object',
   required: ['name', 'template_ids'],
@@ -81,8 +79,6 @@ function replaceRoutineTemplates(db, routineId, templateIds) {
 }
 
 export default async function routinesRoutes(app) {
-  app.addHook('preHandler', requireAuth);
-
   app.get('/api/routines', {
     schema: {
       querystring: {

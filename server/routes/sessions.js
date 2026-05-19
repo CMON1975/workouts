@@ -1,8 +1,4 @@
-import { requireAuth } from '../auth.js';
-
 export default async function sessionsRoutes(app) {
-  app.addHook('preHandler', requireAuth);
-
   app.get('/api/sessions', {
     schema: {
       querystring: {

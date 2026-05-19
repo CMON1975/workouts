@@ -1,5 +1,3 @@
-import { requireAuth } from '../auth.js';
-
 const VALUE_TYPES = ['number', 'text', 'duration'];
 const KINDS = ['standard', 'checkbox'];
 
@@ -85,8 +83,6 @@ function uniqueColumnNames(columns) {
 }
 
 export default async function templatesRoutes(app) {
-  app.addHook('preHandler', requireAuth);
-
   app.get('/api/templates', {
     schema: {
       querystring: {

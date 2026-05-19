@@ -3,27 +3,13 @@ import assert from 'node:assert/strict';
 import { unlinkSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import bcrypt from 'bcrypt';
 import { buildApp } from '../index.js';
 
-const PASSWORD = 'hunter2';
 let app;
-let cookie;
 let tmpDir;
 let dbPath;
 let bicepTemplateId;
 let bicepColumnId;
-
-async function login() {
-  const res = await app.inject({
-    method: 'POST',
-    url: '/api/login',
-    payload: { password: PASSWORD },
-  });
-  assert.equal(res.statusCode, 204);
-  cookie = res.headers['set-cookie'];
-  assert.ok(cookie, 'expected login to return a session cookie');
-}
 
 function uuidv7Fixture(n = 0) {
   // Valid static UUIDv7 for tests (version/variant bits correct).
@@ -34,22 +20,13 @@ function uuidv7Fixture(n = 0) {
 before(async () => {
   tmpDir = mkdtempSync(join(tmpdir(), 'workouts-test-'));
   dbPath = join(tmpDir, 'test.db');
-  const hash = await bcrypt.hash(PASSWORD, 4);
-  app = await buildApp({
-    dbPath,
-    passwordHash: hash,
-    sessionSecret: 'a'.repeat(64),
-    isProd: false,
-    logger: false,
-  });
+  app = await buildApp({ dbPath, logger: false });
   await app.ready();
 
   const t = app.db.prepare(`SELECT id FROM templates WHERE name='Bicep Curls'`).get();
   bicepTemplateId = t.id;
   const c = app.db.prepare(`SELECT id FROM template_columns WHERE template_id=?`).get(bicepTemplateId);
   bicepColumnId = c.id;
-
-  await login();
 });
 
 after(async () => {
@@ -69,22 +46,11 @@ function draftBody(id, clientVersion, values) {
   };
 }
 
-test('PATCH /api/drafts/:id requires auth', async () => {
-  const id = uuidv7Fixture(1);
-  const res = await app.inject({
-    method: 'PATCH',
-    url: `/api/drafts/${id}`,
-    payload: draftBody(id, 1, []),
-  });
-  assert.equal(res.statusCode, 401);
-});
-
 test('PATCH inserts a new draft with values', async () => {
   const id = uuidv7Fixture(2);
   const res = await app.inject({
     method: 'PATCH',
     url: `/api/drafts/${id}`,
-    headers: { cookie },
     payload: draftBody(id, 1, [
       { row_index: 0, column_id: bicepColumnId, value_num: 10 },
       { row_index: 1, column_id: bicepColumnId, value_num: 12 },
@@ -106,13 +72,13 @@ test('PATCH inserts a new draft with values', async () => {
 test('PATCH is idempotent on same id and replaces values', async () => {
   const id = uuidv7Fixture(3);
   const first = await app.inject({
-    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${id}`,
     payload: draftBody(id, 1, [{ row_index: 0, column_id: bicepColumnId, value_num: 5 }]),
   });
   assert.equal(first.statusCode, 200);
 
   const second = await app.inject({
-    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${id}`,
     payload: draftBody(id, 2, [
       { row_index: 0, column_id: bicepColumnId, value_num: 15 },
       { row_index: 1, column_id: bicepColumnId, value_num: 20 },
@@ -128,13 +94,13 @@ test('PATCH is idempotent on same id and replaces values', async () => {
 test('PATCH with lower client_version returns 409 stale (LWW)', async () => {
   const id = uuidv7Fixture(4);
   const a = await app.inject({
-    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${id}`,
     payload: draftBody(id, 5, [{ row_index: 0, column_id: bicepColumnId, value_num: 10 }]),
   });
   assert.equal(a.statusCode, 200);
 
   const b = await app.inject({
-    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${id}`,
     payload: draftBody(id, 3, [{ row_index: 0, column_id: bicepColumnId, value_num: 99 }]),
   });
   assert.equal(b.statusCode, 409);
@@ -149,12 +115,12 @@ test('PATCH with lower client_version returns 409 stale (LWW)', async () => {
 test('POST finalize sets finalized_at and is idempotent', async () => {
   const id = uuidv7Fixture(5);
   await app.inject({
-    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${id}`,
     payload: draftBody(id, 1, [{ row_index: 0, column_id: bicepColumnId, value_num: 7 }]),
   });
 
   const first = await app.inject({
-    method: 'POST', url: `/api/sessions/${id}/finalize`, headers: { cookie },
+    method: 'POST', url: `/api/sessions/${id}/finalize`,
     payload: { client_version: 1 },
   });
   assert.equal(first.statusCode, 200);
@@ -162,7 +128,7 @@ test('POST finalize sets finalized_at and is idempotent', async () => {
   assert.ok(finalizedAt > 0);
 
   const second = await app.inject({
-    method: 'POST', url: `/api/sessions/${id}/finalize`, headers: { cookie },
+    method: 'POST', url: `/api/sessions/${id}/finalize`,
     payload: { client_version: 1 },
   });
   assert.equal(second.statusCode, 200);
@@ -172,16 +138,16 @@ test('POST finalize sets finalized_at and is idempotent', async () => {
 test('PATCH to finalized session is a no-op', async () => {
   const id = uuidv7Fixture(6);
   await app.inject({
-    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${id}`,
     payload: draftBody(id, 1, [{ row_index: 0, column_id: bicepColumnId, value_num: 8 }]),
   });
   await app.inject({
-    method: 'POST', url: `/api/sessions/${id}/finalize`, headers: { cookie },
+    method: 'POST', url: `/api/sessions/${id}/finalize`,
     payload: { client_version: 1 },
   });
 
   const res = await app.inject({
-    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${id}`,
     payload: draftBody(id, 2, [{ row_index: 0, column_id: bicepColumnId, value_num: 999 }]),
   });
   assert.equal(res.statusCode, 200);
@@ -194,7 +160,7 @@ test('PATCH to finalized session is a no-op', async () => {
 test('GET /api/sessions/:id returns the stored values', async () => {
   const id = uuidv7Fixture(7);
   await app.inject({
-    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${id}`,
     payload: draftBody(id, 1, [
       { row_index: 0, column_id: bicepColumnId, value_num: 11 },
       { row_index: 1, column_id: bicepColumnId, value_num: 13 },
@@ -202,7 +168,7 @@ test('GET /api/sessions/:id returns the stored values', async () => {
   });
 
   const res = await app.inject({
-    method: 'GET', url: `/api/sessions/${id}`, headers: { cookie },
+    method: 'GET', url: `/api/sessions/${id}`,
   });
   assert.equal(res.statusCode, 200);
   const body = res.json();
@@ -213,7 +179,7 @@ test('GET /api/sessions/:id returns the stored values', async () => {
 
 test('GET /api/templates returns seeded Bicep Curls', async () => {
   const res = await app.inject({
-    method: 'GET', url: '/api/templates', headers: { cookie },
+    method: 'GET', url: '/api/templates',
   });
   assert.equal(res.statusCode, 200);
   const list = res.json();
@@ -226,33 +192,20 @@ test('GET /api/templates returns seeded Bicep Curls', async () => {
   assert.equal(bicep.columns[0].unit, 'pounds');
 });
 
-test('login with wrong password returns 401', async () => {
-  const res = await app.inject({
-    method: 'POST', url: '/api/login',
-    payload: { password: 'nope' },
-  });
-  assert.equal(res.statusCode, 401);
-});
-
 test('body id mismatch is rejected', async () => {
   const id = uuidv7Fixture(8);
   const other = uuidv7Fixture(9);
   const res = await app.inject({
-    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${id}`,
     payload: draftBody(other, 1, []),
   });
   assert.equal(res.statusCode, 400);
 });
 
-test('GET /api/sessions requires auth', async () => {
-  const res = await app.inject({ method: 'GET', url: '/api/sessions' });
-  assert.equal(res.statusCode, 401);
-});
-
 test('GET /api/sessions returns newest-first with values', async () => {
   // Drain whatever earlier tests created; rely on insertion order + timestamps.
   const res = await app.inject({
-    method: 'GET', url: '/api/sessions', headers: { cookie },
+    method: 'GET', url: '/api/sessions',
   });
   assert.equal(res.statusCode, 200);
   const list = res.json();
@@ -271,12 +224,12 @@ test('GET /api/sessions?finalized=true filters drafts out', async () => {
   // Create a draft that must not appear.
   const draftId = uuidv7Fixture(20);
   await app.inject({
-    method: 'PATCH', url: `/api/drafts/${draftId}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${draftId}`,
     payload: draftBody(draftId, 1, [{ row_index: 0, column_id: bicepColumnId, value_num: 3 }]),
   });
 
   const res = await app.inject({
-    method: 'GET', url: '/api/sessions?finalized=true', headers: { cookie },
+    method: 'GET', url: '/api/sessions?finalized=true',
   });
   assert.equal(res.statusCode, 200);
   const ids = res.json().map(s => s.id);
@@ -288,7 +241,7 @@ test('GET /api/sessions?finalized=true filters drafts out', async () => {
 
 test('GET /api/sessions?finalized=false returns only drafts', async () => {
   const res = await app.inject({
-    method: 'GET', url: '/api/sessions?finalized=false', headers: { cookie },
+    method: 'GET', url: '/api/sessions?finalized=false',
   });
   assert.equal(res.statusCode, 200);
   for (const s of res.json()) {
@@ -298,7 +251,7 @@ test('GET /api/sessions?finalized=false returns only drafts', async () => {
 
 test('GET /api/sessions?template_id=X filters by template', async () => {
   const res = await app.inject({
-    method: 'GET', url: `/api/sessions?template_id=${bicepTemplateId}`, headers: { cookie },
+    method: 'GET', url: `/api/sessions?template_id=${bicepTemplateId}`,
   });
   assert.equal(res.statusCode, 200);
   const list = res.json();
@@ -308,7 +261,7 @@ test('GET /api/sessions?template_id=X filters by template', async () => {
 
 test('GET /api/sessions?limit=1 caps the result', async () => {
   const res = await app.inject({
-    method: 'GET', url: '/api/sessions?limit=1', headers: { cookie },
+    method: 'GET', url: '/api/sessions?limit=1',
   });
   assert.equal(res.statusCode, 200);
   assert.equal(res.json().length, 1);
@@ -316,7 +269,7 @@ test('GET /api/sessions?limit=1 caps the result', async () => {
 
 test('GET /api/sessions?limit=0 is rejected', async () => {
   const res = await app.inject({
-    method: 'GET', url: '/api/sessions?limit=0', headers: { cookie },
+    method: 'GET', url: '/api/sessions?limit=0',
   });
   assert.equal(res.statusCode, 400);
 });
@@ -325,7 +278,7 @@ test('PATCH then GET round-trips notes verbatim', async () => {
   const id = uuidv7Fixture(50);
   const noteText = 'leg day — back off 5kg next time';
   const patch = await app.inject({
-    method: 'PATCH', url: `/api/drafts/${id}`, headers: { cookie },
+    method: 'PATCH', url: `/api/drafts/${id}`,
     payload: {
       id, template_id: bicepTemplateId,
       started_at: Date.now(), updated_at: Date.now(),
@@ -337,7 +290,7 @@ test('PATCH then GET round-trips notes verbatim', async () => {
   assert.equal(patch.statusCode, 200);
 
   const get = await app.inject({
-    method: 'GET', url: `/api/sessions/${id}`, headers: { cookie },
+    method: 'GET', url: `/api/sessions/${id}`,
   });
   assert.equal(get.statusCode, 200);
   assert.equal(get.json().notes, noteText);
@@ -345,7 +298,7 @@ test('PATCH then GET round-trips notes verbatim', async () => {
 
 test('malformed uuid is rejected by schema', async () => {
   const res = await app.inject({
-    method: 'PATCH', url: '/api/drafts/not-a-uuid', headers: { cookie },
+    method: 'PATCH', url: '/api/drafts/not-a-uuid',
     payload: {
       id: 'not-a-uuid',
       template_id: bicepTemplateId,

@@ -1,5 +1,3 @@
-import { requireAuth } from '../auth.js';
-
 const UUIDV7_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const upsertBodySchema = {
@@ -41,8 +39,6 @@ function loadWorkout(db, id) {
 }
 
 export default async function workoutsRoutes(app) {
-  app.addHook('preHandler', requireAuth);
-
   app.get('/api/workouts', {
     schema: {
       querystring: {
