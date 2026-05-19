@@ -10,7 +10,8 @@ on my Digital Ocean droplet.
 ## Stack (locked)
 - Backend: Node + Fastify + better-sqlite3
 - Frontend: vanilla HTML/CSS/JS, no bundler, no framework
-- Auth: single bcrypt-hashed password in env var, signed session cookie
+- Auth: none in-app. The Apache vhost is bound to the droplet's
+  tailscale IP, so the tailnet is the auth boundary. See DEPLOY.md.
 - Deploy: `git pull && systemctl restart workouts` on the droplet
 
 ## Non-negotiables
@@ -32,9 +33,7 @@ on my Digital Ocean droplet.
 - `node --test --test-name-pattern='<regex>' server/routes/templates.test.js` — run a single file or filter by name.
 - `npm run dev:mobile` — runs tests, then dev server, then exposes it via ngrok for iPhone testing (`scripts/dev-tunnel.sh`).
 - `npm run seed` — wipes `data/workouts.db` and reseeds broad fixtures. Refuses if `NODE_ENV=production` or `DB_PATH` escapes `./data`.
-- `npm run hash-password` — bcrypt a password to paste into `.env` as `PASSWORD_HASH`.
-
-`.env` requires `SESSION_SECRET` (32-byte hex, 64 chars, from `openssl rand -hex 32`) and `PASSWORD_HASH`. The server fails fast on boot if either is missing or malformed.
+`.env` only needs `DB_PATH`, `PORT`, `HOST`, `NODE_ENV` (see `.env.example`). No secrets — there is no in-app auth.
 
 ## Architecture
 
@@ -59,9 +58,9 @@ Failed PATCHes go into an IDB `outbox` store; `drainOutbox` runs on `online` and
 
 ### Server
 
-`server/index.js` exports `buildApp({ dbPath, passwordHash, sessionSecret, isProd, logger })` for tests; the same module starts the listener when run directly. `server/db.js` opens the DB, sets pragmas (`WAL`, `synchronous=NORMAL`, `foreign_keys=ON`), and applies any unrun `migrations/*.sql` inside a transaction tracked in a `_migrations` table. Migrations are append-only — never edit an applied file; add a new numbered one.
+`server/index.js` exports `buildApp({ dbPath, logger })` for tests; the same module starts the listener when run directly. `server/db.js` opens the DB, sets pragmas (`WAL`, `synchronous=NORMAL`, `foreign_keys=ON`), and applies any unrun `migrations/*.sql` inside a transaction tracked in a `_migrations` table. Migrations are append-only — never edit an applied file; add a new numbered one.
 
-Routes (`server/routes/`) all install `requireAuth` as a `preHandler`. Login is rate-limited (10 / 10min); global rate limit 300/min excludes `/assets/`. Body limits are tight (4–64 KiB per route).
+Routes (`server/routes/`) do not gate on any in-app auth — Apache's tailnet-bound vhost is the network boundary. Global rate limit 300/min excludes `/assets/`. Body limits are tight (4–64 KiB per route).
 
 ### Frontend
 
@@ -77,9 +76,8 @@ Module split under `public/js/`:
 ## Testing
 
 Use Node's built-in test runner (`node:test`, `node:assert/strict`). Each route has a sibling `*.test.js` that:
-- builds a fresh app with `buildApp({ dbPath: <tmpdir>, passwordHash: bcrypt.hash('hunter2', 4), sessionSecret: 'a'.repeat(64), isProd: false, logger: false })`,
-- uses `app.inject({ method, url, headers: { cookie }, payload })` rather than a live socket,
-- logs in once in `before()` and reuses the `set-cookie` value across tests.
+- builds a fresh app with `buildApp({ dbPath: <tmpdir>, logger: false })`,
+- uses `app.inject({ method, url, payload })` rather than a live socket.
 
 `server/hardening.test.js` exercises rate-limit and auth behavior end-to-end. Keep tests hermetic — no shared DB between files.
 
@@ -88,4 +86,4 @@ Use Node's built-in test runner (`node:test`, `node:assert/strict`). Each route 
 - Numbered SQL migrations (`NNN_name.sql`) applied automatically on `openDb()`. Add a new file; never mutate an existing one.
 - Reordering or replacing a routine's templates is rejected with 409 if any workout against that routine is unfinalized — the user must end or finalize first.
 - Checkbox templates: server fills in the single `completed` column and `rows_fixed=1`; client only sends `name` + `description`.
-- Apache vhost terminates TLS, serves `public/` directly, and proxies `/api/` to `127.0.0.1:8787` (`X-Forwarded-Proto: https`); Fastify runs with `trustProxy: true`.
+- Apache vhost binds to the droplet's tailscale IP (not `*:80/443`), terminates TLS, serves `public/` directly, and proxies `/api/` to `127.0.0.1:8787` (`X-Forwarded-Proto: https`); Fastify runs with `trustProxy: true`. The cert is issued via certbot-dns-cloudflare DNS-01 because the host isn't publicly reachable.

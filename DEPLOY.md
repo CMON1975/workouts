@@ -47,9 +47,10 @@ feature.
   the working tree at `/var/www/workouts/data/` is empty in prod; `git pull`
   cannot affect prod data.
 - **Apache** doesn't need a restart for code changes; it only proxies
-  `/api/*` to `127.0.0.1:8787` and serves `public/`. Restart Apache (and
-  copy the file into `/etc/apache2/sites-available/`) only if you edit
-  `deploy/apache-workouts.conf`.
+  `/api/*` to `127.0.0.1:8787` and serves `public/`. If you edit
+  `deploy/apache-workouts.conf`, re-run
+  `sudo bash deploy/install-apache.sh <tailscale-ip>` — it re-templates
+  the vhost and reloads Apache.
 - **Rollback**: on the droplet,
   `git reset --hard HEAD~1 && sudo systemctl restart workouts`
   (or check out a known-good SHA).
@@ -128,3 +129,37 @@ git reset --hard origin/main
 See `deploy/workouts.service`, `deploy/apache-workouts.conf`,
 `deploy/logrotate-workouts`. Required env vars are listed in `.env.example`;
 the production env file lives at `/etc/workouts.env` (chmod 600).
+
+## Auth model: tailnet-scoped
+
+There is no password. The Apache vhost binds to the droplet's tailscale
+IP, public DNS for `workouts.cmon1975.com` resolves to that 100.x address,
+and the cert is issued via certbot-dns-cloudflare DNS-01 because the host
+is not publicly reachable. Devices that aren't on the tailnet cannot
+resolve a working route to the app at all.
+
+### One-time migration from password auth
+
+1. **Cloudflare DNS** — change the A record for `workouts.cmon1975.com`
+   to the droplet's tailscale IP (`tailscale ip -4` on the droplet).
+2. **Reissue the cert via DNS-01** — the existing
+   certbot-dns-cloudflare setup that issues `overmind.cmon1975.com`
+   can do this in one command. Roughly:
+   ```
+   sudo certbot certonly --dns-cloudflare \
+     --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+     -d workouts.cmon1975.com
+   ```
+3. **Install the new vhost** —
+   ```
+   sudo bash /var/www/workouts/deploy/install-apache.sh <tailscale-ip>
+   ```
+   This substitutes the IP into the template, enables the site, and
+   reloads Apache. The previous public vhost gets disabled.
+4. **Clean up `/etc/workouts.env`** — remove `PASSWORD_HASH` and
+   `SESSION_SECRET`; they are no longer read. Ensure `HOST=127.0.0.1`.
+5. `sudo systemctl restart workouts` to pick up the env change.
+
+After this, the app is reachable from any tailnet device at
+`https://workouts.cmon1975.com`. Anyone off-tailnet hitting that hostname
+gets a connection-refused or unrouted-IP error.
