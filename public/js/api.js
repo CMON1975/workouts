@@ -19,8 +19,6 @@ async function request(url, opts = {}) {
 }
 
 export const api = {
-  login: (password) => request('/api/login', { method: 'POST', body: JSON.stringify({ password }) }),
-  logout: () => request('/api/logout', { method: 'POST' }),
   templates: ({ includeArchived = false } = {}) =>
     request('/api/templates' + (includeArchived ? '?include_archived=true' : '')),
   createTemplate: (body) => request('/api/templates', {

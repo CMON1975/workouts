@@ -58,20 +58,6 @@ main, section {
 
 h2 { margin-top: 0; font-size: 1.05rem; color: var(--muted); font-weight: 600; }
 
-/* Login */
-
-#login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 360px;
-  margin: 10vh auto;
-}
-
-#login-form label { font-size: 0.9rem; color: var(--muted); }
-
-#login-err { color: var(--danger); min-height: 1.2em; margin: 0; }
-
 /* Inputs */
 
 input, button {
@@ -79,7 +65,7 @@ input, button {
   font-family: inherit;
 }
 
-input[type='text'], input[type='number'], input[type='password'] {
+input[type='text'], input[type='number'] {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -101,15 +87,6 @@ button {
 }
 
 button:disabled { opacity: 0.5; }
-
-#logout {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  padding: 6px 12px;
-  min-height: 32px;
-  font-size: 0.85rem;
-}
 
 /* Template list */
 

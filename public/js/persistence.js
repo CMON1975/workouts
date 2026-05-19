@@ -87,9 +87,6 @@ export async function drainOutbox() {
         });
         if (res.ok) {
           await deleteOutbox(entry.id);
-        } else if (res.status === 401) {
-          // not authed — stop draining, user will re-login
-          break;
         } else {
           entry.attempts += 1;
           if (entry.attempts >= OUTBOX_MAX_ATTEMPTS) {

@@ -16,10 +16,6 @@ import {
 } from './renderer.js';
 
 const els = {
-  login: document.getElementById('login'),
-  loginForm: document.getElementById('login-form'),
-  loginPw: document.getElementById('login-pw'),
-  loginErr: document.getElementById('login-err'),
   app: document.getElementById('app'),
   home: document.getElementById('home'),
   templateList: document.getElementById('template-list'),
@@ -84,7 +80,6 @@ const els = {
   runnerStep: document.getElementById('runner-step'),
   runnerNext: document.getElementById('runner-next'),
   runnerEnd: document.getElementById('runner-end'),
-  logout: document.getElementById('logout'),
   resumeBanner: document.getElementById('resume-banner'),
   exercisesDisclosure: document.getElementById('exercises-disclosure'),
   tplEditDialog: document.getElementById('tpl-edit-dialog'),
@@ -299,8 +294,8 @@ function renderHomeRoutines() {
   });
   // Onboarding: when there are no routines yet but at least one template,
   // auto-open the exercises disclosure so the user has an obvious next step.
-  // Only on the very first render after login (open === false by default);
-  // we never force-close, so the user's manual toggle is preserved.
+  // Only on the first render (open === false by default); we never
+  // force-close, so the user's manual toggle is preserved.
   if (els.exercisesDisclosure && !els.exercisesDisclosure.open) {
     if (!active.length && activeTemplates().length) {
       els.exercisesDisclosure.open = true;
@@ -1190,9 +1185,7 @@ async function handleArchiveToggle(tpl) {
 }
 
 async function enterApp() {
-  hide(els.login);
   show(els.app);
-  show(els.logout);
   show(els.openHistory);
 
   templates = await api.templates({ includeArchived: true });
@@ -1225,18 +1218,6 @@ async function enterApp() {
   drainOutbox();
 }
 
-async function handleLogin(e) {
-  e.preventDefault();
-  els.loginErr.textContent = '';
-  try {
-    await api.login(els.loginPw.value);
-    els.loginPw.value = '';
-    await enterApp();
-  } catch (err) {
-    els.loginErr.textContent = err.status === 401 ? 'Incorrect password' : 'Login failed';
-  }
-}
-
 async function handleSubmit() {
   if (!currentSession) return;
   els.submit.disabled = true;
@@ -1250,15 +1231,8 @@ async function handleSubmit() {
   }
 }
 
-async function handleLogout() {
-  try { await api.logout(); } catch (_) {}
-  location.reload();
-}
-
 async function boot() {
-  els.loginForm.addEventListener('submit', handleLogin);
   els.submit.addEventListener('click', handleSubmit);
-  els.logout.addEventListener('click', handleLogout);
   els.openHistory.addEventListener('click', openHistory);
   els.sessionBack.addEventListener('click', goHome);
   els.historyBack.addEventListener('click', goHome);
@@ -1289,17 +1263,7 @@ async function boot() {
   els.teCancel.addEventListener('click', () => els.tplEditDialog.close());
   els.teAddCol.addEventListener('click', handleTeAddCol);
 
-  try {
-    await api.templates({ includeArchived: true });
-    await enterApp();
-  } catch (err) {
-    if (err.status === 401) {
-      show(els.login);
-    } else {
-      show(els.login);
-      els.loginErr.textContent = 'Server unreachable.';
-    }
-  }
+  await enterApp();
 }
 
 boot();
