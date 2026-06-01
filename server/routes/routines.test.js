@@ -335,3 +335,76 @@ test('PATCH template_ids succeeds once the active workout is finalized', async (
   assert.equal(ok.statusCode, 200);
   assert.deepEqual(ok.json().templates.map(t => t.id), [otherId, bicepId]);
 });
+
+// --- routine ordering (sort_position) ---
+
+async function makeRoutine(name) {
+  const res = await app.inject({
+    method: 'POST', url: '/api/routines',
+    payload: { name, template_ids: [bicepId] },
+  });
+  assert.equal(res.statusCode, 201);
+  return res.json();
+}
+
+test('routine carries a numeric sort_position', async () => {
+  const r = await makeRoutine('PosShape');
+  assert.equal(typeof r.sort_position, 'number');
+});
+
+test('a new routine appends after existing ones', async () => {
+  const a = await makeRoutine('AppendA');
+  const b = await makeRoutine('AppendB');
+  assert.ok(b.sort_position > a.sort_position, 'later routine gets a higher sort_position');
+});
+
+test('GET /api/routines is ordered by sort_position', async () => {
+  const res = await app.inject({ method: 'GET', url: '/api/routines' });
+  assert.equal(res.statusCode, 200);
+  const positions = res.json().map(r => r.sort_position);
+  const sorted = positions.slice().sort((x, y) => x - y);
+  assert.deepEqual(positions, sorted, 'list comes back in ascending sort_position order');
+});
+
+test('PUT /api/routines/order persists a custom order', async () => {
+  const a = await makeRoutine('OrderA');
+  const b = await makeRoutine('OrderB');
+  const c = await makeRoutine('OrderC');
+
+  const res = await app.inject({
+    method: 'PUT', url: '/api/routines/order',
+    payload: { ids: [c.id, a.id, b.id] },
+  });
+  assert.equal(res.statusCode, 200);
+
+  // The three appear in the new relative order in a fresh GET.
+  const list = (await app.inject({ method: 'GET', url: '/api/routines' })).json();
+  const seen = list.map(r => r.id).filter(id => [a.id, b.id, c.id].includes(id));
+  assert.deepEqual(seen, [c.id, a.id, b.id]);
+});
+
+test('PUT /api/routines/order with an unknown id returns 404', async () => {
+  const a = await makeRoutine('Order404');
+  const res = await app.inject({
+    method: 'PUT', url: '/api/routines/order',
+    payload: { ids: [a.id, 999999] },
+  });
+  assert.equal(res.statusCode, 404);
+});
+
+test('PUT /api/routines/order with duplicate ids returns 400', async () => {
+  const a = await makeRoutine('OrderDup');
+  const res = await app.inject({
+    method: 'PUT', url: '/api/routines/order',
+    payload: { ids: [a.id, a.id] },
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('PUT /api/routines/order with empty ids is rejected by schema', async () => {
+  const res = await app.inject({
+    method: 'PUT', url: '/api/routines/order',
+    payload: { ids: [] },
+  });
+  assert.equal(res.statusCode, 400);
+});

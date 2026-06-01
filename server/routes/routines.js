@@ -27,9 +27,23 @@ const patchBodySchema = {
   additionalProperties: false,
 };
 
+const orderBodySchema = {
+  type: 'object',
+  required: ['ids'],
+  properties: {
+    ids: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 64,
+      items: { type: 'integer' },
+    },
+  },
+  additionalProperties: false,
+};
+
 function loadRoutine(db, id) {
   const r = db.prepare(`
-    SELECT id, name, created_at, archived_at
+    SELECT id, name, created_at, archived_at, sort_position
       FROM routines WHERE id = ?
   `).get(id);
   if (!r) return null;
@@ -93,7 +107,7 @@ export default async function routinesRoutes(app) {
     const includeArchived = req.query?.include_archived === true;
     const where = includeArchived ? '' : 'WHERE archived_at IS NULL';
     const routines = db.prepare(`
-      SELECT id FROM routines ${where} ORDER BY name
+      SELECT id FROM routines ${where} ORDER BY sort_position, name
     `).all();
     return routines.map(r => loadRoutine(db, r.id));
   });
@@ -121,9 +135,10 @@ export default async function routinesRoutes(app) {
     let newId;
     try {
       newId = db.transaction(() => {
-        const info = db.prepare(
-          'INSERT INTO routines (name, created_at) VALUES (?, ?)'
-        ).run(name, Date.now());
+        const info = db.prepare(`
+          INSERT INTO routines (name, created_at, sort_position)
+          VALUES (?, ?, (SELECT COALESCE(MAX(sort_position) + 1, 0) FROM routines))
+        `).run(name, Date.now());
         const id = info.lastInsertRowid;
         replaceRoutineTemplates(db, id, req.body.template_ids);
         return id;
@@ -139,6 +154,38 @@ export default async function routinesRoutes(app) {
       throw err;
     }
     return reply.code(201).send(loadRoutine(db, newId));
+  });
+
+  app.put('/api/routines/order', {
+    schema: { body: orderBodySchema },
+  }, async (req, reply) => {
+    const db = app.db;
+    const ids = req.body.ids;
+    if (!uniqueInts(ids)) {
+      return reply.code(400).send({ error: 'ids must be unique' });
+    }
+    try {
+      db.transaction(() => {
+        const exists = db.prepare('SELECT id FROM routines WHERE id = ?');
+        for (const rid of ids) {
+          if (!exists.get(rid)) {
+            const err = new Error('ROUTINE_NOT_FOUND');
+            err.routineId = rid;
+            throw err;
+          }
+        }
+        const upd = db.prepare('UPDATE routines SET sort_position = ? WHERE id = ?');
+        ids.forEach((rid, i) => upd.run(i, rid));
+      })();
+    } catch (err) {
+      if (err.message === 'ROUTINE_NOT_FOUND') {
+        return reply.code(404).send({ error: `routine ${err.routineId} not found` });
+      }
+      req.log.error({ err }, 'routine reorder failed');
+      throw err;
+    }
+    const rows = db.prepare('SELECT id FROM routines ORDER BY sort_position, name').all();
+    return reply.code(200).send(rows.map(r => loadRoutine(db, r.id)));
   });
 
   app.patch('/api/routines/:id', {
