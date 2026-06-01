@@ -547,24 +547,38 @@ export function renderRoutineBuilder({
   }
 }
 
-export function renderRoutineManageList(root, { routines, onEdit, onArchiveToggle }) {
+export function renderRoutineManageList(root, { routines, onEdit, onArchiveToggle, onReorder }) {
   root.innerHTML = '';
   for (const r of routines) {
     const card = document.createElement('div');
     card.className = 'manage-row';
+    card.dataset.id = String(r.id);
     if (r.archived_at) card.classList.add('is-archived');
+
+    // Drag handle (active routines only — archived are pinned at the bottom).
+    if (!r.archived_at && onReorder) {
+      const handle = document.createElement('div');
+      handle.className = 'manage-drag';
+      handle.setAttribute('aria-hidden', 'true');
+      handle.title = 'Drag to reorder';
+      handle.textContent = '⠇'; // ⠇ braille dots, reads as a grip
+      card.appendChild(handle);
+    }
+
+    const body = document.createElement('div');
+    body.className = 'manage-body';
 
     const name = document.createElement('div');
     name.className = 'manage-name';
     name.textContent = r.name + (r.archived_at ? ' (archived)' : '');
-    card.appendChild(name);
+    body.appendChild(name);
 
     const meta = document.createElement('div');
     meta.className = 'manage-meta';
     const names = r.templates.map(t => t.name).join(', ');
     const count = r.templates.length;
     meta.textContent = `${count} exercise${count === 1 ? '' : 's'}: ${names || '(none)'}`;
-    card.appendChild(meta);
+    body.appendChild(meta);
 
     const actions = document.createElement('div');
     actions.className = 'manage-actions';
@@ -585,8 +599,85 @@ export function renderRoutineManageList(root, { routines, onEdit, onArchiveToggl
     archBtn.addEventListener('click', () => onArchiveToggle(r));
     actions.appendChild(archBtn);
 
-    card.appendChild(actions);
+    body.appendChild(actions);
+    card.appendChild(body);
     root.appendChild(card);
+  }
+
+  if (onReorder) enableManageRowDrag(root, onReorder);
+}
+
+// Pointer-based drag-to-reorder for the routines Manage list. Works with mouse
+// and touch (iOS Safari has no working native HTML5 DnD). Only active rows have
+// a `.manage-drag` handle; archived rows stay pinned below and are never moved.
+function enableManageRowDrag(root, onReorder) {
+  const activeIds = () =>
+    [...root.querySelectorAll('.manage-row:not(.is-archived)')].map(el => el.dataset.id);
+
+  root.querySelectorAll('.manage-drag').forEach((handle) => {
+    handle.addEventListener('pointerdown', (e) => startDrag(e, handle));
+  });
+
+  function startDrag(e, handle) {
+    if (e.button != null && e.button !== 0) return; // left button / touch only
+    const card = handle.closest('.manage-row');
+    if (!card) return;
+    e.preventDefault();
+
+    const before = activeIds();
+    const rect = card.getBoundingClientRect();
+    const grabOffset = e.clientY - rect.top;
+
+    // Placeholder keeps the gap; the card goes position:fixed and follows the pointer.
+    const placeholder = document.createElement('div');
+    placeholder.className = 'manage-row manage-placeholder';
+    placeholder.style.height = rect.height + 'px';
+    card.parentNode.insertBefore(placeholder, card);
+
+    card.classList.add('dragging');
+    card.style.width = rect.width + 'px';
+    card.style.left = rect.left + 'px';
+    card.style.top = (e.clientY - grabOffset) + 'px';
+
+    try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+
+    const onMove = (ev) => {
+      card.style.top = (ev.clientY - grabOffset) + 'px';
+      // Place the placeholder before the first active sibling whose midpoint is
+      // below the pointer; otherwise after the last active sibling.
+      const siblings = [...root.querySelectorAll('.manage-row:not(.is-archived):not(.dragging):not(.manage-placeholder)')];
+      let target = null;
+      for (const sib of siblings) {
+        const r = sib.getBoundingClientRect();
+        if (ev.clientY < r.top + r.height / 2) { target = sib; break; }
+      }
+      if (target) root.insertBefore(placeholder, target);
+      else {
+        const lastActive = siblings[siblings.length - 1];
+        if (lastActive) lastActive.after(placeholder);
+      }
+    };
+
+    const onUp = (ev) => {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
+      try { handle.releasePointerCapture(ev.pointerId); } catch (_) {}
+
+      root.insertBefore(card, placeholder);
+      placeholder.remove();
+      card.classList.remove('dragging');
+      card.style.width = card.style.left = card.style.top = '';
+
+      const after = activeIds();
+      if (after.join(',') !== before.join(',')) {
+        onReorder(after.map(Number));
+      }
+    };
+
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
   }
 }
 

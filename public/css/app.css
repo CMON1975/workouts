@@ -367,8 +367,48 @@ button.secondary {
   border-radius: 8px;
   padding: 12px 14px;
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.manage-body {
+  display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Drag handle for reordering routines. touch-action:none so a vertical drag
+   grabs the row instead of scrolling the page on touch devices. */
+.manage-drag {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  margin: -12px 0 -12px -14px;
+  color: var(--muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.manage-row.dragging {
+  position: fixed;
+  z-index: 50;
+  cursor: grabbing;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  background: var(--bg);
+  opacity: 0.95;
+}
+
+.manage-placeholder {
+  border-style: dashed;
+  background: transparent;
 }
 
 .manage-row.is-archived {

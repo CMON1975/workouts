@@ -285,6 +285,10 @@ function renderTemplateList() {
   }
 }
 
+function sortRoutinesByPosition() {
+  routines.sort((a, b) => (a.sort_position - b.sort_position) || a.name.localeCompare(b.name));
+}
+
 function renderHomeRoutines() {
   const active = routines.filter(r => !r.archived_at);
   els.routineEmpty.hidden = active.length > 0;
@@ -1104,7 +1108,7 @@ async function handleRoutineFormSubmit(e) {
       const updated = await api.updateRoutine(rtEditingId, { name, template_ids: rtSelectedIds });
       const idx = routines.findIndex(r => r.id === rtEditingId);
       if (idx >= 0) routines[idx] = updated; else routines.push(updated);
-      routines.sort((a, b) => a.name.localeCompare(b.name));
+      sortRoutinesByPosition();
       rtEditingId = null;
       renderHomeRoutines();
       renderManageRoutines();
@@ -1112,7 +1116,7 @@ async function handleRoutineFormSubmit(e) {
     } else {
       const created = await api.createRoutine({ name, template_ids: rtSelectedIds });
       routines.push(created);
-      routines.sort((a, b) => a.name.localeCompare(b.name));
+      sortRoutinesByPosition();
       renderHomeRoutines();
       showView('home');
     }
@@ -1145,15 +1149,49 @@ function renderManageRoutines() {
     els.manageRtEmpty.hidden = false;
     return;
   }
+  // Active routines keep their user-defined (drag) order; archived sink to the
+  // bottom, sorted by name (they aren't draggable).
   const sorted = routines.slice().sort((a, b) => {
     if (!!a.archived_at !== !!b.archived_at) return a.archived_at ? 1 : -1;
-    return a.name.localeCompare(b.name);
+    if (a.archived_at) return a.name.localeCompare(b.name);
+    return (a.sort_position - b.sort_position) || a.name.localeCompare(b.name);
   });
   renderRoutineManageList(els.manageRtList, {
     routines: sorted,
     onEdit: openEditRoutine,
     onArchiveToggle: handleRoutineArchiveToggle,
+    onReorder: handleRoutineReorder,
   });
+}
+
+async function handleRoutineReorder(orderedActiveIds) {
+  // Snapshot for rollback, then optimistically apply the new positions so Home
+  // and Manage update instantly.
+  const prev = routines.map(r => ({ id: r.id, sort_position: r.sort_position }));
+  orderedActiveIds.forEach((id, i) => {
+    const r = routines.find(x => x.id === id);
+    if (r) r.sort_position = i;
+  });
+  sortRoutinesByPosition();
+  renderManageRoutines();
+  renderHomeRoutines();
+  try {
+    const updated = await api.reorderRoutines(orderedActiveIds);
+    routines = updated;
+    sortRoutinesByPosition();
+    renderManageRoutines();
+    renderHomeRoutines();
+  } catch (err) {
+    // Restore previous positions and re-render.
+    for (const snap of prev) {
+      const r = routines.find(x => x.id === snap.id);
+      if (r) r.sort_position = snap.sort_position;
+    }
+    sortRoutinesByPosition();
+    renderManageRoutines();
+    renderHomeRoutines();
+    alert('Reorder failed — order restored.');
+  }
 }
 
 async function handleRoutineArchiveToggle(r) {

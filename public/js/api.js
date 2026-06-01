@@ -42,6 +42,10 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(body),
   }),
+  reorderRoutines: (ids) => request('/api/routines/order', {
+    method: 'PUT',
+    body: JSON.stringify({ ids }),
+  }),
   patchWorkout: (id, body) => request('/api/workouts/' + encodeURIComponent(id), {
     method: 'PATCH',
     body: JSON.stringify(body),
