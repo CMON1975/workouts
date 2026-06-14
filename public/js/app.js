@@ -226,13 +226,27 @@ function bindSession(draft, template) {
 }
 
 async function loadPreviousHints(template, draftId, formRoot) {
+  // Fan-out: previous session for this template, plus the active prescription
+  // for the current routine if any. Both feed `applyPreviousHints` so they
+  // render together as distinct .prev-hint / .target-hint overlays.
+  const routineId = activeWorkout?.routine?.id ?? null;
   try {
-    const prev = await api.lastTemplateSession(template.id);
-    if (!prev) return;
+    const [prev, prescribed] = await Promise.all([
+      api.lastTemplateSession(template.id).catch((err) => {
+        console.warn('previous fetch failed', err);
+        return null;
+      }),
+      routineId
+        ? api.activePrescription(routineId).catch((err) => {
+            console.warn('prescription fetch failed', err);
+            return null;
+          })
+        : Promise.resolve(null),
+    ]);
     if (currentSession?.getDraft()?.id !== draftId) return;
-    applyPreviousHints(formRoot, { template, prev });
+    applyPreviousHints(formRoot, { template, prev, prescribed });
   } catch (err) {
-    console.warn('previous fetch failed', err);
+    console.warn('hints fetch failed', err);
   }
 }
 

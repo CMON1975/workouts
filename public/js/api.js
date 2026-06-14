@@ -82,4 +82,9 @@ export const api = {
   }),
   deleteSession: (id) => request('/api/sessions/' + encodeURIComponent(id), { method: 'DELETE' }),
   deleteWorkout: (id) => request('/api/workouts/' + encodeURIComponent(id), { method: 'DELETE' }),
+  activePrescription: (routineId, on = null) => {
+    const qs = new URLSearchParams({ routine_id: String(routineId) });
+    if (on) qs.set('on', on);
+    return request('/api/prescriptions/active?' + qs.toString());
+  },
 };

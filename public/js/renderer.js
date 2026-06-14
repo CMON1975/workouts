@@ -27,6 +27,13 @@ export function renderSessionForm(root, { template, draft, onInput }) {
     return;
   }
 
+  if (template.description) {
+    const desc = document.createElement('p');
+    desc.className = 'template-description';
+    desc.textContent = template.description;
+    form.appendChild(desc);
+  }
+
   const valuesMax = draft.values.reduce((m, v) => Math.max(m, v.row_index + 1), 0);
   const rows = Math.max(template.default_rows, valuesMax);
   if (rows <= 1) form.classList.add('no-row-labels');
@@ -53,7 +60,7 @@ export function renderSessionForm(root, { template, draft, onInput }) {
         input.inputMode = 'decimal';
         input.step = 'any';
       }
-      input.placeholder = col.name + (col.unit ? ` (${col.unit})` : '');
+      input.placeholder = col.name;
       input.setAttribute('aria-label', col.name);
       input.dataset.rowIndex = String(r);
       input.dataset.columnId = String(col.id);
@@ -437,7 +444,9 @@ function shortDate(ms) {
   return d.toLocaleDateString(undefined, opts);
 }
 
-export function applyPreviousHints(root, { template, prev }) {
+export function applyPreviousHints(root, { template, prev, prescribed = null }) {
+  applyPrescribedTargets(root, { template, prescribed });
+
   if (!prev || !Array.isArray(prev.values)) return;
 
   if (prev.finalized_at && !root.querySelector('.prev-header')) {
@@ -484,6 +493,56 @@ export function applyPreviousHints(root, { template, prev }) {
       : 'No previous note.';
     noteHint.textContent = text;
     notesField.appendChild(noteHint);
+  }
+}
+
+// Render prescription targets as .target-hint overlays next to empty inputs.
+// Does NOT auto-fill the input — the user types actuals into empty fields and
+// the prescription stays visible for comparison.
+function applyPrescribedTargets(root, { template, prescribed }) {
+  if (!prescribed || !Array.isArray(prescribed.targets)) return;
+  const mine = prescribed.targets.filter(t => t.template_id === template.id);
+  if (!mine.length) return;
+
+  if (!root.querySelector('.target-header')) {
+    const header = document.createElement('p');
+    header.className = 'target-header';
+    const label = prescribed.notes
+      ? `Prescribed (${prescribed.starts_on}): ${prescribed.notes}`
+      : `Prescribed for ${prescribed.starts_on}`;
+    header.textContent = label;
+    const h2 = root.querySelector('h2');
+    if (h2 && h2.nextSibling) root.insertBefore(header, h2.nextSibling);
+    else root.appendChild(header);
+  }
+
+  const colsById = new Map(template.columns.map(c => [c.id, c]));
+  for (const t of mine) {
+    const input = root.querySelector(
+      `input[data-row-index="${t.row_index}"][data-column-id="${t.column_id}"]`,
+    );
+    if (!input) continue;
+    const field = input.parentElement;
+    if (!field) continue;
+
+    if (template.kind === 'checkbox') {
+      const row = input.closest('.checkbox-row') ?? field;
+      if (row.querySelector('.target-hint')) continue;
+      const hint = document.createElement('span');
+      hint.className = 'target-hint';
+      hint.textContent = t.cue || 'prescribed';
+      row.appendChild(hint);
+      continue;
+    }
+
+    if (field.querySelector('.target-hint')) continue;
+    const col = colsById.get(t.column_id);
+    const raw = col?.value_type === 'text' ? (t.target_text ?? '') : (t.target_num ?? '');
+    if (raw === '' || raw === null || raw === undefined) continue;
+    const hint = document.createElement('span');
+    hint.className = 'target-hint';
+    hint.textContent = t.cue ? `target: ${raw} (${t.cue})` : `target: ${raw}`;
+    field.appendChild(hint);
   }
 }
 

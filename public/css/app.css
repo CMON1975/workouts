@@ -144,6 +144,22 @@ button:disabled { opacity: 0.5; }
   color: var(--muted);
 }
 
+/* Prescribed targets (from /api/prescriptions/active). Distinct visually from
+   .prev-hint so the user can tell "what was prescribed" apart from
+   "what happened last time" at a glance. */
+.target-hint {
+  font-size: 0.75rem;
+  color: var(--accent, #2c6e49);
+  padding-left: 4px;
+  font-weight: 600;
+}
+.target-header {
+  margin: 0 0 12px 0;
+  font-size: 0.85rem;
+  color: var(--accent, #2c6e49);
+  font-weight: 600;
+}
+
 .checkbox-row { padding: 12px 0; }
 .checkbox-field {
   display: flex;
@@ -160,6 +176,12 @@ button:disabled { opacity: 0.5; }
 .checkbox-description {
   margin: 8px 0 4px 0;
   white-space: pre-wrap;
+}
+.template-description {
+  margin: 0 0 12px 0;
+  white-space: pre-wrap;
+  color: var(--fg);
+  font-size: 0.95rem;
 }
 .detail-description {
   margin: 0 0 4px 0;
