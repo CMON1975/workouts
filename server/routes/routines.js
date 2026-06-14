@@ -75,7 +75,7 @@ function uniqueInts(arr) {
   return new Set(arr).size === arr.length;
 }
 
-function replaceRoutineTemplates(db, routineId, templateIds) {
+export function replaceRoutineTemplates(db, routineId, templateIds) {
   const existing = db.prepare('SELECT id FROM templates WHERE id = ?');
   for (const tid of templateIds) {
     if (!existing.get(tid)) {

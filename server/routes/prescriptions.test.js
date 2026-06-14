@@ -1,0 +1,748 @@
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { buildApp } from '../index.js';
+
+let app;
+let tmpDir;
+let dbPath;
+
+before(async () => {
+  tmpDir = mkdtempSync(join(tmpdir(), 'workouts-presc-test-'));
+  dbPath = join(tmpDir, 'test.db');
+  app = await buildApp({ dbPath, logger: false });
+  await app.ready();
+});
+
+after(async () => {
+  await app?.close();
+  if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('migration 006: prescriptions table exists with expected columns', () => {
+  const cols = app.db.prepare('PRAGMA table_info(prescriptions)').all();
+  const names = cols.map(c => c.name);
+  assert.deepEqual(
+    names.sort(),
+    ['created_at', 'ends_on', 'id', 'notes', 'routine_id', 'source', 'starts_on'].sort()
+  );
+  const notNull = new Set(cols.filter(c => c.notnull).map(c => c.name));
+  // `id` is INTEGER PRIMARY KEY (rowid alias) — SQLite reports notnull=0 but it's effectively required.
+  for (const n of ['routine_id', 'starts_on', 'ends_on', 'created_at']) {
+    assert.ok(notNull.has(n), `${n} must be NOT NULL`);
+  }
+});
+
+test('migration 006: prescription_targets table exists with expected columns', () => {
+  const cols = app.db.prepare('PRAGMA table_info(prescription_targets)').all();
+  const names = cols.map(c => c.name);
+  assert.deepEqual(
+    names.sort(),
+    [
+      'column_id', 'cue', 'prescription_id', 'row_index',
+      'target_num', 'target_text', 'template_id',
+    ].sort()
+  );
+  const pk = cols.filter(c => c.pk > 0).map(c => c.name).sort();
+  assert.deepEqual(
+    pk,
+    ['column_id', 'prescription_id', 'row_index', 'template_id'].sort()
+  );
+});
+
+test('migration 006: prescriptions(routine_id) FK cascades on routine delete', () => {
+  // Seed a routine + prescription and confirm cascade removes the prescription.
+  app.db.exec(`
+    INSERT INTO routines (name, created_at, sort_position) VALUES ('PrescCascade', ${Date.now()}, 99);
+  `);
+  const r = app.db.prepare(`SELECT id FROM routines WHERE name = 'PrescCascade'`).get();
+  const ins = app.db.prepare(`
+    INSERT INTO prescriptions (routine_id, starts_on, ends_on, created_at)
+    VALUES (?, '2026-06-08', '2026-06-14', ?)
+  `).run(r.id, Date.now());
+  const presId = ins.lastInsertRowid;
+  app.db.prepare('DELETE FROM routines WHERE id = ?').run(r.id);
+  const after = app.db.prepare('SELECT id FROM prescriptions WHERE id = ?').get(presId);
+  assert.equal(after, undefined, 'prescription should cascade-delete with routine');
+});
+
+test('migration 007: workouts has nullable prescription_id column', () => {
+  const cols = app.db.prepare('PRAGMA table_info(workouts)').all();
+  const presCol = cols.find(c => c.name === 'prescription_id');
+  assert.ok(presCol, 'workouts.prescription_id column must exist');
+  assert.equal(presCol.notnull, 0, 'prescription_id must be nullable');
+  const idxs = app.db.prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='workouts'`).all();
+  assert.ok(
+    idxs.some(i => i.name === 'ix_workouts_prescription'),
+    'ix_workouts_prescription index must exist'
+  );
+});
+
+test('migration 007: deleting a prescription sets workouts.prescription_id to NULL', () => {
+  app.db.exec(`
+    INSERT INTO routines (name, created_at, sort_position) VALUES ('PresSetNull', ${Date.now()}, 101);
+  `);
+  const r = app.db.prepare(`SELECT id FROM routines WHERE name = 'PresSetNull'`).get();
+  const presIns = app.db.prepare(`
+    INSERT INTO prescriptions (routine_id, starts_on, ends_on, created_at)
+    VALUES (?, '2026-07-06', '2026-07-12', ?)
+  `).run(r.id, Date.now());
+  const presId = presIns.lastInsertRowid;
+  const wid = '019dbaf7-9999-7000-8000-000000000007';
+  app.db.prepare(`
+    INSERT INTO workouts (id, routine_id, started_at, updated_at, prescription_id)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(wid, r.id, Date.now(), Date.now(), presId);
+  app.db.prepare('DELETE FROM prescriptions WHERE id = ?').run(presId);
+  const row = app.db.prepare('SELECT prescription_id FROM workouts WHERE id = ?').get(wid);
+  assert.equal(row.prescription_id, null, 'workout.prescription_id should be NULL after prescription deleted');
+});
+
+function nextId(prefix = 'p') {
+  // Tests share the test app + DB; randomize routine/template names within a test
+  // run by appending a monotonic counter so tests don't collide on UNIQUE name.
+  nextId._n = (nextId._n ?? 0) + 1;
+  return `${prefix}${nextId._n}`;
+}
+
+function sampleStandardExercise(name, targets = null) {
+  return {
+    template_name: name,
+    kind: 'standard',
+    columns: [
+      { name: 'reps', unit: null, value_type: 'number' },
+      { name: 'weight', unit: 'pounds', value_type: 'number' },
+    ],
+    default_rows: 4,
+    rows_fixed: 1,
+    targets: targets ?? [
+      { row_index: 0, column: 'reps', target_num: 6 },
+      { row_index: 0, column: 'weight', target_num: 22.5, cue: 'RPE 7' },
+      { row_index: 1, column: 'reps', target_num: 6 },
+      { row_index: 1, column: 'weight', target_num: 22.5 },
+    ],
+  };
+}
+
+function sampleCheckboxExercise(name, description = '1 min hip 90/90 each side') {
+  return {
+    template_name: name,
+    kind: 'checkbox',
+    description,
+    targets: [{ row_index: 0, column: 'completed', target_num: 1, cue: 'just do it' }],
+  };
+}
+
+test('POST /api/prescriptions/import — happy path creates routine, template, prescription, targets', async () => {
+  const routineName = nextId('Routine');
+  const templateName = nextId('Tpl');
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-08',
+      week_ends_on: '2026-06-14',
+      source: 'test',
+      days: [
+        {
+          routine_name: routineName,
+          notes: 'Phase 2 wk 6',
+          exercises: [sampleStandardExercise(templateName)],
+        },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 201, res.body);
+  const body = res.json();
+  assert.equal(body.prescriptions.length, 1);
+  assert.equal(body.prescriptions[0].routine_name, routineName);
+  assert.equal(body.prescriptions[0].starts_on, '2026-06-08');
+  assert.ok(body.prescriptions[0].id > 0);
+
+  const r = app.db.prepare(`SELECT id, sort_position FROM routines WHERE name = ?`).get(routineName);
+  assert.ok(r, 'routine created');
+  const t = app.db.prepare(`SELECT id, kind FROM templates WHERE name = ?`).get(templateName);
+  assert.ok(t, 'template created');
+  assert.equal(t.kind, 'standard');
+
+  const cols = app.db.prepare(`SELECT name, position FROM template_columns WHERE template_id = ? ORDER BY position`).all(t.id);
+  assert.deepEqual(cols.map(c => c.name), ['reps', 'weight']);
+
+  const rt = app.db.prepare(`SELECT template_id, position FROM routine_templates WHERE routine_id = ?`).all(r.id);
+  assert.equal(rt.length, 1);
+  assert.equal(rt[0].template_id, t.id);
+
+  const targets = app.db.prepare(`
+    SELECT pt.row_index, pt.target_num, pt.cue, tc.name AS column_name
+      FROM prescription_targets pt
+      JOIN template_columns tc ON tc.id = pt.column_id
+     WHERE pt.prescription_id = ?
+     ORDER BY pt.row_index, tc.position
+  `).all(body.prescriptions[0].id);
+  assert.equal(targets.length, 4);
+  assert.deepEqual(targets[0], { row_index: 0, target_num: 6, cue: null, column_name: 'reps' });
+  assert.deepEqual(targets[1], { row_index: 0, target_num: 22.5, cue: 'RPE 7', column_name: 'weight' });
+});
+
+test('POST /api/prescriptions/import — find-or-create reuses existing routine + template', async () => {
+  const routineName = nextId('ReuseRoutine');
+  const templateName = nextId('ReuseTpl');
+  // First import — create.
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-08',
+      week_ends_on: '2026-06-14',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  const tBefore = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(templateName);
+  const rBefore = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+
+  // Second import — should reuse same ids.
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-15',
+      week_ends_on: '2026-06-21',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  assert.equal(res.statusCode, 201);
+  const tAfter = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(templateName);
+  const rAfter = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  assert.equal(tBefore.id, tAfter.id, 'template id stable across re-import');
+  assert.equal(rBefore.id, rAfter.id, 'routine id stable across re-import');
+});
+
+test('POST /api/prescriptions/import — re-import for same routine + week inserts NEW prescription row', async () => {
+  const routineName = nextId('SameWeek');
+  const templateName = nextId('SameWeekTpl');
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-22',
+      week_ends_on: '2026-06-28',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  const second = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-22',
+      week_ends_on: '2026-06-28',
+      days: [{
+        routine_name: routineName,
+        exercises: [sampleStandardExercise(templateName, [
+          { row_index: 0, column: 'reps', target_num: 99 },
+          { row_index: 0, column: 'weight', target_num: 30 },
+        ])],
+      }],
+    },
+  });
+  assert.equal(second.statusCode, 201);
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const rows = app.db.prepare(
+    'SELECT id FROM prescriptions WHERE routine_id = ? AND starts_on = ? ORDER BY id'
+  ).all(r.id, '2026-06-22');
+  assert.equal(rows.length, 2, 'two prescriptions for the same (routine, starts_on)');
+});
+
+test('GET /api/prescriptions/active?routine_id=X returns most recent applicable prescription with targets', async () => {
+  const routineName = nextId('ActiveRoutine');
+  const templateName = nextId('ActiveTpl');
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-05-04',
+      week_ends_on: '2026-05-10',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName, [
+        { row_index: 0, column: 'reps', target_num: 5 },
+      ])] }],
+    },
+  });
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-05-11',
+      week_ends_on: '2026-05-17',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName, [
+        { row_index: 0, column: 'reps', target_num: 7 },
+      ])] }],
+    },
+  });
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const res = await app.inject({
+    method: 'GET',
+    url: `/api/prescriptions/active?routine_id=${r.id}&on=2026-05-13`,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.starts_on, '2026-05-11', 'most recent applicable');
+  const target = body.targets.find(t => t.column_name === 'reps');
+  assert.equal(target.target_num, 7);
+});
+
+test('GET /api/prescriptions/active returns null when no prescription applies', async () => {
+  const routineName = nextId('NoActive');
+  app.db.exec(`
+    INSERT INTO routines (name, created_at, sort_position) VALUES ('${routineName}', ${Date.now()}, 200);
+  `);
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const res = await app.inject({
+    method: 'GET',
+    url: `/api/prescriptions/active?routine_id=${r.id}&on=2026-05-04`,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body, 'null');
+});
+
+test('POST /api/prescriptions/import — 409 when an active workout exists on a touched routine', async () => {
+  const routineName = nextId('ActiveWorkoutGate');
+  const templateName = nextId('ActiveWorkoutTpl');
+  // Seed prescription + routine + template.
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-01',
+      week_ends_on: '2026-06-07',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  // Create an unfinalized workout on that routine.
+  const wid = '019dbaf7-aaaa-7000-8000-000000000aaa';
+  const res1 = await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: { id: wid, routine_id: r.id, started_at: Date.now(), updated_at: Date.now(), client_version: 1 },
+  });
+  assert.equal(res1.statusCode, 200);
+
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-08',
+      week_ends_on: '2026-06-14',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  assert.equal(res.statusCode, 409);
+  assert.match(res.json().error, /active workout/i);
+});
+
+test('POST /api/prescriptions/import — 400 when create_if_missing=false and template missing', async () => {
+  const routineName = nextId('NoCreate');
+  const templateName = nextId('NoCreateTpl');
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-08',
+      week_ends_on: '2026-06-14',
+      create_if_missing: false,
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json().error, /template/i);
+  // Rollback check: routine must not exist either.
+  assert.equal(
+    app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName),
+    undefined
+  );
+});
+
+test('POST /api/prescriptions/import — 409 column shape mismatch on existing template', async () => {
+  const routineName = nextId('ShapeRoutine');
+  const templateName = nextId('ShapeTpl');
+  // Seed template via a first import.
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-08',
+      week_ends_on: '2026-06-14',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  // Now try to prescribe a target on a column that doesn't exist on the template.
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-15',
+      week_ends_on: '2026-06-21',
+      days: [{
+        routine_name: routineName,
+        exercises: [{
+          ...sampleStandardExercise(templateName),
+          targets: [{ row_index: 0, column: 'distance', target_num: 5 }],
+        }],
+      }],
+    },
+  });
+  assert.equal(res.statusCode, 409);
+  assert.match(res.json().error, /column.*distance|template_shape_mismatch/i);
+});
+
+test('POST /api/prescriptions/import — 400 when max_new_templates exceeded (rollback)', async () => {
+  const routineName = nextId('CapRoutine');
+  const tpls = [nextId('CapA'), nextId('CapB'), nextId('CapC')];
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-08',
+      week_ends_on: '2026-06-14',
+      max_new_templates: 2,
+      days: [{
+        routine_name: routineName,
+        exercises: tpls.map(n => sampleStandardExercise(n)),
+      }],
+    },
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json().error, /max_new_templates/);
+  // Rollback: none of the templates should exist.
+  for (const n of tpls) {
+    assert.equal(app.db.prepare('SELECT id FROM templates WHERE name = ?').get(n), undefined);
+  }
+  assert.equal(app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName), undefined);
+});
+
+test('POST /api/prescriptions/import — checkbox template round-trip', async () => {
+  const routineName = nextId('CbRoutine');
+  const templateName = nextId('CbTpl');
+  const desc = '1 min hip 90/90 each side, 1 min couch stretch';
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-06-08',
+      week_ends_on: '2026-06-14',
+      days: [{
+        routine_name: routineName,
+        exercises: [sampleCheckboxExercise(templateName, desc)],
+      }],
+    },
+  });
+  assert.equal(res.statusCode, 201);
+  const t = app.db.prepare('SELECT id, kind, description FROM templates WHERE name = ?').get(templateName);
+  assert.equal(t.kind, 'checkbox');
+  assert.equal(t.description, desc);
+
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const active = await app.inject({
+    method: 'GET',
+    url: `/api/prescriptions/active?routine_id=${r.id}&on=2026-06-10`,
+  });
+  assert.equal(active.statusCode, 200);
+  const body = active.json();
+  assert.equal(body.targets.length, 1);
+  assert.equal(body.targets[0].column_name, 'completed');
+  assert.equal(body.targets[0].target_num, 1);
+  assert.equal(body.targets[0].cue, 'just do it');
+});
+
+test('POST /api/prescriptions/import — finalize_pending=true deletes empty draft on touched routine and proceeds', async () => {
+  const routineName = nextId('FinalizeEmptyRoutine');
+  const templateName = nextId('FinalizeEmptyTpl');
+  // Seed routine + template via initial import.
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-03',
+      week_ends_on: '2026-08-09',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  // Create an empty unfinalized workout (no child sessions).
+  const wid = '019ec999-aaaa-7000-8000-000000000001';
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: { id: wid, routine_id: r.id, started_at: Date.now(), updated_at: Date.now(), client_version: 1 },
+  });
+  // Confirm draft exists, no sessions.
+  assert.equal(app.db.prepare('SELECT id FROM workouts WHERE id = ?').get(wid)?.id, wid);
+  assert.equal(app.db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE workout_id = ?').get(wid).n, 0);
+
+  // Re-import with finalize_pending=true — should succeed AND delete the empty draft.
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-10',
+      week_ends_on: '2026-08-16',
+      finalize_pending: true,
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  assert.equal(res.statusCode, 201, res.body);
+  const draftAfter = app.db.prepare('SELECT id FROM workouts WHERE id = ?').get(wid);
+  assert.equal(draftAfter, undefined, 'empty draft should be deleted');
+});
+
+test('POST /api/prescriptions/import — finalize_pending=true finalizes a draft that has child sessions', async () => {
+  const routineName = nextId('FinalizeWithDataRoutine');
+  const templateName = nextId('FinalizeWithDataTpl');
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-03',
+      week_ends_on: '2026-08-09',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const tpl = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(templateName);
+  const tplCol = app.db.prepare(`SELECT id FROM template_columns WHERE template_id = ? AND name = 'reps'`).get(tpl.id);
+
+  const wid = '019ec999-aaaa-7000-8000-000000000002';
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: { id: wid, routine_id: r.id, started_at: Date.now(), updated_at: Date.now(), client_version: 1 },
+  });
+  // Drop a real child session with a recorded value.
+  const sid = '019ec999-bbbb-7000-8000-000000000002';
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${sid}`,
+    payload: {
+      id: sid, template_id: tpl.id, workout_id: wid,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+      values: [{ row_index: 0, column_id: tplCol.id, value_num: 7 }],
+    },
+  });
+
+  // Re-import with finalize_pending=true.
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-10',
+      week_ends_on: '2026-08-16',
+      finalize_pending: true,
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  assert.equal(res.statusCode, 201, res.body);
+
+  const row = app.db.prepare('SELECT finalized_at FROM workouts WHERE id = ?').get(wid);
+  assert.ok(row, 'workout with data should NOT be deleted');
+  assert.ok(row.finalized_at != null, 'workout with data should be finalized');
+  const sRow = app.db.prepare('SELECT finalized_at FROM sessions WHERE id = ?').get(sid);
+  assert.ok(sRow.finalized_at != null, 'child session should also be finalized');
+  // Value preserved.
+  assert.equal(
+    app.db.prepare('SELECT value_num FROM session_values WHERE session_id = ? AND row_index = 0').get(sid).value_num,
+    7
+  );
+});
+
+test('POST /api/prescriptions/import — finalize_pending omitted keeps the active-workout gate', async () => {
+  const routineName = nextId('GateStillFiresRoutine');
+  const templateName = nextId('GateStillFiresTpl');
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-17',
+      week_ends_on: '2026-08-23',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const wid = '019ec999-aaaa-7000-8000-000000000003';
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: { id: wid, routine_id: r.id, started_at: Date.now(), updated_at: Date.now(), client_version: 1 },
+  });
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-24',
+      week_ends_on: '2026-08-30',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  assert.equal(res.statusCode, 409, 'gate fires without finalize_pending');
+});
+
+test('POST /api/prescriptions/import — description on existing template updates the template description', async () => {
+  const routineName = nextId('DescUpdateRoutine');
+  const templateName = nextId('DescUpdateTpl');
+  // Create the template via import without description.
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-09-07',
+      week_ends_on: '2026-09-13',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  const tBefore = app.db.prepare('SELECT description FROM templates WHERE name = ?').get(templateName);
+  assert.equal(tBefore.description, null);
+
+  // Re-import with description on the same template.
+  const desc = 'RPE 7. Pause 1s at the bottom. Watch knee tracking on lockout.';
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-09-14',
+      week_ends_on: '2026-09-20',
+      days: [{
+        routine_name: routineName,
+        exercises: [{ ...sampleStandardExercise(templateName), description: desc }],
+      }],
+    },
+  });
+  assert.equal(res.statusCode, 201);
+  const tAfter = app.db.prepare('SELECT description FROM templates WHERE name = ?').get(templateName);
+  assert.equal(tAfter.description, desc);
+});
+
+test('POST /api/prescriptions/import — missing description leaves existing template description untouched', async () => {
+  const routineName = nextId('DescKeepRoutine');
+  const templateName = nextId('DescKeepTpl');
+  const originalDesc = 'original prose';
+  // Create template with a description via import.
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-10-05',
+      week_ends_on: '2026-10-11',
+      days: [{
+        routine_name: routineName,
+        exercises: [{ ...sampleStandardExercise(templateName), description: originalDesc }],
+      }],
+    },
+  });
+  // Re-import without description.
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-10-12',
+      week_ends_on: '2026-10-18',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  const tAfter = app.db.prepare('SELECT description FROM templates WHERE name = ?').get(templateName);
+  assert.equal(tAfter.description, originalDesc, 'no-description re-import preserves prior description');
+});
+
+test('PATCH /api/workouts/:id stamps prescription_id on first create from started_at date', async () => {
+  const routineName = nextId('StampRoutine');
+  const templateName = nextId('StampTpl');
+  // Prescribe two consecutive weeks so we can verify the date-range pick.
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-07-06',
+      week_ends_on: '2026-07-12',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-07-13',
+      week_ends_on: '2026-07-19',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const expected = app.db.prepare(
+    'SELECT id FROM prescriptions WHERE routine_id = ? AND starts_on = ?'
+  ).get(r.id, '2026-07-13');
+  assert.ok(expected, 'precondition: wk2 prescription exists');
+
+  // Workout started Wed 2026-07-15 (UTC) — falls in the wk2 window.
+  const startedAt = Date.UTC(2026, 6, 15, 15, 0, 0); // months are 0-indexed
+  const wid = '019dbaf7-bbbb-7000-8000-000000000111';
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: {
+      id: wid, routine_id: r.id, started_at: startedAt, updated_at: startedAt, client_version: 1,
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  const row = app.db.prepare('SELECT prescription_id FROM workouts WHERE id = ?').get(wid);
+  assert.equal(row.prescription_id, expected.id, 'workout stamped with wk2 prescription');
+});
+
+test('PATCH /api/workouts/:id re-PATCH does not change a stamped prescription_id', async () => {
+  const routineName = nextId('NoRestampRoutine');
+  const templateName = nextId('NoRestampTpl');
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-07-06',
+      week_ends_on: '2026-07-12',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const wid = '019dbaf7-bbbb-7000-8000-000000000222';
+  const startedAt = Date.UTC(2026, 6, 8, 15, 0, 0);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: { id: wid, routine_id: r.id, started_at: startedAt, updated_at: startedAt, client_version: 1 },
+  });
+  const stamped = app.db.prepare('SELECT prescription_id FROM workouts WHERE id = ?').get(wid).prescription_id;
+  assert.ok(stamped, 'precondition: stamped');
+
+  // Add a NEWER prescription that would change "active" if re-stamping happened.
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-07-06',
+      week_ends_on: '2026-07-12',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: { id: wid, routine_id: r.id, started_at: startedAt, updated_at: startedAt + 1, client_version: 2 },
+  });
+  const after = app.db.prepare('SELECT prescription_id FROM workouts WHERE id = ?').get(wid).prescription_id;
+  assert.equal(after, stamped, 'prescription_id is immutable after first stamp');
+});
+
+test('PATCH /api/workouts/:id leaves prescription_id NULL when no prescription is active', async () => {
+  // Seed an unrelated routine that has no prescription.
+  const routineName = nextId('NoPrescRoutine');
+  app.db.prepare(`
+    INSERT INTO routines (name, created_at, sort_position) VALUES (?, ?, ?)
+  `).run(routineName, Date.now(), 250);
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const wid = '019dbaf7-bbbb-7000-8000-000000000333';
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: { id: wid, routine_id: r.id, started_at: Date.now(), updated_at: Date.now(), client_version: 1 },
+  });
+  const row = app.db.prepare('SELECT prescription_id FROM workouts WHERE id = ?').get(wid);
+  assert.equal(row.prescription_id, null);
+});
+
+test('migration 006: prescription_targets cascades on prescription delete', () => {
+  // Seed routine + prescription + target, then delete prescription and verify the target is gone.
+  app.db.exec(`
+    INSERT INTO routines (name, created_at, sort_position) VALUES ('TargetsCascade', ${Date.now()}, 100);
+  `);
+  const r = app.db.prepare(`SELECT id FROM routines WHERE name = 'TargetsCascade'`).get();
+  const tpl = app.db.prepare(`SELECT id FROM templates WHERE name = 'Bicep Curls'`).get();
+  const col = app.db.prepare(`SELECT id FROM template_columns WHERE template_id = ?`).get(tpl.id);
+  const ins = app.db.prepare(`
+    INSERT INTO prescriptions (routine_id, starts_on, ends_on, created_at)
+    VALUES (?, '2026-06-15', '2026-06-21', ?)
+  `).run(r.id, Date.now());
+  const presId = ins.lastInsertRowid;
+  app.db.prepare(`
+    INSERT INTO prescription_targets
+      (prescription_id, template_id, row_index, column_id, target_num)
+    VALUES (?, ?, 0, ?, 8)
+  `).run(presId, tpl.id, col.id);
+  assert.equal(
+    app.db.prepare('SELECT COUNT(*) AS n FROM prescription_targets WHERE prescription_id = ?').get(presId).n,
+    1
+  );
+  app.db.prepare('DELETE FROM prescriptions WHERE id = ?').run(presId);
+  assert.equal(
+    app.db.prepare('SELECT COUNT(*) AS n FROM prescription_targets WHERE prescription_id = ?').get(presId).n,
+    0
+  );
+});

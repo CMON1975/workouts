@@ -134,11 +134,22 @@ export default async function workoutsRoutes(app) {
            WHERE id = ?
         `).run(body.started_at, now, body.client_version, id);
       } else {
+        // Stamp the active prescription (if any) onto this workout at creation
+        // time. The pin is by id, not by date — re-importing the same week
+        // later won't retroactively change what this workout was "run against".
+        const onDate = new Date(body.started_at).toISOString().slice(0, 10);
+        const presRow = db.prepare(`
+          SELECT id FROM prescriptions
+           WHERE routine_id = ? AND starts_on <= ?
+           ORDER BY starts_on DESC, id DESC
+           LIMIT 1
+        `).get(body.routine_id, onDate);
+        const presId = presRow ? presRow.id : null;
         db.prepare(`
           INSERT INTO workouts
-            (id, routine_id, started_at, updated_at, client_version)
-          VALUES (?, ?, ?, ?, ?)
-        `).run(id, body.routine_id, body.started_at, now, body.client_version);
+            (id, routine_id, started_at, updated_at, client_version, prescription_id)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(id, body.routine_id, body.started_at, now, body.client_version, presId);
       }
       return { status: 200, body: { server_version: body.client_version, updated_at: now } };
     })();
