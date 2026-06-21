@@ -84,3 +84,16 @@ Running log of work done with Claude Code.
 - Renderer: `applyPreviousHints` signature extended to take `prescribed`. `.target-hint` is a distinct CSS class from `.prev-hint` so prescribed vs last-actual stay visually separable. Input placeholder dropped the `(unit)` interpolation so stale-target hacks in `template_columns.unit` don't ghost-render anymore; blue `.target-hint` carries the prescribed value with `cue`.
 - Followups noted but not done: `template_columns.unit` is still rendered in `renderHistoryList`'s summary line and the detail-view table headers — same stale-target hack, same fix shape if/when user asks.
 - Deploy: pushing both repos and bouncing the droplet's systemd unit; prod DB backup taken first via `VACUUM INTO`. Both migrations are pure additive (CREATE TABLE / ADD COLUMN NULL), no rewrites, no in-flight draft risk.
+
+---
+## 2026-06-21 — Prescription preview on Manage Routines + workout-form row count + all-text columns
+**What:** Three-commit push (`f2f189c` → `34cdff2` on `main`) to close the prescription-visibility gap surfaced during the wk 8 Sunday cycle.
+**Why:** Wk 7 prescription was correct in the DB but the user never executed many of its bumps. He'd been checking the Manage Routines screen (which showed nothing prescription-related) to "see what's prescribed" and falling back on the stale `template_columns.unit` ghost values (`30 sec`, `10 lb x 2`). Workout form was the only surface that rendered targets, and it only did so async after render — too late to influence row count.
+**Notes:**
+- `GET /api/prescriptions/active` extended: no-routine returns array of every routine's latest prescription (wrapped `{routine_id, routine_name, prescription, targets}`). Default semantics changed to latest-wins regardless of `starts_on` so Sunday-publish for Monday-start previews immediately; existing `?on=YYYY-MM-DD` cap still works.
+- Migration 008 normalizes `template_columns.unit` to plain unit indicators (`lbs`, `sec`, `kph`, `seconds per side`, etc.); value-based UPDATEs so dev and prod (different ids) both clean correctly.
+- Migration 009 flips every `template_columns.value_type` to `'text'`; defaults in `templates.js` and `prescriptions.js` switched to text. User wanted flexibility (`24 x 2`, `8 left 6 right`). Renderer falls back across `target_num` ↔ `target_text` and `value_num` ↔ `value_text` so legacy data and current prescriptions both render.
+- Renderer overhaul: `renderRoutineManageList` accepts a `prescriptionsByRoutineId` map and appends a per-template target block; `bindCurrentExercise` pre-fetches the prescription and caches on `activeWorkout` so `renderSessionForm` can use the prescribed set count for row rendering (`Math.max(prescribedRowCount, valuesMax)`); placeholder restored to `name (unit)` now that units are clean; dropped the noisy `Prescribed (date): wk N notes` banner; descriptions rewritten as pure form/equipment cues, no RPE jargon.
+- Prod DB backed up to `/tmp/workouts-pre-008-009.db` via `VACUUM INTO` before migrations applied.
+- Tests: 154 passing (added 4 new prescription tests, updated 2 stale value_type assertions in `templates.test.js`).
+- Followup still open: `renderHistoryList` summary and detail-view table headers still pull `column.unit`; less urgent now that units are clean strings rather than target encodings.
