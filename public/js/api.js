@@ -93,4 +93,16 @@ export const api = {
     const s = qs.toString();
     return request('/api/prescriptions/active' + (s ? '?' + s : ''));
   },
+  listBodyMetrics: ({ from, to, metric } = {}) => {
+    const qs = new URLSearchParams();
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+    if (metric) qs.set('metric', metric);
+    const s = qs.toString();
+    return request('/api/body-metrics' + (s ? '?' + s : ''));
+  },
+  createBodyMetric: (body) => request('/api/body-metrics', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
 };

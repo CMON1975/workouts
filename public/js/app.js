@@ -97,6 +97,12 @@ const els = {
   teCancel: document.getElementById('te-cancel'),
   teSave: document.getElementById('te-save'),
   teErr: document.getElementById('te-err'),
+  bodyMetricsForm: document.getElementById('body-metrics-form'),
+  bmMetric: document.getElementById('bm-metric'),
+  bmDate: document.getElementById('bm-date'),
+  bmValue: document.getElementById('bm-value'),
+  bmSubmit: document.getElementById('bm-submit'),
+  bmStatus: document.getElementById('bm-status'),
 };
 
 const VIEWS = ['home', 'session', 'history', 'detail', 'newTpl', 'manage', 'newRt', 'manageRt', 'runner'];
@@ -1286,6 +1292,47 @@ async function enterApp() {
   drainOutbox();
 }
 
+function todayISODate() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+let bmStatusTimer = null;
+function bmFlash(msg, isError = false) {
+  els.bmStatus.textContent = msg;
+  els.bmStatus.classList.toggle('err', isError);
+  if (bmStatusTimer) clearTimeout(bmStatusTimer);
+  if (msg && !isError) {
+    bmStatusTimer = setTimeout(() => { els.bmStatus.textContent = ''; }, 4000);
+  }
+}
+
+async function handleBodyMetricSubmit(e) {
+  e.preventDefault();
+  const date = els.bmDate.value;
+  const metric = els.bmMetric.value;
+  const value = els.bmValue.value.trim();
+  if (!date || !metric || !value) {
+    bmFlash('Fill date, metric, and value.', true);
+    return;
+  }
+  els.bmSubmit.disabled = true;
+  try {
+    const row = await api.createBodyMetric({ date, metric, value });
+    bmFlash(`Logged ${row.metric} ${row.value} on ${row.date}`);
+    els.bmValue.value = '';
+    els.bmValue.focus();
+  } catch (err) {
+    const msg = err.body?.error || err.message || 'Log failed';
+    bmFlash(msg, true);
+  } finally {
+    els.bmSubmit.disabled = false;
+  }
+}
+
 async function handleSubmit() {
   if (!currentSession) return;
   els.submit.disabled = true;
@@ -1330,6 +1377,9 @@ async function boot() {
   els.tplEditForm.addEventListener('submit', handleTemplateEditSubmit);
   els.teCancel.addEventListener('click', () => els.tplEditDialog.close());
   els.teAddCol.addEventListener('click', handleTeAddCol);
+
+  els.bodyMetricsForm.addEventListener('submit', handleBodyMetricSubmit);
+  els.bmDate.value = todayISODate();
 
   await enterApp();
 }

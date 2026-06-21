@@ -88,6 +88,38 @@ button {
 
 button:disabled { opacity: 0.5; }
 
+/* Body metrics quick-log */
+
+.body-metrics-form {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr auto;
+  gap: 6px;
+  align-items: stretch;
+  margin: 0 0 16px;
+}
+.body-metrics-form select,
+.body-metrics-form input[type='date'],
+.body-metrics-form input[type='text'] {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 40px;
+  min-width: 0;
+}
+.body-metrics-form button {
+  padding: 8px 14px;
+  min-height: 40px;
+}
+.bm-status {
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
+  color: var(--muted, #888);
+  min-height: 1.2em;
+}
+.bm-status.err { color: var(--err, #c0392b); }
+
 /* Template list */
 
 #template-list {

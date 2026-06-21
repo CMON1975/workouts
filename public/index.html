@@ -29,6 +29,17 @@
     <p id="resume-banner" class="banner" hidden></p>
 
     <section id="home" class="view">
+      <form id="body-metrics-form" class="body-metrics-form" autocomplete="off">
+        <select id="bm-metric" aria-label="Metric">
+          <option value="body_weight">weight</option>
+          <option value="waist">waist</option>
+        </select>
+        <input id="bm-date" type="date" aria-label="Date" required>
+        <input id="bm-value" type="text" inputmode="decimal" aria-label="Value" placeholder="value" required>
+        <button id="bm-submit" type="submit">Log</button>
+        <span id="bm-status" class="bm-status" aria-live="polite"></span>
+      </form>
+
       <h2>Start a session</h2>
 
       <h3 class="home-heading">Routines</h3>
