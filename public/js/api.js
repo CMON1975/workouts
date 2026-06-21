@@ -87,4 +87,10 @@ export const api = {
     if (on) qs.set('on', on);
     return request('/api/prescriptions/active?' + qs.toString());
   },
+  activePrescriptions: (on = null) => {
+    const qs = new URLSearchParams();
+    if (on) qs.set('on', on);
+    const s = qs.toString();
+    return request('/api/prescriptions/active' + (s ? '?' + s : ''));
+  },
 };

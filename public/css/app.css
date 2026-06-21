@@ -452,6 +452,41 @@ button.secondary {
   margin-top: 8px;
 }
 
+.routine-card-targets {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--bg-soft, rgba(0, 0, 0, 0.03));
+  border-left: 3px solid var(--accent, #2c6e49);
+  font-size: 0.85rem;
+}
+
+.routine-card-targets-header {
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.routine-card-target-line {
+  line-height: 1.4;
+  padding: 1px 0;
+}
+
+.target-template-name {
+  font-weight: 600;
+}
+
+.target-summary {
+  color: var(--text, inherit);
+}
+
+.target-cue {
+  color: var(--muted);
+  font-style: italic;
+}
+
 button.small {
   padding: 6px 12px;
   min-height: 32px;

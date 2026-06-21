@@ -204,14 +204,17 @@ function bindSessionTo({ draft, template, formRoot, statusEl }) {
   });
   currentSession = session;
 
+  const prescribed = activeWorkout?.prescribed ?? null;
+
   renderSessionForm(formRoot, {
     template,
     draft: session.getDraft(),
     onInput: session.onInput,
+    prescribed,
   });
   renderStatus(statusEl, { state: session.getState() });
 
-  loadPreviousHints(template, draft.id, formRoot);
+  loadPreviousHints(template, draft.id, formRoot, prescribed);
   return session;
 }
 
@@ -225,24 +228,15 @@ function bindSession(draft, template) {
   showView('session');
 }
 
-async function loadPreviousHints(template, draftId, formRoot) {
-  // Fan-out: previous session for this template, plus the active prescription
-  // for the current routine if any. Both feed `applyPreviousHints` so they
-  // render together as distinct .prev-hint / .target-hint overlays.
-  const routineId = activeWorkout?.routine?.id ?? null;
+async function loadPreviousHints(template, draftId, formRoot, prescribed) {
+  // Prescription is now pre-fetched in bindCurrentExercise so the form can
+  // render with the correct row count and synchronous target hints. This
+  // function only fetches the previous session for the "was X" overlay.
   try {
-    const [prev, prescribed] = await Promise.all([
-      api.lastTemplateSession(template.id).catch((err) => {
-        console.warn('previous fetch failed', err);
-        return null;
-      }),
-      routineId
-        ? api.activePrescription(routineId).catch((err) => {
-            console.warn('prescription fetch failed', err);
-            return null;
-          })
-        : Promise.resolve(null),
-    ]);
+    const prev = await api.lastTemplateSession(template.id).catch((err) => {
+      console.warn('previous fetch failed', err);
+      return null;
+    });
     if (currentSession?.getDraft()?.id !== draftId) return;
     applyPreviousHints(formRoot, { template, prev, prescribed });
   } catch (err) {
@@ -378,6 +372,18 @@ async function bindCurrentExercise() {
   if (!activeWorkout) return;
   const { routine, currentIndex } = activeWorkout;
   const template = routine.templates[currentIndex];
+
+  // Cache the active prescription per workout so the form can compute row
+  // count and render target hints synchronously rather than after the form
+  // has already drawn N rows from template.default_rows.
+  if (activeWorkout.prescribed === undefined) {
+    try {
+      activeWorkout.prescribed = await api.activePrescription(routine.id);
+    } catch (err) {
+      console.warn('prescription fetch failed', err);
+      activeWorkout.prescribed = null;
+    }
+  }
 
   let sid = activeWorkout.sessionIds[currentIndex];
   let draft = null;
@@ -1151,9 +1157,18 @@ async function handleRoutineFormSubmit(e) {
   }
 }
 
-function openManageRoutines() {
-  renderManageRoutines();
+let activePrescriptionsByRoutineId = new Map();
+
+async function openManageRoutines() {
   showView('manageRt');
+  renderManageRoutines();
+  try {
+    const list = await api.activePrescriptions();
+    activePrescriptionsByRoutineId = new Map((list || []).map(p => [p.routine_id, p]));
+    renderManageRoutines();
+  } catch (err) {
+    console.warn('failed to load prescriptions for manage view', err);
+  }
 }
 
 function renderManageRoutines() {
@@ -1172,6 +1187,7 @@ function renderManageRoutines() {
   });
   renderRoutineManageList(els.manageRtList, {
     routines: sorted,
+    prescriptionsByRoutineId: activePrescriptionsByRoutineId,
     onEdit: openEditRoutine,
     onArchiveToggle: handleRoutineArchiveToggle,
     onReorder: handleRoutineReorder,

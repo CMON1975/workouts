@@ -11,7 +11,7 @@ function makeTrashAction() {
   return action;
 }
 
-export function renderSessionForm(root, { template, draft, onInput }) {
+export function renderSessionForm(root, { template, draft, onInput, prescribed = null }) {
   root.innerHTML = '';
 
   const h = document.createElement('h2');
@@ -34,8 +34,17 @@ export function renderSessionForm(root, { template, draft, onInput }) {
     form.appendChild(desc);
   }
 
+  // Row count precedence: prescribed set count (when prescription is active for
+  // this template) overrides template.default_rows; valuesMax always wins so a
+  // draft with extra ad-hoc rows is never truncated visually.
   const valuesMax = draft.values.reduce((m, v) => Math.max(m, v.row_index + 1), 0);
-  const rows = Math.max(template.default_rows, valuesMax);
+  const prescribedRowCount = prescribed && Array.isArray(prescribed.targets)
+    ? prescribed.targets
+        .filter(t => t.template_id === template.id)
+        .reduce((m, t) => Math.max(m, t.row_index + 1), 0)
+    : 0;
+  const baseRows = prescribedRowCount > 0 ? prescribedRowCount : template.default_rows;
+  const rows = Math.max(baseRows, valuesMax);
   if (rows <= 1) form.classList.add('no-row-labels');
 
   for (let r = 0; r < rows; r++) {
@@ -60,8 +69,9 @@ export function renderSessionForm(root, { template, draft, onInput }) {
         input.inputMode = 'decimal';
         input.step = 'any';
       }
-      input.placeholder = col.name;
-      input.setAttribute('aria-label', col.name);
+      const placeholder = col.unit ? `${col.name} (${col.unit})` : col.name;
+      input.placeholder = placeholder;
+      input.setAttribute('aria-label', placeholder);
       input.dataset.rowIndex = String(r);
       input.dataset.columnId = String(col.id);
 
@@ -476,7 +486,9 @@ export function applyPreviousHints(root, { template, prev, prescribed = null }) 
       row.appendChild(hint);
       continue;
     }
-    const raw = col?.value_type === 'text' ? (v.value_text ?? '') : (v.value_num ?? '');
+    const raw = col?.value_type === 'text'
+      ? (v.value_text ?? v.value_num ?? '')
+      : (v.value_num ?? v.value_text ?? '');
     if (raw === '' || raw === null || raw === undefined) continue;
     const hint = document.createElement('span');
     hint.className = 'prev-hint';
@@ -504,18 +516,6 @@ function applyPrescribedTargets(root, { template, prescribed }) {
   const mine = prescribed.targets.filter(t => t.template_id === template.id);
   if (!mine.length) return;
 
-  if (!root.querySelector('.target-header')) {
-    const header = document.createElement('p');
-    header.className = 'target-header';
-    const label = prescribed.notes
-      ? `Prescribed (${prescribed.starts_on}): ${prescribed.notes}`
-      : `Prescribed for ${prescribed.starts_on}`;
-    header.textContent = label;
-    const h2 = root.querySelector('h2');
-    if (h2 && h2.nextSibling) root.insertBefore(header, h2.nextSibling);
-    else root.appendChild(header);
-  }
-
   const colsById = new Map(template.columns.map(c => [c.id, c]));
   for (const t of mine) {
     const input = root.querySelector(
@@ -537,7 +537,12 @@ function applyPrescribedTargets(root, { template, prescribed }) {
 
     if (field.querySelector('.target-hint')) continue;
     const col = colsById.get(t.column_id);
-    const raw = col?.value_type === 'text' ? (t.target_text ?? '') : (t.target_num ?? '');
+    // Fall back across number ↔ text. Some templates have legacy value_type='text'
+    // on numeric columns (weight/time/etc.); the prescription supplies target_num
+    // and we'd otherwise skip the hint. Read whichever side is populated.
+    const raw = col?.value_type === 'text'
+      ? (t.target_text ?? t.target_num ?? '')
+      : (t.target_num ?? t.target_text ?? '');
     if (raw === '' || raw === null || raw === undefined) continue;
     const hint = document.createElement('span');
     hint.className = 'target-hint';
@@ -606,7 +611,10 @@ export function renderRoutineBuilder({
   }
 }
 
-export function renderRoutineManageList(root, { routines, onEdit, onArchiveToggle, onReorder }) {
+export function renderRoutineManageList(root, {
+  routines, onEdit, onArchiveToggle, onReorder,
+  prescriptionsByRoutineId = null,
+}) {
   root.innerHTML = '';
   for (const r of routines) {
     const card = document.createElement('div');
@@ -639,6 +647,9 @@ export function renderRoutineManageList(root, { routines, onEdit, onArchiveToggl
     meta.textContent = `${count} exercise${count === 1 ? '' : 's'}: ${names || '(none)'}`;
     body.appendChild(meta);
 
+    const presc = prescriptionsByRoutineId?.get(r.id);
+    if (presc) appendPrescriptionBlock(body, presc);
+
     const actions = document.createElement('div');
     actions.className = 'manage-actions';
 
@@ -664,6 +675,81 @@ export function renderRoutineManageList(root, { routines, onEdit, onArchiveToggl
   }
 
   if (onReorder) enableManageRowDrag(root, onReorder);
+}
+
+function appendPrescriptionBlock(parent, active) {
+  const { prescription, targets } = active;
+  if (!targets || targets.length === 0) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'routine-card-targets';
+
+  const header = document.createElement('div');
+  header.className = 'routine-card-targets-header';
+  const headerBits = [`Prescription · ${prescription.starts_on} → ${prescription.ends_on}`];
+  if (prescription.notes) headerBits.push(prescription.notes);
+  header.textContent = headerBits.join(' · ');
+  wrap.appendChild(header);
+
+  for (const tpl of groupTargetsByTemplate(targets)) {
+    const line = document.createElement('div');
+    line.className = 'routine-card-target-line';
+
+    const nm = document.createElement('span');
+    nm.className = 'target-template-name';
+    nm.textContent = tpl.templateName;
+    line.appendChild(nm);
+    line.appendChild(document.createTextNode(': '));
+
+    if (tpl.uniform) {
+      const sum = document.createElement('span');
+      sum.className = 'target-summary';
+      sum.textContent = `${tpl.rowsArr.length} × (${tpl.rowsArr[0].text})`;
+      line.appendChild(sum);
+    } else {
+      const sum = document.createElement('span');
+      sum.className = 'target-summary';
+      sum.textContent = tpl.rowsArr.map(r => `[${r.rowIdx}] ${r.text}`).join(' / ');
+      line.appendChild(sum);
+    }
+
+    if (tpl.cues.length) {
+      line.appendChild(document.createTextNode(' '));
+      const cue = document.createElement('span');
+      cue.className = 'target-cue';
+      cue.textContent = `(${tpl.cues.join('; ')})`;
+      line.appendChild(cue);
+    }
+
+    wrap.appendChild(line);
+  }
+
+  parent.appendChild(wrap);
+}
+
+function groupTargetsByTemplate(targets) {
+  // Map preserves insertion order, which matches the server's ORDER BY template_id.
+  const byTpl = new Map();
+  for (const t of targets) {
+    if (!byTpl.has(t.template_id)) {
+      byTpl.set(t.template_id, { templateName: t.template_name, rows: new Map(), cues: new Set() });
+    }
+    const e = byTpl.get(t.template_id);
+    if (!e.rows.has(t.row_index)) e.rows.set(t.row_index, []);
+    const v = t.target_num != null ? String(t.target_num) : (t.target_text ?? '');
+    e.rows.get(t.row_index).push({ col: t.column_name, val: v });
+    if (t.cue) e.cues.add(t.cue);
+  }
+  const out = [];
+  for (const [, e] of byTpl) {
+    const rowKeys = [...e.rows.keys()].sort((a, b) => a - b);
+    const rowsArr = rowKeys.map(k => ({
+      rowIdx: k,
+      text: e.rows.get(k).map(({ col, val }) => `${col} ${val}`).join(', '),
+    }));
+    const uniform = rowsArr.every(r => r.text === rowsArr[0].text);
+    out.push({ templateName: e.templateName, rowsArr, uniform, cues: [...e.cues] });
+  }
+  return out;
 }
 
 // Pointer-based drag-to-reorder for the routines Manage list. Works with mouse
