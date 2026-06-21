@@ -64,7 +64,7 @@ test('POST creates a rows-style template with multiple columns in order', async 
   assert.deepEqual(body.columns.map(c => c.name), ['Time', 'Incline', 'KPH']);
   assert.deepEqual(body.columns.map(c => c.position), [0, 1, 2]);
   assert.equal(body.columns[1].unit, null);
-  assert.equal(body.columns[0].value_type, 'number');
+  assert.equal(body.columns[0].value_type, 'text');
 });
 
 test('POST with duplicate name returns 409', async () => {
@@ -635,7 +635,7 @@ test('POST kind=checkbox stores description and synthesizes a completed column',
   assert.equal(body.default_rows, 1);
   assert.equal(body.rows_fixed, 1);
   assert.deepEqual(body.columns.map(c => c.name), ['completed']);
-  assert.equal(body.columns[0].value_type, 'number');
+  assert.equal(body.columns[0].value_type, 'text');
 });
 
 test('POST kind=checkbox without description returns 400', async () => {

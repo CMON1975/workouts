@@ -7,7 +7,7 @@ const columnSchema = {
   properties: {
     name: { type: 'string', minLength: 1, maxLength: 50 },
     unit: { type: ['string', 'null'], maxLength: 20 },
-    value_type: { type: 'string', enum: VALUE_TYPES, default: 'number' },
+    value_type: { type: 'string', enum: VALUE_TYPES, default: 'text' },
   },
 };
 
@@ -163,7 +163,7 @@ export default async function templatesRoutes(app) {
       if (!description) {
         return reply.code(400).send({ error: 'description is required for checkbox templates' });
       }
-      columns = [{ name: 'completed', unit: null, value_type: 'number' }];
+      columns = [{ name: 'completed', unit: null, value_type: 'text' }];
       defaultRows = 1;
       rowsFixed = 1;
     } else {
@@ -199,7 +199,7 @@ export default async function templatesRoutes(app) {
             c.name.trim(),
             c.unit ? c.unit.trim() : null,
             i,
-            c.value_type || 'number',
+            c.value_type || 'text',
           );
         });
         db.prepare(`
@@ -316,7 +316,7 @@ export default async function templatesRoutes(app) {
             if (c.id !== undefined) {
               updateExisting.run(name, unit, i, c.id, id);
             } else {
-              insertNew.run(id, name, unit, i, c.value_type || 'number');
+              insertNew.run(id, name, unit, i, c.value_type || 'text');
             }
           });
         }

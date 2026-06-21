@@ -284,6 +284,154 @@ test('GET /api/prescriptions/active?routine_id=X returns most recent applicable 
   assert.equal(target.target_num, 7);
 });
 
+test('GET /api/prescriptions/active?routine_id=X (no on) returns the latest for the routine, even if future (preview Sunday publish)', async () => {
+  const routine = nextId('SingleLatest');
+  const tpl = nextId('SingleLatestTpl');
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-02-09',
+      week_ends_on: '2026-02-15',
+      days: [{ routine_name: routine, exercises: [sampleStandardExercise(tpl, [
+        { row_index: 0, column: 'reps', target_num: 3 },
+      ])] }],
+    },
+  });
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2099-02-01',
+      week_ends_on: '2099-02-07',
+      days: [{ routine_name: routine, exercises: [sampleStandardExercise(tpl, [
+        { row_index: 0, column: 'reps', target_num: 88 },
+      ])] }],
+    },
+  });
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routine);
+  const res = await app.inject({ method: 'GET', url: `/api/prescriptions/active?routine_id=${r.id}` });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.starts_on, '2099-02-01', 'future prescription wins when no ?on=');
+  const reps = body.targets.find(t => t.column_name === 'reps');
+  assert.equal(reps.target_num, 88);
+});
+
+test('GET /api/prescriptions/active (no routine_id) returns array with most-recent prescription per routine, fully populated', async () => {
+  const routineA = nextId('ArrayActiveA');
+  const routineB = nextId('ArrayActiveB');
+  const tpl = nextId('ArrayActiveTpl');
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-04-01',
+      week_ends_on: '2026-04-07',
+      days: [
+        { routine_name: routineA, exercises: [sampleStandardExercise(tpl)] },
+        { routine_name: routineB, exercises: [sampleStandardExercise(tpl)] },
+      ],
+    },
+  });
+
+  const res = await app.inject({ method: 'GET', url: '/api/prescriptions/active?on=2026-04-04' });
+  assert.equal(res.statusCode, 200, res.body);
+  const body = res.json();
+  assert.ok(Array.isArray(body), 'returns array');
+  const mineA = body.find(r => r.routine_name === routineA);
+  const mineB = body.find(r => r.routine_name === routineB);
+  assert.ok(mineA, `expected ${routineA} in response`);
+  assert.ok(mineB, `expected ${routineB} in response`);
+  for (const item of [mineA, mineB]) {
+    assert.ok(item.routine_id > 0, 'routine_id present');
+    assert.ok(item.prescription?.id > 0, 'prescription nested object');
+    assert.equal(item.prescription.starts_on, '2026-04-01');
+    assert.ok(Array.isArray(item.targets) && item.targets.length > 0, 'targets array populated');
+    for (const t of item.targets) {
+      assert.ok(t.template_name, 'template_name resolved');
+      assert.ok(t.column_name, 'column_name resolved');
+    }
+  }
+});
+
+test('GET /api/prescriptions/active (no routine_id) returns the most recent applicable per routine, honoring ?on=', async () => {
+  const routine = nextId('ArrayMostRecent');
+  const tpl = nextId('ArrayMostRecentTpl');
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-03-02',
+      week_ends_on: '2026-03-08',
+      days: [{ routine_name: routine, exercises: [sampleStandardExercise(tpl, [
+        { row_index: 0, column: 'reps', target_num: 5 },
+      ])] }],
+    },
+  });
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-03-09',
+      week_ends_on: '2026-03-15',
+      days: [{ routine_name: routine, exercises: [sampleStandardExercise(tpl, [
+        { row_index: 0, column: 'reps', target_num: 9 },
+      ])] }],
+    },
+  });
+
+  const res = await app.inject({ method: 'GET', url: '/api/prescriptions/active?on=2026-03-11' });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  const mine = body.find(r => r.routine_name === routine);
+  assert.ok(mine, `expected ${routine} in response`);
+  assert.equal(mine.prescription.starts_on, '2026-03-09', 'most recent applicable wins');
+  const reps = mine.targets.find(t => t.column_name === 'reps');
+  assert.equal(reps.target_num, 9);
+});
+
+test('GET /api/prescriptions/active (no routine_id, no on) returns the latest per routine regardless of starts_on (preview future prescriptions)', async () => {
+  const routine = nextId('ArrayLatest');
+  const tpl = nextId('ArrayLatestTpl');
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-02-02',
+      week_ends_on: '2026-02-08',
+      days: [{ routine_name: routine, exercises: [sampleStandardExercise(tpl, [
+        { row_index: 0, column: 'reps', target_num: 3 },
+      ])] }],
+    },
+  });
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2099-01-01',
+      week_ends_on: '2099-01-07',
+      days: [{ routine_name: routine, exercises: [sampleStandardExercise(tpl, [
+        { row_index: 0, column: 'reps', target_num: 99 },
+      ])] }],
+    },
+  });
+
+  const res = await app.inject({ method: 'GET', url: '/api/prescriptions/active' });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  const mine = body.find(r => r.routine_name === routine);
+  assert.ok(mine, `expected ${routine} in response`);
+  assert.equal(mine.prescription.starts_on, '2099-01-01', 'future prescription is the latest');
+  const reps = mine.targets.find(t => t.column_name === 'reps');
+  assert.equal(reps.target_num, 99);
+});
+
+test('GET /api/prescriptions/active (no routine_id) skips routines that have no applicable prescription', async () => {
+  const routine = nextId('ArrayNoPresc');
+  app.db.prepare(
+    'INSERT INTO routines (name, created_at, sort_position) VALUES (?, ?, ?)'
+  ).run(routine, Date.now(), 400);
+  const res = await app.inject({ method: 'GET', url: '/api/prescriptions/active?on=2026-01-01' });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  const found = body.find(r => r.routine_name === routine);
+  assert.equal(found, undefined, 'routine without prescription is not in the array');
+});
+
 test('GET /api/prescriptions/active returns null when no prescription applies', async () => {
   const routineName = nextId('NoActive');
   app.db.exec(`

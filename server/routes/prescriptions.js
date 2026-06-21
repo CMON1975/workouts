@@ -10,7 +10,7 @@ const columnDefSchema = {
   properties: {
     name: { type: 'string', minLength: 1, maxLength: 50 },
     unit: { type: ['string', 'null'], maxLength: 20 },
-    value_type: { type: 'string', enum: VALUE_TYPES, default: 'number' },
+    value_type: { type: 'string', enum: VALUE_TYPES, default: 'text' },
   },
 };
 
@@ -151,7 +151,7 @@ function findOrCreateTemplate(db, exercise, now, opts, counters) {
       err.detail = template_name;
       throw err;
     }
-    columns = [{ name: 'completed', unit: null, value_type: 'number' }];
+    columns = [{ name: 'completed', unit: null, value_type: 'text' }];
     defaultRows = 1;
     rowsFixed = 1;
   } else {
@@ -181,7 +181,7 @@ function findOrCreateTemplate(db, exercise, now, opts, counters) {
       c.name.trim(),
       c.unit ? String(c.unit).trim() : null,
       i,
-      c.value_type || 'number',
+      c.value_type || 'text',
     );
   });
   db.prepare(`
@@ -386,7 +386,6 @@ export default async function prescriptionsRoutes(app) {
     schema: {
       querystring: {
         type: 'object',
-        required: ['routine_id'],
         properties: {
           routine_id: { type: 'integer' },
           on: { type: 'string', pattern: ISO_DATE },
@@ -395,14 +394,69 @@ export default async function prescriptionsRoutes(app) {
     },
   }, async (req) => {
     const db = app.db;
-    const onDate = req.query.on || todayUtcISO();
-    const row = db.prepare(`
-      SELECT id FROM prescriptions
-       WHERE routine_id = ? AND starts_on <= ?
-       ORDER BY starts_on DESC, id DESC
-       LIMIT 1
-    `).get(req.query.routine_id, onDate);
-    if (!row) return null;
-    return loadPrescription(db, row.id);
+    const hasOn = req.query.on != null;
+    if (req.query.routine_id != null) {
+      // Single-routine mode. Default: latest prescription for the routine,
+      // regardless of starts_on (so the workout form can preview a wk N+1
+      // prescription published Sunday for Monday). Optional ?on= filters to
+      // "active no later than that date" — pass on=today for strict semantics.
+      const row = hasOn
+        ? db.prepare(`
+            SELECT id FROM prescriptions
+             WHERE routine_id = ? AND starts_on <= ?
+             ORDER BY starts_on DESC, id DESC
+             LIMIT 1
+          `).get(req.query.routine_id, req.query.on)
+        : db.prepare(`
+            SELECT id FROM prescriptions
+             WHERE routine_id = ?
+             ORDER BY starts_on DESC, id DESC
+             LIMIT 1
+          `).get(req.query.routine_id);
+      if (!row) return null;
+      return loadPrescription(db, row.id);
+    }
+    // Array mode: latest prescription per routine. By default no date filter
+    // — this powers the management preview, which should show whatever's been
+    // most recently published (even a wk N+1 prescription published Sunday for
+    // a Monday start). Optional ?on= caps starts_on to <= that date, so a
+    // caller that wants strictly "active today" can pass on=today.
+    const sql = hasOn ? `
+      SELECT id, routine_id FROM prescriptions p1
+       WHERE starts_on <= ?
+         AND id = (
+           SELECT id FROM prescriptions p2
+            WHERE p2.routine_id = p1.routine_id AND p2.starts_on <= ?
+            ORDER BY starts_on DESC, id DESC LIMIT 1
+         )
+       ORDER BY routine_id
+    ` : `
+      SELECT id, routine_id FROM prescriptions p1
+       WHERE id = (
+         SELECT id FROM prescriptions p2
+          WHERE p2.routine_id = p1.routine_id
+          ORDER BY starts_on DESC, id DESC LIMIT 1
+       )
+       ORDER BY routine_id
+    `;
+    const heads = hasOn
+      ? db.prepare(sql).all(req.query.on, req.query.on)
+      : db.prepare(sql).all();
+    return heads.map(({ id }) => {
+      const p = loadPrescription(db, id);
+      return {
+        routine_id: p.routine_id,
+        routine_name: p.routine_name,
+        prescription: {
+          id: p.id,
+          starts_on: p.starts_on,
+          ends_on: p.ends_on,
+          source: p.source,
+          notes: p.notes,
+          created_at: p.created_at,
+        },
+        targets: p.targets,
+      };
+    });
   });
 }
