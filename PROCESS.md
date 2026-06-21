@@ -97,3 +97,9 @@ Running log of work done with Claude Code.
 - Prod DB backed up to `/tmp/workouts-pre-008-009.db` via `VACUUM INTO` before migrations applied.
 - Tests: 154 passing (added 4 new prescription tests, updated 2 stale value_type assertions in `templates.test.js`).
 - Followup still open: `renderHistoryList` summary and detail-view table headers still pull `column.unit`; less urgent now that units are clean strings rather than target encodings.
+
+---
+## 2026-06-21 — Body-metrics logging route + UI (replace health/bodymetrics.csv)
+**What:** Added `body_metrics` table (migration 010), `GET/POST /api/body-metrics` with `?from/?to/?metric` filters, a compact logging form on the home view above "Start a session" (metric dropdown weight/waist, date default today, text value), and a one-time `scripts/backfill-body-metrics.js` that imports the long-form CSV from the health repo idempotently. 49 rows backfilled into prod on first run; 6 BP rows skipped (current enum is weight+waist).
+**Why:** The health repo's `bodymetrics.csv` had been hand-edited for ~6 weeks and broke twice in a row (7x duplication, `1012` typo). One-tap phone logging removes the transcription step and gives Claude an API-readable source for the Sunday weight average.
+**Notes:** Three commits (`736cd8c` route+migration, `a025293` form UI, `a4cecf3` backfill). Form pattern is inline HTML + handler in `app.js` (matches existing `#new-tpl-form` / `#new-rt-form` convention), not a renderer function. Value column is TEXT so waist fractions ("44 3/8") survive. All 165 tests passing. Prod DB backed up to `/tmp/workouts-pre-010.db` before service restart. Adding BP later is one-line: extend the enum in `body-metrics.js` and add the dropdown option in `index.html`.
