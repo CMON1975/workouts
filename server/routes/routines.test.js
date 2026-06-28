@@ -56,6 +56,32 @@ test('POST creates a routine with ordered templates', async () => {
   assert.equal(typeof body.templates[0].default_rows, 'number');
 });
 
+test('embedded templates carry kind + description (the runner renders from these)', async () => {
+  // The workout runner renders straight from routine.templates, so the embedded
+  // shape must include `kind` (to pick the checkbox render path) and
+  // `description` (the "what to do" text shown during a session). Regression:
+  // both were dropped from the SELECT, so during prescribed workouts checkbox
+  // exercises rendered as raw inputs and no exercise showed its instructions.
+  const tplRes = await app.inject({
+    method: 'POST', url: '/api/templates',
+    payload: {
+      name: 'Mobility flow', kind: 'checkbox',
+      description: 'Hip 90/90, 1 min each side.',
+    },
+  });
+  assert.equal(tplRes.statusCode, 201);
+  const mobilityId = tplRes.json().id;
+
+  const created = await app.inject({
+    method: 'POST', url: '/api/routines',
+    payload: { name: 'Runner shape', template_ids: [mobilityId] },
+  });
+  assert.equal(created.statusCode, 201);
+  const t = created.json().templates[0];
+  assert.equal(t.kind, 'checkbox');
+  assert.equal(t.description, 'Hip 90/90, 1 min each side.');
+});
+
 test('POST with duplicate name returns 409', async () => {
   const dup = await app.inject({
     method: 'POST', url: '/api/routines',

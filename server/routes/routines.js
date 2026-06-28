@@ -48,7 +48,7 @@ function loadRoutine(db, id) {
   `).get(id);
   if (!r) return null;
   r.templates = db.prepare(`
-    SELECT t.id, t.name, t.created_at, t.archived_at,
+    SELECT t.id, t.name, t.kind, t.description, t.created_at, t.archived_at,
            d.default_rows, d.rows_fixed,
            rt.position
       FROM routine_templates rt
