@@ -1,4 +1,6 @@
-const METRICS = ['body_weight', 'waist'];
+// 'food' is free-text off-core eating ("300g lay's bacon potato chips"); the
+// nutrition math is done downstream at review time, not stored here.
+const METRICS = ['body_weight', 'waist', 'food'];
 const DATE_PATTERN = '^\\d{4}-\\d{2}-\\d{2}$';
 
 const createBodySchema = {
@@ -8,7 +10,7 @@ const createBodySchema = {
   properties: {
     date: { type: 'string', pattern: DATE_PATTERN },
     metric: { type: 'string', enum: METRICS },
-    value: { type: 'string', minLength: 1, maxLength: 50 },
+    value: { type: 'string', minLength: 1, maxLength: 500 },
   },
 };
 

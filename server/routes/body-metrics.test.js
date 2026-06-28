@@ -135,3 +135,40 @@ test('GET ?metric rejects an unknown metric value', async () => {
   });
   assert.equal(res.statusCode, 400);
 });
+
+test('POST accepts a food entry with a long free-text value', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/body-metrics',
+    payload: { date: '2026-06-28', metric: 'food', value: '1 medium extra cheese papa john\'s pizza' },
+  });
+  assert.equal(res.statusCode, 201);
+  const body = res.json();
+  assert.equal(body.metric, 'food');
+  assert.equal(body.value, '1 medium extra cheese papa john\'s pizza');
+});
+
+test('POST rejects a food value longer than 500 chars', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/body-metrics',
+    payload: { date: '2026-06-28', metric: 'food', value: 'x'.repeat(501) },
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('multiple food entries on the same date coexist (no clobber)', async () => {
+  await app.inject({
+    method: 'POST', url: '/api/body-metrics',
+    payload: { date: '2026-06-27', metric: 'food', value: '300g lay\'s bacon potato chips' },
+  });
+  await app.inject({
+    method: 'POST', url: '/api/body-metrics',
+    payload: { date: '2026-06-27', metric: 'food', value: '2 beers' },
+  });
+  const res = await app.inject({
+    method: 'GET', url: '/api/body-metrics?metric=food&from=2026-06-27&to=2026-06-27',
+  });
+  assert.equal(res.statusCode, 200);
+  const rows = res.json();
+  assert.equal(rows.length, 2, 'both same-day food entries persist');
+  for (const r of rows) assert.equal(r.metric, 'food');
+});

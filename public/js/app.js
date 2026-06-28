@@ -1333,6 +1333,14 @@ async function handleBodyMetricSubmit(e) {
   }
 }
 
+// Food entries are free text; weight/waist are numeric. Adapt the value input
+// so the on-screen keyboard and placeholder match the selected metric.
+function applyBmMetricUI() {
+  const isFood = els.bmMetric.value === 'food';
+  els.bmValue.inputMode = isFood ? 'text' : 'decimal';
+  els.bmValue.placeholder = isFood ? 'e.g. 300g potato chips' : 'value';
+}
+
 async function handleSubmit() {
   if (!currentSession) return;
   els.submit.disabled = true;
@@ -1379,6 +1387,8 @@ async function boot() {
   els.teAddCol.addEventListener('click', handleTeAddCol);
 
   els.bodyMetricsForm.addEventListener('submit', handleBodyMetricSubmit);
+  els.bmMetric.addEventListener('change', applyBmMetricUI);
+  applyBmMetricUI();
   els.bmDate.value = todayISODate();
 
   await enterApp();
