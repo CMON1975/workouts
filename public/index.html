@@ -10,7 +10,8 @@
 <meta name="theme-color" content="#2f6feb">
 <link rel="manifest" href="/manifest.webmanifest">
 <title>Workouts</title>
-<link rel="stylesheet" href="/css/app.css">
+<!-- ?v= busts stale phone caches; bump when the asset changes (no build step to do it for us) -->
+<link rel="stylesheet" href="/css/app.css?v=2">
 </head>
 <body>
   <header>
@@ -222,6 +223,6 @@
     </dialog>
   </main>
 
-  <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/app.js?v=2"></script>
 </body>
 </html>
