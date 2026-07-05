@@ -90,30 +90,42 @@ button:disabled { opacity: 0.5; }
 
 /* Body metrics quick-log */
 
+/* Two rows so the value input keeps full width on phone portrait:
+   metric | date | Log on top, value spanning the second row. */
 .body-metrics-form {
   display: grid;
-  grid-template-columns: auto 1fr 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'metric date  submit'
+    'value  value value'
+    'status status status';
   gap: 6px;
   align-items: stretch;
   margin: 0 0 16px;
 }
+.body-metrics-form select { grid-area: metric; }
+.body-metrics-form input[type='date'] { grid-area: date; }
+.body-metrics-form input[type='text'] { grid-area: value; }
+.body-metrics-form button { grid-area: submit; }
 .body-metrics-form select,
 .body-metrics-form input[type='date'],
 .body-metrics-form input[type='text'] {
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg);
   color: var(--fg);
   min-height: 40px;
   min-width: 0;
+  /* 16px floor: anything smaller makes iOS Safari zoom the page on focus */
+  font-size: 16px;
 }
 .body-metrics-form button {
-  padding: 8px 14px;
+  padding: 6px 14px;
   min-height: 40px;
 }
 .bm-status {
-  grid-column: 1 / -1;
+  grid-area: status;
   font-size: 0.85rem;
   color: var(--muted, #888);
   min-height: 1.2em;
