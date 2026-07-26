@@ -176,6 +176,13 @@ button:disabled { opacity: 0.5; }
   gap: 2px;
 }
 
+/* Single-row templates (cardio: time / hr / distance / incline / speed) stack
+   their fields vertically — five inputs side by side don't fit phone portrait. */
+.session-form.no-row-labels .session-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+
 .prev-hint {
   font-size: 0.75rem;
   color: var(--muted);
