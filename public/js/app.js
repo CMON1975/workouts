@@ -1333,12 +1333,17 @@ async function handleBodyMetricSubmit(e) {
   }
 }
 
-// Food entries are free text; weight/waist are numeric. Adapt the value input
-// so the on-screen keyboard and placeholder match the selected metric.
+// Food entries are free text; blood pressure needs a "/" (no slash on the
+// decimal keyboard); the rest are numeric. Adapt the value input so the
+// on-screen keyboard and placeholder match the selected metric.
 function applyBmMetricUI() {
-  const isFood = els.bmMetric.value === 'food';
-  els.bmValue.inputMode = isFood ? 'text' : 'decimal';
-  els.bmValue.placeholder = isFood ? 'e.g. 300g potato chips' : 'value';
+  const metric = els.bmMetric.value;
+  const isText = metric === 'food' || metric === 'blood_pressure';
+  els.bmValue.inputMode = isText ? 'text' : 'decimal';
+  els.bmValue.placeholder =
+    metric === 'food' ? 'e.g. 300g potato chips' :
+    metric === 'blood_pressure' ? 'e.g. 120/80' :
+    metric === 'resting_hr' ? 'bpm' : 'value';
 }
 
 async function handleSubmit() {

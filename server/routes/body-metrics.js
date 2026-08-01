@@ -1,6 +1,7 @@
 // 'food' is free-text off-core eating ("300g lay's bacon potato chips"); the
 // nutrition math is done downstream at review time, not stored here.
-const METRICS = ['body_weight', 'waist', 'food'];
+// resting_hr is bpm; blood_pressure is free-form "systolic/diastolic" text.
+const METRICS = ['body_weight', 'waist', 'food', 'resting_hr', 'blood_pressure'];
 const DATE_PATTERN = '^\\d{4}-\\d{2}-\\d{2}$';
 
 const createBodySchema = {

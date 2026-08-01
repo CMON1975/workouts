@@ -155,6 +155,38 @@ test('POST rejects a food value longer than 500 chars', async () => {
   assert.equal(res.statusCode, 400);
 });
 
+test('POST accepts a resting_hr entry', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/body-metrics',
+    payload: { date: '2026-08-03', metric: 'resting_hr', value: '72' },
+  });
+  assert.equal(res.statusCode, 201);
+  const body = res.json();
+  assert.equal(body.metric, 'resting_hr');
+  assert.equal(body.value, '72');
+});
+
+test('GET ?metric=resting_hr filters to resting_hr rows', async () => {
+  const res = await app.inject({
+    method: 'GET', url: '/api/body-metrics?metric=resting_hr',
+  });
+  assert.equal(res.statusCode, 200);
+  const rows = res.json();
+  assert.ok(rows.length > 0);
+  for (const r of rows) assert.equal(r.metric, 'resting_hr');
+});
+
+test('POST accepts a blood_pressure entry in systolic/diastolic form', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/body-metrics',
+    payload: { date: '2026-08-03', metric: 'blood_pressure', value: '120/80' },
+  });
+  assert.equal(res.statusCode, 201);
+  const body = res.json();
+  assert.equal(body.metric, 'blood_pressure');
+  assert.equal(body.value, '120/80');
+});
+
 test('multiple food entries on the same date coexist (no clobber)', async () => {
   await app.inject({
     method: 'POST', url: '/api/body-metrics',
