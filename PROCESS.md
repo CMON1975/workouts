@@ -151,3 +151,9 @@ Running log of work done with Claude Code.
 **What:** Reflowed `.body-metrics-form` from a 3-across top row (`metric date submit`) to a 2x2 grid: `metric date` / `value submit` / `status`. Columns are now `minmax(0,1fr) auto`, so the date sets column 2's width and the Log button aligns under it. Bumped the CSS cache-bust to `?v=4`.
 **Why:** On iOS Edge/Safari the date input has a much wider intrinsic size than in Blink, so metric + date + Log fought for one row and the date and button ended up mashed together.
 **Notes:** No width media queries in this stylesheet (mobile-first, single layout), so the change applies everywhere; verified fine at desktop widths too. Headless chromium check at 390x844 plus local tailnet smoke server on 100.126.241.21:8787. Suite 172 green (no CSS coverage; nothing to drive with a failing test here).
+
+---
+## 2026-08-03 — Precheck: "Intervals" template renders fine for Tue 2026-08-04
+**What:** Mirrored prod template 33 + prescription 44 into the local dev DB via `/api/prescriptions/import`, then drove the Tue routine at 390x844 with puppeteer-core over system chromium. Form renders single-row `.no-row-labels`: four full-width stacked inputs (326px each), each with its blue target line, no horizontal overflow.
+**Why:** HANDOFF.md FYI from the health repo asked for an eyeball on the new interval template before its first real use.
+**Notes:** Row count comes only from prescription targets (max row_index + 1), `default_rows`, or existing draft values — `renderer.js:40-48`. There is no add-row control in the UI, so the cramped multi-across fallback is unreachable unless the health repo publishes a target with `row_index > 0`. That, not column count, is the real trigger for the 2026-07-26 caveat. `rows_fixed=0` on template 33 changes nothing here; it only affects the Manage list's summary text.
