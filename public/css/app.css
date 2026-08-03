@@ -94,11 +94,13 @@ button:disabled { opacity: 0.5; }
    metric | date | Log on top, value spanning the second row. */
 .body-metrics-form {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* 2x2: the date input has a wide intrinsic size on iOS, so keeping it on a
+     row with both the metric select and the Log button crushed all three. */
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    'metric date  submit'
-    'value  value value'
-    'status status status';
+    'metric date'
+    'value  submit'
+    'status status';
   gap: 6px;
   align-items: stretch;
   margin: 0 0 16px;

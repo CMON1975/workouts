@@ -139,3 +139,15 @@ Running log of work done with Claude Code.
 **What:** Added `resting_hr` and `blood_pressure` to the body-metrics API enum and home-view dropdown, with per-metric input adaptation (decimal keyboard + "bpm" placeholder for resting HR; text keyboard + "e.g. 120/80" for BP so "/" is typeable).
 **Why:** HANDOFF.md flag from the health repo — wk-13 wrap prescribes Mon/Wed/Fri resting-HR readings that couldn't be logged; BP was the optional add-on (6 rows stranded in the health repo's frozen bodymetrics.csv, backfillable via the API once deployed).
 **Notes:** Metric column is text so no migration needed. TDD: 3 new tests (resting_hr POST/GET filter, BP "120/80" round-trip), suite 172 green. Handoff item moved to Done. Not committed pending approval.
+
+---
+## 2026-08-01 — Backfilled 3 blood-pressure readings from health repo CSV
+**What:** Paired the 6 bp_systolic/bp_diastolic rows in the health repo's frozen bodymetrics.csv by date and POSTed them to prod as blood_pressure "sys/dia": 2026-06-01 106/44, 2026-06-02 104/50, 2026-06-03 118/40 (ids 106-108).
+**Why:** Rows were stranded since the CSV froze; the new blood_pressure enum value (commit 0083f24, deployed today) unblocked migration.
+**Notes:** Verified deploy live first (GET ?metric=blood_pressure 200 vs 400 on old enum) and confirmed zero existing BP rows before POSTing, then re-verified all 3 via GET. One-shot curl loop, no script kept.
+
+---
+## 2026-08-03 — Unstack the body-metrics form top row (iOS cramping)
+**What:** Reflowed `.body-metrics-form` from a 3-across top row (`metric date submit`) to a 2x2 grid: `metric date` / `value submit` / `status`. Columns are now `minmax(0,1fr) auto`, so the date sets column 2's width and the Log button aligns under it. Bumped the CSS cache-bust to `?v=4`.
+**Why:** On iOS Edge/Safari the date input has a much wider intrinsic size than in Blink, so metric + date + Log fought for one row and the date and button ended up mashed together.
+**Notes:** No width media queries in this stylesheet (mobile-first, single layout), so the change applies everywhere; verified fine at desktop widths too. Headless chromium check at 390x844 plus local tailnet smoke server on 100.126.241.21:8787. Suite 172 green (no CSS coverage; nothing to drive with a failing test here).
