@@ -11,6 +11,23 @@ function makeTrashAction() {
   return action;
 }
 
+function makeValueEntry(col, rowIndex, val) {
+  return {
+    row_index: rowIndex,
+    column_id: col.id,
+    value_num: col.value_type === 'text' ? null : (val === '' ? null : Number(val)),
+    value_text: col.value_type === 'text' ? (val || null) : null,
+  };
+}
+
+function upsertValue(draft, entry) {
+  const idx = draft.values.findIndex(
+    v => v.row_index === entry.row_index && v.column_id === entry.column_id,
+  );
+  if (idx >= 0) draft.values[idx] = entry;
+  else draft.values.push(entry);
+}
+
 export function renderSessionForm(root, { template, draft, onInput, prescribed = null }) {
   root.innerHTML = '';
 
@@ -82,18 +99,7 @@ export function renderSessionForm(root, { template, draft, onInput, prescribed =
 
       input.addEventListener('input', () => {
         onInput((d) => {
-          const rowIndex = r;
-          const columnId = col.id;
-          const idx = d.values.findIndex(v => v.row_index === rowIndex && v.column_id === columnId);
-          const val = input.value;
-          const entry = {
-            row_index: rowIndex,
-            column_id: columnId,
-            value_num: col.value_type === 'text' ? null : (val === '' ? null : Number(val)),
-            value_text: col.value_type === 'text' ? (val || null) : null,
-          };
-          if (idx >= 0) d.values[idx] = entry;
-          else d.values.push(entry);
+          upsertValue(d, makeValueEntry(col, r, input.value));
         });
       });
 
@@ -167,15 +173,12 @@ function renderCheckboxField(form, { template, draft, onInput }) {
 
   input.addEventListener('change', () => {
     onInput((d) => {
-      const idx = d.values.findIndex(v => v.row_index === 0 && v.column_id === col.id);
-      const entry = {
+      upsertValue(d, {
         row_index: 0,
         column_id: col.id,
         value_num: input.checked ? 1 : 0,
         value_text: null,
-      };
-      if (idx >= 0) d.values[idx] = entry;
-      else d.values.push(entry);
+      });
     });
   });
 
