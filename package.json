@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --env-file=.env --watch server/index.js",
-    "test": "node --test --test-reporter=spec server/*.test.js server/**/*.test.js scripts/**/*.test.js",
+    "test": "node --test --test-reporter=spec server/*.test.js server/**/*.test.js scripts/**/*.test.js public/js/*.test.js",
     "seed": "node --env-file=.env scripts/seed-dev.js",
     "export": "node --env-file=.env scripts/export.js"
   },

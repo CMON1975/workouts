@@ -1,4 +1,5 @@
 import { attachSwipeReveal } from './swipe.js';
+import { isWeightColumn, planWeightAutofill } from './autofill.js';
 
 const TRASH_GLYPH = '🗑';
 
@@ -64,6 +65,9 @@ export function renderSessionForm(root, { template, draft, onInput, prescribed =
   const rows = Math.max(baseRows, valuesMax);
   if (rows <= 1) form.classList.add('no-row-labels');
 
+  const weightCells = new Map(); // "row:columnId" → { input, col }
+  const ownedCells = new Set();  // weight cells the user (or a saved draft) owns
+
   for (let r = 0; r < rows; r++) {
     const rowEl = document.createElement('div');
     rowEl.className = 'session-row';
@@ -97,10 +101,19 @@ export function renderSessionForm(root, { template, draft, onInput, prescribed =
         else if (existing.value_num != null) input.value = String(existing.value_num);
       }
 
+      if (isWeightColumn(col)) {
+        weightCells.set(`${r}:${col.id}`, { input, col });
+        if (existing) ownedCells.add(`${r}:${col.id}`);
+      }
+
       input.addEventListener('input', () => {
         onInput((d) => {
           upsertValue(d, makeValueEntry(col, r, input.value));
         });
+        if (isWeightColumn(col)) {
+          ownedCells.add(`${r}:${col.id}`);
+          applyWeightAutofill();
+        }
       });
 
       field.appendChild(input);
@@ -109,6 +122,33 @@ export function renderSessionForm(root, { template, draft, onInput, prescribed =
 
     form.appendChild(rowEl);
   }
+
+  // Weight auto-fill (HANDOFF 2026-08-09): prescription target first, else the
+  // previous row's value; see planWeightAutofill. Filled values go through
+  // onInput so they persist exactly like typed input; cells holding a saved
+  // draft value are owned and never overwritten. Re-runs on every weight
+  // keystroke so later auto rows follow a mid-session change.
+  function applyWeightAutofill() {
+    if (draft.finalized_at || !weightCells.size) return;
+    const userValues = new Map();
+    for (const key of ownedCells) {
+      userValues.set(key, weightCells.get(key).input.value);
+    }
+    const plan = planWeightAutofill({ template, prescribed, rows, userValues });
+    const changes = plan.filter(({ row_index, column_id, value }) =>
+      weightCells.get(`${row_index}:${column_id}`).input.value !== value);
+    if (!changes.length) return;
+    for (const { row_index, column_id, value } of changes) {
+      weightCells.get(`${row_index}:${column_id}`).input.value = value;
+    }
+    onInput((d) => {
+      for (const { row_index, column_id, value } of changes) {
+        const { col } = weightCells.get(`${row_index}:${column_id}`);
+        upsertValue(d, makeValueEntry(col, row_index, value));
+      }
+    });
+  }
+  applyWeightAutofill();
 
   renderNotesField(form, { draft, onInput });
   root.appendChild(form);
@@ -511,9 +551,11 @@ export function applyPreviousHints(root, { template, prev, prescribed = null }) 
   }
 }
 
-// Render prescription targets as .target-hint overlays next to empty inputs.
-// Does NOT auto-fill the input — the user types actuals into empty fields and
-// the prescription stays visible for comparison.
+// Render prescription targets as .target-hint overlays next to the inputs.
+// Does NOT auto-fill the input — the user types actuals and the prescription
+// stays visible for comparison. (Exception: weight columns are prefilled by
+// renderSessionForm via planWeightAutofill; their hint still renders so the
+// target stays visible if the user edits the weight mid-session.)
 function applyPrescribedTargets(root, { template, prescribed }) {
   if (!prescribed || !Array.isArray(prescribed.targets)) return;
   const mine = prescribed.targets.filter(t => t.template_id === template.id);
