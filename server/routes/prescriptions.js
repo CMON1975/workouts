@@ -97,6 +97,12 @@ function loadPrescription(db, id) {
      WHERE pt.prescription_id = ?
      ORDER BY pt.template_id, pt.row_index, tc.position
   `).all(id);
+  p.exercises = db.prepare(`
+    SELECT pe.template_id, pe.rest_seconds
+      FROM prescription_exercises pe
+     WHERE pe.prescription_id = ?
+     ORDER BY pe.template_id
+  `).all(id);
   return p;
 }
 
@@ -472,6 +478,7 @@ export default async function prescriptionsRoutes(app) {
           created_at: p.created_at,
         },
         targets: p.targets,
+        exercises: p.exercises,
       };
     });
   });

@@ -323,6 +323,81 @@ test('POST /api/prescriptions/import — duplicate template in one day is reject
   assert.equal(pres.length, 0, 'failed import must not leave a prescription behind');
 });
 
+test('GET /api/prescriptions/active — single mode carries exercises with rest_seconds', async () => {
+  const routineName = nextId('ActiveRestRoutine');
+  const templateName = nextId('ActiveRestTpl');
+  const imp = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-17',
+      week_ends_on: '2026-08-23',
+      days: [
+        {
+          routine_name: routineName,
+          exercises: [{ ...sampleStandardExercise(templateName), rest_seconds: 90 }],
+        },
+      ],
+    },
+  });
+  assert.equal(imp.statusCode, 201, imp.body);
+  const routineId = imp.json().prescriptions[0].routine_id;
+  const t = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(templateName);
+
+  const res = await app.inject({ method: 'GET', url: `/api/prescriptions/active?routine_id=${routineId}` });
+  assert.equal(res.statusCode, 200, res.body);
+  assert.deepEqual(res.json().exercises, [{ template_id: t.id, rest_seconds: 90 }]);
+});
+
+test('GET /api/prescriptions/active — exercises is an empty array when no rest prescribed', async () => {
+  const routineName = nextId('NoRestActiveRoutine');
+  const imp = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-17',
+      week_ends_on: '2026-08-23',
+      days: [
+        {
+          routine_name: routineName,
+          exercises: [sampleStandardExercise(nextId('NoRestActiveTpl'))],
+        },
+      ],
+    },
+  });
+  assert.equal(imp.statusCode, 201, imp.body);
+  const routineId = imp.json().prescriptions[0].routine_id;
+
+  const res = await app.inject({ method: 'GET', url: `/api/prescriptions/active?routine_id=${routineId}` });
+  assert.equal(res.statusCode, 200, res.body);
+  assert.deepEqual(res.json().exercises, []);
+});
+
+test('GET /api/prescriptions/active — array mode carries exercises per routine', async () => {
+  const routineName = nextId('ArrRestRoutine');
+  const templateName = nextId('ArrRestTpl');
+  const imp = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-17',
+      week_ends_on: '2026-08-23',
+      days: [
+        {
+          routine_name: routineName,
+          exercises: [{ ...sampleStandardExercise(templateName), rest_seconds: 75 }],
+        },
+      ],
+    },
+  });
+  assert.equal(imp.statusCode, 201, imp.body);
+  const routineId = imp.json().prescriptions[0].routine_id;
+  const t = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(templateName);
+
+  const res = await app.inject({ method: 'GET', url: '/api/prescriptions/active' });
+  assert.equal(res.statusCode, 200, res.body);
+  const entry = res.json().find(e => e.routine_id === routineId);
+  assert.ok(entry, 'array mode entry for the imported routine');
+  assert.deepEqual(entry.exercises, [{ template_id: t.id, rest_seconds: 75 }]);
+});
+
 test('POST /api/prescriptions/import — find-or-create reuses existing routine + template', async () => {
   const routineName = nextId('ReuseRoutine');
   const templateName = nextId('ReuseTpl');
