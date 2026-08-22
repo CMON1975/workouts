@@ -36,6 +36,7 @@ const exerciseSchema = {
     columns: { type: 'array', maxItems: 16, items: columnDefSchema },
     default_rows: { type: 'integer', minimum: 1, maximum: 100 },
     rows_fixed: { type: 'integer', minimum: 0, maximum: 1 },
+    rest_seconds: { type: 'integer', minimum: 1, maximum: 3600 },
     targets: { type: 'array', minItems: 0, maxItems: 200, items: targetSchema },
   },
 };
@@ -296,11 +297,15 @@ export default async function prescriptionsRoutes(app) {
 
           const templateIds = [];
           const perTemplateTargets = new Map();
+          // Last occurrence carrying rest_seconds wins; an occurrence without
+          // the field never clears an earlier value.
+          const perTemplateRest = new Map();
           for (const ex of day.exercises) {
             const { id: templateId } = findOrCreateTemplate(db, ex, now, opts, counters);
             templateIds.push(templateId);
             if (!perTemplateTargets.has(templateId)) perTemplateTargets.set(templateId, []);
             perTemplateTargets.get(templateId).push({ targets: ex.targets, template_name: ex.template_name });
+            if (ex.rest_seconds != null) perTemplateRest.set(templateId, ex.rest_seconds);
           }
 
           replaceRoutineTemplates(db, routineId, templateIds);
@@ -328,6 +333,14 @@ export default async function prescriptionsRoutes(app) {
             for (const { targets, template_name } of entries) {
               insertTargets(db, prescriptionId, templateId, targets, colMap, template_name);
             }
+          }
+
+          const restIns = db.prepare(`
+            INSERT INTO prescription_exercises (prescription_id, template_id, rest_seconds)
+            VALUES (?, ?, ?)
+          `);
+          for (const [templateId, restSeconds] of perTemplateRest) {
+            restIns.run(prescriptionId, templateId, restSeconds);
           }
 
           createdPrescriptions.push({

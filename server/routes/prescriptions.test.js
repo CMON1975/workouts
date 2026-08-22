@@ -223,6 +223,106 @@ test('POST /api/prescriptions/import — happy path creates routine, template, p
   assert.deepEqual(targets[1], { row_index: 0, target_num: 22.5, cue: 'RPE 7', column_name: 'weight' });
 });
 
+test('POST /api/prescriptions/import — rest_seconds lands in prescription_exercises', async () => {
+  const routineName = nextId('RestRoutine');
+  const withRest = nextId('RestTpl');
+  const withoutRest = nextId('NoRestTpl');
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-17',
+      week_ends_on: '2026-08-23',
+      days: [
+        {
+          routine_name: routineName,
+          exercises: [
+            { ...sampleStandardExercise(withRest), rest_seconds: 90 },
+            sampleStandardExercise(withoutRest),
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 201, res.body);
+  const presId = res.json().prescriptions[0].id;
+  const tWith = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(withRest);
+  const rows = app.db.prepare(
+    'SELECT template_id, rest_seconds FROM prescription_exercises WHERE prescription_id = ?'
+  ).all(presId);
+  assert.deepEqual(rows, [{ template_id: tWith.id, rest_seconds: 90 }]);
+});
+
+test('POST /api/prescriptions/import — rest_seconds accepted with empty targets', async () => {
+  const routineName = nextId('RestEmptyRoutine');
+  const templateName = nextId('RestEmptyTpl');
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-17',
+      week_ends_on: '2026-08-23',
+      days: [
+        {
+          routine_name: routineName,
+          exercises: [{ ...sampleStandardExercise(templateName, []), rest_seconds: 120 }],
+        },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 201, res.body);
+  const presId = res.json().prescriptions[0].id;
+  const rows = app.db.prepare(
+    'SELECT rest_seconds FROM prescription_exercises WHERE prescription_id = ?'
+  ).all(presId);
+  assert.deepEqual(rows, [{ rest_seconds: 120 }]);
+});
+
+test('POST /api/prescriptions/import — invalid rest_seconds rejected with 400', async () => {
+  for (const bad of [0, 3601, 'ninety', 1.5]) {
+    const res = await app.inject({
+      method: 'POST', url: '/api/prescriptions/import',
+      payload: {
+        week_starts_on: '2026-08-17',
+        week_ends_on: '2026-08-23',
+        days: [
+          {
+            routine_name: nextId('BadRestRoutine'),
+            exercises: [{ ...sampleStandardExercise(nextId('BadRestTpl')), rest_seconds: bad }],
+          },
+        ],
+      },
+    });
+    assert.equal(res.statusCode, 400, `rest_seconds ${JSON.stringify(bad)} should be rejected`);
+  }
+});
+
+test('POST /api/prescriptions/import — duplicate template in one day is rejected (characterization)', async () => {
+  // routine_templates has UNIQUE (routine_id, template_id), so a day can never
+  // hold the same exercise twice — the import fails before rest handling runs.
+  // Pinned here so the health-repo contract can say "no duplicate templates".
+  const routineName = nextId('DupRestRoutine');
+  const templateName = nextId('DupRestTpl');
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-17',
+      week_ends_on: '2026-08-23',
+      days: [
+        {
+          routine_name: routineName,
+          exercises: [
+            { ...sampleStandardExercise(templateName), rest_seconds: 45 },
+            { ...sampleStandardExercise(templateName, []), rest_seconds: 60 },
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 500, res.body);
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const pres = app.db.prepare('SELECT id FROM prescriptions WHERE routine_id = ?').all(r?.id ?? -1);
+  assert.equal(pres.length, 0, 'failed import must not leave a prescription behind');
+});
+
 test('POST /api/prescriptions/import — find-or-create reuses existing routine + template', async () => {
   const routineName = nextId('ReuseRoutine');
   const templateName = nextId('ReuseTpl');
