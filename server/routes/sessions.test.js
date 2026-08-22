@@ -32,10 +32,13 @@ async function createDraft(id, { workoutId = null, value = 5, clientVersion = 1 
   });
 }
 
-async function finalizeSession(id, clientVersion = 1) {
+async function finalizeSession(id, clientVersion = 1, durationSeconds = null) {
   return app.inject({
     method: 'POST', url: `/api/sessions/${id}/finalize`,
-    payload: { client_version: clientVersion },
+    payload: {
+      client_version: clientVersion,
+      ...(durationSeconds !== null ? { duration_seconds: durationSeconds } : {}),
+    },
   });
 }
 
@@ -151,4 +154,60 @@ test('DELETE /api/sessions/:id deletes a child session of a finalized workout wi
   const w = app.db.prepare('SELECT id, finalized_at FROM workouts WHERE id = ?').get(wid);
   assert.ok(w, 'workout must remain');
   assert.ok(w.finalized_at, 'workout finalized_at must remain');
+});
+
+test('POST /api/sessions/:id/finalize with duration_seconds records it', async () => {
+  const id = suuid(20);
+  await createDraft(id);
+  const res = await finalizeSession(id, 1, 187);
+  assert.equal(res.statusCode, 200);
+
+  const row = app.db.prepare('SELECT duration_seconds FROM sessions WHERE id = ?').get(id);
+  assert.equal(row.duration_seconds, 187);
+});
+
+test('POST /api/sessions/:id/finalize without duration_seconds leaves it NULL', async () => {
+  const id = suuid(21);
+  await createDraft(id);
+  const res = await finalizeSession(id);
+  assert.equal(res.statusCode, 200);
+
+  const row = app.db.prepare('SELECT duration_seconds FROM sessions WHERE id = ?').get(id);
+  assert.equal(row.duration_seconds, null);
+});
+
+test('finalize replay preserves the originally recorded duration', async () => {
+  const id = suuid(22);
+  await createDraft(id);
+  await finalizeSession(id, 1, 120);
+
+  const replay = await finalizeSession(id, 2, 999);
+  assert.equal(replay.statusCode, 200);
+
+  const row = app.db.prepare('SELECT duration_seconds FROM sessions WHERE id = ?').get(id);
+  assert.equal(row.duration_seconds, 120);
+});
+
+test('stale finalize (409) records no duration', async () => {
+  const id = suuid(23);
+  await createDraft(id, { clientVersion: 5 });
+  const res = await finalizeSession(id, 1, 60);
+  assert.equal(res.statusCode, 409);
+
+  const row = app.db.prepare('SELECT duration_seconds, finalized_at FROM sessions WHERE id = ?').get(id);
+  assert.equal(row.duration_seconds, null);
+  assert.equal(row.finalized_at, null);
+});
+
+test('GET /api/sessions and /api/sessions/:id include duration_seconds', async () => {
+  const id = suuid(24);
+  await createDraft(id);
+  await finalizeSession(id, 1, 95);
+
+  const list = await app.inject({ method: 'GET', url: '/api/sessions' });
+  const inList = list.json().find(s => s.id === id);
+  assert.equal(inList.duration_seconds, 95);
+
+  const one = await app.inject({ method: 'GET', url: `/api/sessions/${id}` });
+  assert.equal(one.json().duration_seconds, 95);
 });

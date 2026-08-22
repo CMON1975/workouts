@@ -220,9 +220,12 @@ function sweepUnfinalizedWorkouts(db, routineId, now) {
     db.prepare(
       'UPDATE sessions SET finalized_at = ?, updated_at = ? WHERE workout_id = ? AND finalized_at IS NULL'
     ).run(now, now, w.id);
-    db.prepare(
-      'UPDATE workouts SET finalized_at = ?, updated_at = ? WHERE id = ?'
-    ).run(now, now, w.id);
+    db.prepare(`
+      UPDATE workouts
+         SET finalized_at = ?, updated_at = ?,
+             duration_seconds = (SELECT SUM(duration_seconds) FROM sessions WHERE workout_id = workouts.id)
+       WHERE id = ?
+    `).run(now, now, w.id);
   }
 }
 

@@ -894,3 +894,57 @@ test('migration 006: prescription_targets cascades on prescription delete', () =
     0
   );
 });
+
+test('POST /api/prescriptions/import — sweep records the session-duration sum on stale workouts', async () => {
+  const routineName = nextId('SweepDurationRoutine');
+  const templateName = nextId('SweepDurationTpl');
+  await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-03',
+      week_ends_on: '2026-08-09',
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const tpl = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(templateName);
+  const tplCol = app.db.prepare(`SELECT id FROM template_columns WHERE template_id = ? AND name = 'reps'`).get(tpl.id);
+
+  const wid = '019ec999-aaaa-7000-8000-000000000010';
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: { id: wid, routine_id: r.id, started_at: Date.now(), updated_at: Date.now(), client_version: 1 },
+  });
+  // One child finalized with a recorded duration, one left as an open draft.
+  const sidDone = '019ec999-bbbb-7000-8000-000000000010';
+  const sidOpen = '019ec999-bbbb-7000-8000-000000000011';
+  for (const sid of [sidDone, sidOpen]) {
+    await app.inject({
+      method: 'PATCH', url: `/api/drafts/${sid}`,
+      payload: {
+        id: sid, template_id: tpl.id, workout_id: wid,
+        started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+        values: [{ row_index: 0, column_id: tplCol.id, value_num: 7 }],
+      },
+    });
+  }
+  await app.inject({
+    method: 'POST', url: `/api/sessions/${sidDone}/finalize`,
+    payload: { client_version: 1, duration_seconds: 80 },
+  });
+
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-10',
+      week_ends_on: '2026-08-16',
+      finalize_pending: true,
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName)] }],
+    },
+  });
+  assert.equal(res.statusCode, 201, res.body);
+
+  const row = app.db.prepare('SELECT finalized_at, duration_seconds FROM workouts WHERE id = ?').get(wid);
+  assert.ok(row.finalized_at != null, 'swept workout should be finalized');
+  assert.equal(row.duration_seconds, 80, 'swept workout total should sum recorded child durations');
+});

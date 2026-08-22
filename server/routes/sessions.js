@@ -32,7 +32,7 @@ export default async function sessionsRoutes(app) {
     const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
     const sessions = db.prepare(`
-      SELECT id, template_id, started_at, updated_at, finalized_at, client_version, notes
+      SELECT id, template_id, started_at, updated_at, finalized_at, client_version, notes, duration_seconds
         FROM sessions
         ${whereSql}
         ORDER BY COALESCE(finalized_at, started_at) DESC, started_at DESC
@@ -53,7 +53,7 @@ export default async function sessionsRoutes(app) {
     const db = app.db;
     const { id } = req.params;
     const session = db.prepare(`
-      SELECT id, template_id, started_at, updated_at, finalized_at, client_version, notes
+      SELECT id, template_id, started_at, updated_at, finalized_at, client_version, notes, duration_seconds
         FROM sessions WHERE id = ?
     `).get(id);
     if (!session) return reply.code(404).send({ error: 'not found' });
@@ -101,7 +101,10 @@ export default async function sessionsRoutes(app) {
       body: {
         type: 'object',
         required: ['client_version'],
-        properties: { client_version: { type: 'integer', minimum: 0 } },
+        properties: {
+          client_version: { type: 'integer', minimum: 0 },
+          duration_seconds: { type: ['integer', 'null'], minimum: 0 },
+        },
       },
     },
   }, async (req, reply) => {
@@ -123,8 +126,8 @@ export default async function sessionsRoutes(app) {
       }
       const now = Date.now();
       db.prepare(
-        'UPDATE sessions SET finalized_at = ?, client_version = ?, updated_at = ? WHERE id = ?'
-      ).run(now, client_version, now, id);
+        'UPDATE sessions SET finalized_at = ?, client_version = ?, updated_at = ?, duration_seconds = ? WHERE id = ?'
+      ).run(now, client_version, now, req.body.duration_seconds ?? null, id);
       return { status: 200, body: { finalized_at: now } };
     })();
 

@@ -15,7 +15,7 @@ const upsertBodySchema = {
 function loadWorkout(db, id) {
   const w = db.prepare(`
     SELECT w.id, w.routine_id, r.name AS routine_name,
-           w.started_at, w.updated_at, w.finalized_at, w.client_version
+           w.started_at, w.updated_at, w.finalized_at, w.client_version, w.duration_seconds
       FROM workouts w
       JOIN routines r ON r.id = w.routine_id
      WHERE w.id = ?
@@ -23,7 +23,7 @@ function loadWorkout(db, id) {
   if (!w) return null;
   w.sessions = db.prepare(`
     SELECT s.id, s.template_id, s.started_at, s.updated_at,
-           s.finalized_at, s.client_version, s.notes
+           s.finalized_at, s.client_version, s.notes, s.duration_seconds
       FROM sessions s
      WHERE s.workout_id = ?
      ORDER BY s.started_at, s.id
@@ -66,7 +66,7 @@ export default async function workoutsRoutes(app) {
 
     const rows = db.prepare(`
       SELECT w.id, w.routine_id, r.name AS routine_name,
-             w.started_at, w.updated_at, w.finalized_at, w.client_version
+             w.started_at, w.updated_at, w.finalized_at, w.client_version, w.duration_seconds
         FROM workouts w
         JOIN routines r ON r.id = w.routine_id
         ${whereSql}
@@ -76,7 +76,7 @@ export default async function workoutsRoutes(app) {
 
     const childStmt = db.prepare(`
       SELECT s.id, s.template_id, s.started_at, s.updated_at,
-             s.finalized_at, s.client_version, s.notes
+             s.finalized_at, s.client_version, s.notes, s.duration_seconds
         FROM sessions s
        WHERE s.workout_id = ?
        ORDER BY s.started_at, s.id
@@ -205,9 +205,14 @@ export default async function workoutsRoutes(app) {
         return { status: 409, body: { error: 'stale', server_version: row.client_version } };
       }
       const now = Date.now();
-      db.prepare(
-        'UPDATE workouts SET finalized_at = ?, client_version = ?, updated_at = ? WHERE id = ?'
-      ).run(now, client_version, now, id);
+      // Total = sum of recorded per-exercise durations, frozen at finalize.
+      // SUM over all-NULL children yields NULL (never-started stopwatch).
+      db.prepare(`
+        UPDATE workouts
+           SET finalized_at = ?, client_version = ?, updated_at = ?,
+               duration_seconds = (SELECT SUM(duration_seconds) FROM sessions WHERE workout_id = workouts.id)
+         WHERE id = ?
+      `).run(now, client_version, now, id);
       return { status: 200, body: { finalized_at: now } };
     })();
 

@@ -563,3 +563,108 @@ test('DELETE /api/workouts/:id removes the workout, all child sessions, and thei
   ).get(sidA, sidB).n;
   assert.equal(valsAfter, 0, 'session_values must cascade');
 });
+
+async function addChildSession(wid, sid, { durationSeconds = null, finalize = true } = {}) {
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${sid}`,
+    payload: {
+      id: sid, template_id: bicepTplId, workout_id: wid,
+      started_at: Date.now(), updated_at: Date.now(),
+      client_version: 1,
+      values: [{ row_index: 0, column_id: bicepColId, value_num: 8 }],
+    },
+  });
+  if (finalize) {
+    await app.inject({
+      method: 'POST', url: `/api/sessions/${sid}/finalize`,
+      payload: {
+        client_version: 1,
+        ...(durationSeconds !== null ? { duration_seconds: durationSeconds } : {}),
+      },
+    });
+  }
+}
+
+test('workout finalize stores the sum of child session durations', async () => {
+  const wid = wuuid(90);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: workoutBody(wid, 1),
+  });
+  await addChildSession(wid, suuid(90), { durationSeconds: 100 });
+  await addChildSession(wid, suuid(91), { durationSeconds: 50 });
+  await addChildSession(wid, suuid(92)); // finalized without a duration
+
+  const res = await app.inject({
+    method: 'POST', url: `/api/workouts/${wid}/finalize`,
+    payload: { client_version: 1 },
+  });
+  assert.equal(res.statusCode, 200);
+
+  const row = app.db.prepare('SELECT duration_seconds FROM workouts WHERE id = ?').get(wid);
+  assert.equal(row.duration_seconds, 150);
+});
+
+test('workout finalize leaves duration_seconds NULL when no session has one', async () => {
+  const wid = wuuid(91);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: workoutBody(wid, 1),
+  });
+  await addChildSession(wid, suuid(93));
+
+  await app.inject({
+    method: 'POST', url: `/api/workouts/${wid}/finalize`,
+    payload: { client_version: 1 },
+  });
+
+  const row = app.db.prepare('SELECT duration_seconds FROM workouts WHERE id = ?').get(wid);
+  assert.equal(row.duration_seconds, null);
+});
+
+test('workout finalize replay preserves the recorded total', async () => {
+  const wid = wuuid(92);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: workoutBody(wid, 1),
+  });
+  await addChildSession(wid, suuid(94), { durationSeconds: 100 });
+  await app.inject({
+    method: 'POST', url: `/api/workouts/${wid}/finalize`,
+    payload: { client_version: 1 },
+  });
+
+  // A later session duration must not leak into the frozen total on replay.
+  await addChildSession(wid, suuid(95), { durationSeconds: 50 });
+  const replay = await app.inject({
+    method: 'POST', url: `/api/workouts/${wid}/finalize`,
+    payload: { client_version: 2 },
+  });
+  assert.equal(replay.statusCode, 200);
+
+  const row = app.db.prepare('SELECT duration_seconds FROM workouts WHERE id = ?').get(wid);
+  assert.equal(row.duration_seconds, 100);
+});
+
+test('GET workouts list and detail expose duration_seconds on workout and child sessions', async () => {
+  const wid = wuuid(93);
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: workoutBody(wid, 1),
+  });
+  await addChildSession(wid, suuid(96), { durationSeconds: 75 });
+  await app.inject({
+    method: 'POST', url: `/api/workouts/${wid}/finalize`,
+    payload: { client_version: 1 },
+  });
+
+  const detail = await app.inject({ method: 'GET', url: `/api/workouts/${wid}` });
+  const dBody = detail.json();
+  assert.equal(dBody.duration_seconds, 75);
+  assert.equal(dBody.sessions[0].duration_seconds, 75);
+
+  const list = await app.inject({ method: 'GET', url: '/api/workouts' });
+  const inList = list.json().find(w => w.id === wid);
+  assert.equal(inList.duration_seconds, 75);
+  assert.equal(inList.sessions[0].duration_seconds, 75);
+});
