@@ -20,3 +20,67 @@ export function beepOffsets(remainingMs) {
   plan.push({ atMs: remainingMs, kind: 'done' });
   return plan;
 }
+
+// Tone shapes, tuned on-device: short marks at T-3..T-1, a longer higher
+// done tone at zero so the end is unambiguous without looking.
+const TONES = {
+  short: { freq: 880, durMs: 120, gain: 0.25 },
+  done: { freq: 1318, durMs: 450, gain: 0.3 },
+};
+
+// Thin Web Audio shell around beepOffsets. Beeps are scheduled on the audio
+// clock at press time — the app's 250ms display tick is cosmetic and dies
+// when the tab freezes, so it can never be the trigger. Everything degrades
+// to silence (no throw into the press path) when audio is unavailable;
+// hidden-tab / locked-screen playback is best-effort by platform design.
+export function createBeeper() {
+  let ctx = null;
+  let pending = [];
+
+  // Must run synchronously in a user-gesture handler (iOS unlock). Called on
+  // every press so the context is warm one gesture before the first countdown.
+  function ensureContext() {
+    try {
+      const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
+      if (!AC) return;
+      if (!ctx) ctx = new AC();
+      if (ctx.state === 'suspended') ctx.resume();
+    } catch (_) {
+      ctx = null;
+    }
+  }
+
+  function cancel() {
+    for (const osc of pending) {
+      try { osc.stop(); osc.disconnect(); } catch (_) {}
+    }
+    pending = [];
+  }
+
+  function schedule(offsets) {
+    cancel();
+    if (!ctx || !offsets?.length) return;
+    try {
+      const base = ctx.currentTime;
+      for (const { atMs, kind } of offsets) {
+        const { freq, durMs, gain } = TONES[kind];
+        const at = base + atMs / 1000;
+        const osc = ctx.createOscillator();
+        const env = ctx.createGain();
+        osc.frequency.value = freq;
+        env.gain.setValueAtTime(gain, at);
+        env.gain.exponentialRampToValueAtTime(0.001, at + durMs / 1000);
+        osc.connect(env).connect(ctx.destination);
+        osc.start(at);
+        osc.stop(at + durMs / 1000);
+        pending.push(osc);
+      }
+    } catch (_) {
+      cancel();
+    }
+  }
+
+  function isArmed() { return ctx != null; }
+
+  return { ensureContext, schedule, cancel, isArmed };
+}

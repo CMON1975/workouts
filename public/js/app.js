@@ -12,6 +12,7 @@ import {
   createStopwatch, formatMSS, restSecondsFor,
   loadStopwatchState, saveStopwatchState, clearStopwatchState,
 } from './stopwatch.js';
+import { createBeeper, beepOffsets } from './beeper.js';
 import {
   renderSessionForm, renderStatus,
   renderHistoryList, renderSessionDetail, renderWorkoutDetail,
@@ -124,6 +125,7 @@ let detailOrigin = 'history';   // 'history' | 'runner'
 let stopwatch = null;           // created on workout start/resume, null otherwise
 let stopwatchTick = null;
 const STOPWATCH_AUTO_START = false; // flip to auto-start each exercise on advance
+const beeper = createBeeper();  // inert until the first button gesture arms it
 
 function show(el) { el.hidden = false; }
 function hide(el) { el.hidden = true; }
@@ -376,10 +378,15 @@ function hideStopwatchBar() {
 
 function handleStopwatchBtn() {
   if (!activeWorkout || !stopwatch) return;
+  // Synchronously, on every press: the gesture is what unlocks audio on iOS,
+  // and pressing Start warms the context before the first countdown needs it.
+  beeper.ensureContext();
+  const rest = currentRestSeconds();
   if (!stopwatch.isRunning()) {
     stopwatch.start();
-  } else if (currentRestSeconds() != null) {
+  } else if (rest != null) {
     stopwatch.startRest();
+    beeper.schedule(beepOffsets(stopwatch.restRemainingMs(rest)));
   } else {
     stopwatch.lap();
   }
@@ -550,6 +557,7 @@ async function handleRunnerNext() {
 
   if (stopwatch) {
     stopwatch.commitExercise();
+    beeper.cancel();
     stopwatch.setExerciseIndex(activeWorkout.currentIndex);
     saveStopwatchState(activeWorkout.workoutId, stopwatch);
     renderStopwatchDisplay();
@@ -579,6 +587,7 @@ async function handleRunnerEnd() {
       try {
         await currentSession.finalize({ durationSeconds: stopwatch?.exerciseSeconds() ?? null });
         stopwatch?.commitExercise();
+        beeper.cancel();
       } catch (err) {
         console.warn('finalizing current exercise failed on end-early', err);
       }
@@ -608,6 +617,7 @@ async function resetRunner() {
   activeWorkout = null;
   currentSession = null;
   stopwatch = null;
+  beeper.cancel();
   hideStopwatchBar();
 }
 
@@ -1469,11 +1479,20 @@ async function boot() {
   els.runnerEnd.addEventListener('click', handleRunnerEnd);
   els.stopwatchBtn.addEventListener('click', handleStopwatchBtn);
   // Repaint immediately on wake so the first visible frame is correct rather
-  // than one interval-tick stale after tab sleep / bfcache restore.
+  // than one interval-tick stale after tab sleep / bfcache restore. If a
+  // countdown is still live, reschedule its remaining beeps — the ones that
+  // were queued before the freeze may have been dropped with the context.
+  const wakeStopwatch = () => {
+    if (!stopwatch) return;
+    const rest = currentRestSeconds();
+    const ms = rest != null ? stopwatch.restRemainingMs(rest) : null;
+    if (ms != null && beeper.isArmed()) beeper.schedule(beepOffsets(ms));
+    renderStopwatchDisplay();
+  };
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && stopwatch) renderStopwatchDisplay();
+    if (document.visibilityState === 'visible') wakeStopwatch();
   });
-  window.addEventListener('pageshow', () => { if (stopwatch) renderStopwatchDisplay(); });
+  window.addEventListener('pageshow', wakeStopwatch);
   els.newTemplateBtn.addEventListener('click', openNewTemplate);
   els.newTplBack.addEventListener('click', goHome);
   els.newTplForm.addEventListener('submit', handleNewTemplateSubmit);
