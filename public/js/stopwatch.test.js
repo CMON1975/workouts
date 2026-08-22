@@ -191,6 +191,121 @@ test('setExerciseIndex restamps the index for the next exercise', () => {
   assert.ok(state, 'saved state must match the advanced index');
 });
 
+test('startRest while idle is a no-op', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.startRest();
+  assert.equal(sw.isRunning(), false);
+  assert.equal(sw.restRemaining(90), null, 'no countdown may anchor before the exercise timer exists');
+});
+
+test('rest countdown counts down and expires to inactive', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.start();
+  assert.equal(sw.restRemaining(90), null, 'started but no countdown yet — idle full-rest display');
+  clock.advance(10_000);
+  sw.startRest();
+  assert.equal(sw.restRemaining(90), 90);
+  clock.advance(1_000);
+  assert.equal(sw.restRemaining(90), 89);
+  clock.advance(88_000);
+  assert.equal(sw.restRemaining(90), 1);
+  clock.advance(1_000);
+  assert.equal(sw.restRemaining(90), null, 'expired countdown reads as inactive');
+  assert.equal(sw.exerciseSeconds(), 100, 'exercise total unaffected by the countdown');
+});
+
+test('startRest mid-countdown restarts from full', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.start();
+  sw.startRest();
+  clock.advance(40_000);
+  assert.equal(sw.restRemaining(90), 50);
+  sw.startRest();
+  assert.equal(sw.restRemaining(90), 90);
+});
+
+test('restRemainingMs gives exact ms to zero, null when idle or expired', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.start();
+  assert.equal(sw.restRemainingMs(90), null);
+  sw.startRest();
+  clock.advance(500);
+  assert.equal(sw.restRemainingMs(90), 89_500);
+  clock.advance(89_500);
+  assert.equal(sw.restRemainingMs(90), null, 'exactly zero remaining is expired');
+});
+
+test('restRemaining with null or non-positive restSeconds is null even when anchored', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.start();
+  sw.startRest();
+  assert.equal(sw.restRemaining(null), null);
+  assert.equal(sw.restRemaining(0), null);
+  assert.equal(sw.restRemainingMs(null), null);
+  assert.equal(sw.restRemainingMs(0), null);
+});
+
+test('commitExercise clears the countdown', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.start();
+  sw.startRest();
+  sw.commitExercise();
+  assert.equal(sw.restRemaining(90), null);
+  assert.equal(sw.toJSON().restEpoch, null, 'an advance mid-countdown must not leak into the next exercise');
+});
+
+test('v2 state round-trips a countdown across eviction, away time counted', () => {
+  const clock = fakeClock();
+  const storage = fakeStorage();
+  const sw = createStopwatch({ now: clock.now, exerciseIndex: 1 });
+  sw.start();
+  clock.advance(5_000);
+  sw.startRest();
+  saveStopwatchState('w-6', sw, storage);
+
+  clock.advance(30_000); // tab evicted mid-countdown
+  const state = loadStopwatchState('w-6', 1, storage);
+  assert.equal(state.v, 2);
+  const restored = createStopwatch({ now: clock.now, exerciseIndex: 1, initial: state });
+  assert.equal(restored.restRemaining(90), 60, 'countdown continues from wall clock');
+  assert.equal(restored.exerciseSeconds(), 35);
+});
+
+test('loadStopwatchState upgrades a v1 payload, keeping the running timer', () => {
+  const clock = fakeClock();
+  const storage = fakeStorage();
+  storage.setItem('stopwatch:w-7', JSON.stringify({
+    v: 1, exerciseIndex: 2, startEpoch: T0 - 20_000, lapEpoch: T0 - 20_000,
+  }));
+  const state = loadStopwatchState('w-7', 2, storage);
+  assert.ok(state, 'v1 payload must upgrade, not reject');
+  assert.equal(state.v, 2);
+  const restored = createStopwatch({ now: clock.now, exerciseIndex: 2, initial: state });
+  assert.equal(restored.isRunning(), true);
+  assert.equal(restored.exerciseSeconds(), 20, 'a deploy mid-workout keeps the running timer');
+  assert.equal(restored.restRemaining(90), null, 'no countdown carried over from v1');
+});
+
+test('exerciseIndex mismatch idles the countdown too', () => {
+  const clock = fakeClock();
+  const storage = fakeStorage();
+  const sw = createStopwatch({ now: clock.now, exerciseIndex: 1 });
+  sw.start();
+  sw.startRest();
+  saveStopwatchState('w-8', sw, storage);
+
+  const state = loadStopwatchState('w-8', 2, storage);
+  assert.equal(state.restEpoch, null);
+  const restored = createStopwatch({ now: clock.now, exerciseIndex: 2, initial: state });
+  assert.equal(restored.restRemaining(90), null);
+});
+
 test('storage errors are swallowed (private mode, quota)', () => {
   const throwing = {
     getItem: () => { throw new Error('nope'); },
