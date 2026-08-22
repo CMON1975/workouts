@@ -76,6 +76,11 @@ header h1 {
   font-variant-numeric: tabular-nums;
 }
 
+/* An active rest countdown, as opposed to the idle full-rest display. */
+.stopwatch-time.resting {
+  color: var(--accent);
+}
+
 main, section {
   padding: 16px;
   max-width: 640px;

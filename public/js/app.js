@@ -9,7 +9,7 @@ import {
 import { installHideFlush, installOutboxDrainers, drainOutbox, readShadow } from './persistence.js';
 import { createSessionState } from './session-state.js';
 import {
-  createStopwatch, formatMSS,
+  createStopwatch, formatMSS, restSecondsFor,
   loadStopwatchState, saveStopwatchState, clearStopwatchState,
 } from './stopwatch.js';
 import {
@@ -193,9 +193,8 @@ async function tryResumeWorkout() {
 
   // A running timer resumes from its original epoch — away time counts.
   stopwatch = createStopwatch({ exerciseIndex: idx, initial: loadStopwatchState(wid, idx) });
-  showStopwatchBar();
-
   await bindCurrentExercise();
+  showStopwatchBar();
   return true;
 }
 
@@ -339,9 +338,25 @@ function renderHomeRoutines() {
   }
 }
 
+// Prescribed rest for the exercise the runner is on; null = none → count-up.
+function currentRestSeconds() {
+  if (!activeWorkout) return null;
+  const template = activeWorkout.routine.templates[activeWorkout.currentIndex];
+  return restSecondsFor(activeWorkout.prescribed, template?.id);
+}
+
 // The interval is cosmetic only — every render recomputes from Date.now()
 // against stored epochs, so a throttled/frozen tab never loses time.
 function renderStopwatchDisplay() {
+  const rest = currentRestSeconds();
+  if (rest != null) {
+    const remaining = stopwatch?.restRemaining(rest) ?? null;
+    els.stopwatchTime.textContent = formatMSS(remaining ?? rest);
+    els.stopwatchTime.classList.toggle('resting', remaining != null);
+    els.stopwatchBtn.textContent = stopwatch?.isRunning() ? 'Rest' : 'Start';
+    return;
+  }
+  els.stopwatchTime.classList.remove('resting');
   els.stopwatchTime.textContent = formatMSS(stopwatch?.displaySeconds() ?? 0);
   els.stopwatchBtn.textContent = stopwatch?.isRunning() ? 'Lap' : 'Start';
 }
@@ -361,8 +376,13 @@ function hideStopwatchBar() {
 
 function handleStopwatchBtn() {
   if (!activeWorkout || !stopwatch) return;
-  if (stopwatch.isRunning()) stopwatch.lap();
-  else stopwatch.start();
+  if (!stopwatch.isRunning()) {
+    stopwatch.start();
+  } else if (currentRestSeconds() != null) {
+    stopwatch.startRest();
+  } else {
+    stopwatch.lap();
+  }
   saveStopwatchState(activeWorkout.workoutId, stopwatch);
   renderStopwatchDisplay();
 }
@@ -410,8 +430,10 @@ async function handleRoutinePick(routine) {
   await persistActiveWorkout();
   stopwatch = createStopwatch({ exerciseIndex: 0 });
   saveStopwatchState(workoutId, stopwatch);
-  showStopwatchBar();
+  // Bind first: it fetches the prescription, so the bar's first frame already
+  // shows the rest display instead of flickering through count-up mode.
   await bindCurrentExercise();
+  showStopwatchBar();
   maybeAutoStartStopwatch();
 }
 
