@@ -462,3 +462,77 @@ test('multi-column standard session renders all columns in position order', () =
   assert.match(md, /\| 1 \| 135 \| 8 \|/);
   assert.match(md, /\| 2 \| 145 \| 8 \|/);
 });
+
+test('loadExportData includes duration_seconds on sessions and workouts (NULL for legacy rows)', async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'workouts-export-dur-'));
+  const dbPath = join(tmp, 'test.db');
+  try {
+    const { openDb } = await import('../server/db.js');
+    const db = openDb(dbPath);
+    const tplId = db.prepare(`SELECT id FROM templates WHERE name='Bicep Curls'`).get().id;
+
+    // Legacy standalone session: no duration.
+    const legacySid = '019dbafa-0000-7000-8000-000000000001';
+    const t0 = Date.UTC(2026, 7, 20, 10, 0, 0);
+    db.prepare(`
+      INSERT INTO sessions (id, template_id, started_at, updated_at, finalized_at, client_version)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(legacySid, tplId, t0 - 60000, t0, t0, 1);
+
+    // Timed workout with one timed child.
+    const routineId = db.prepare(`INSERT INTO routines (name, created_at) VALUES ('Timed', ?)`)
+      .run(t0).lastInsertRowid;
+    db.prepare(`INSERT INTO routine_templates (routine_id, template_id, position) VALUES (?, ?, 0)`)
+      .run(routineId, tplId);
+    const wid = '019dbafa-0001-7000-8000-000000000001';
+    const t1 = Date.UTC(2026, 7, 21, 10, 0, 0);
+    db.prepare(`
+      INSERT INTO workouts (id, routine_id, started_at, updated_at, finalized_at, client_version, duration_seconds)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(wid, routineId, t1 - 900000, t1, t1, 1, 150);
+    const childSid = '019dbafa-0002-7000-8000-000000000001';
+    db.prepare(`
+      INSERT INTO sessions (id, template_id, workout_id, started_at, updated_at, finalized_at, client_version, duration_seconds)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(childSid, tplId, wid, t1 - 900000, t1, t1, 1, 150);
+    db.close();
+
+    const data = loadExportData(dbPath);
+    const legacy = data.standalone.find(s => s.id === legacySid);
+    assert.equal(legacy.duration_seconds, null);
+    const w = data.workouts.find(x => x.id === wid);
+    assert.equal(w.duration_seconds, 150);
+    assert.equal(w.sessions[0].duration_seconds, 150);
+  } finally {
+    if (existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('renderMarkdown shows a Duration line for timed sessions and omits it otherwise', () => {
+  const md = renderMarkdown({
+    ...baseExport,
+    standalone: [
+      {
+        id: 's-timed', template_name: 'Bicep Curls', template_kind: 'standard',
+        template_description: null, template_archived: false,
+        started_at: T_2026_05_08_1842 - 60_000,
+        finalized_at: T_2026_05_08_1842,
+        notes: null, duration_seconds: 187,
+        columns: [{ id: 1, name: 'reps', unit: null, position: 0, value_type: 'number' }],
+        values: [{ row_index: 0, column_id: 1, value_num: 10, value_text: null }],
+      },
+      {
+        id: 's-untimed', template_name: 'Tricep Dips', template_kind: 'standard',
+        template_description: null, template_archived: false,
+        started_at: T_2026_05_08_1842 - 120_000,
+        finalized_at: T_2026_05_08_1842 - 30_000,
+        notes: null, duration_seconds: null,
+        columns: [{ id: 2, name: 'reps', unit: null, position: 0, value_type: 'number' }],
+        values: [{ row_index: 0, column_id: 2, value_num: 8, value_text: null }],
+      },
+    ],
+  });
+  assert.match(md, /\*\*Duration:\*\* 3:07/);
+  const tricepBlock = md.slice(md.indexOf('Tricep Dips'));
+  assert.ok(!/\*\*Duration:\*\*/.test(tricepBlock), 'untimed session must not render a Duration line');
+});

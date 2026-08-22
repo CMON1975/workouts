@@ -22,6 +22,11 @@ function ymdUTC(ms) {
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
 }
 
+function fmtMSS(seconds) {
+  const m = Math.floor(seconds / 60);
+  return `${m}:${pad2(seconds % 60)}`;
+}
+
 function colHeader(col) {
   return col.unit ? `${col.name} (${col.unit})` : col.name;
 }
@@ -74,6 +79,7 @@ function renderSession(s, { workoutRoutineName }) {
   const tag = contextParts.join(', ');
 
   const parts = [`## ${fmtDate(s.finalized_at)} — ${nameWithArchived(s)} (${tag})`];
+  if (s.duration_seconds != null) parts.push(`**Duration:** ${fmtMSS(s.duration_seconds)}`);
   if (s.notes) parts.push(`**Notes:** ${s.notes}`);
   parts.push(s.template_kind === 'checkbox' ? renderCheckbox(s) : renderTable(s));
   return parts.join('\n\n');
@@ -158,7 +164,7 @@ export function loadExportData(dbPath, { since = null } = {}) {
 
     const sessionSql = `
       SELECT s.id, s.template_id, s.workout_id,
-             s.started_at, s.finalized_at, s.notes,
+             s.started_at, s.finalized_at, s.notes, s.duration_seconds,
              t.name AS template_name, t.kind AS template_kind,
              t.description AS template_description,
              t.archived_at AS template_archived_at
@@ -181,12 +187,13 @@ export function loadExportData(dbPath, { since = null } = {}) {
       started_at: r.started_at,
       finalized_at: r.finalized_at,
       notes: r.notes,
+      duration_seconds: r.duration_seconds,
       columns: colsByTpl.get(r.template_id) ?? [],
       values: valsBySession.get(r.id) ?? [],
     });
 
     const workoutRows = db.prepare(`
-      SELECT w.id, w.routine_id, w.started_at, w.finalized_at,
+      SELECT w.id, w.routine_id, w.started_at, w.finalized_at, w.duration_seconds,
              r.name AS routine_name
         FROM workouts w
         JOIN routines r ON r.id = w.routine_id
@@ -211,6 +218,7 @@ export function loadExportData(dbPath, { since = null } = {}) {
       routine_name: w.routine_name,
       started_at: w.started_at,
       finalized_at: w.finalized_at,
+      duration_seconds: w.duration_seconds,
       sessions: sessionsByWorkout.get(w.id) ?? [],
     }));
 
