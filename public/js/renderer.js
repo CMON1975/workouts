@@ -1,5 +1,6 @@
 import { attachSwipeReveal } from './swipe.js';
 import { isWeightColumn, planWeightAutofill } from './autofill.js';
+import { formatMSS } from './stopwatch.js';
 
 const TRASH_GLYPH = '🗑';
 
@@ -426,7 +427,8 @@ export function renderSessionDetail(root, { session, template }) {
   const ts = session.finalized_at ?? session.started_at;
   const meta = document.createElement('p');
   meta.className = 'muted';
-  meta.textContent = (session.finalized_at ? 'Submitted ' : 'Started ') + formatDate(ts);
+  meta.textContent = (session.finalized_at ? 'Submitted ' : 'Started ') + formatDate(ts)
+    + (session.duration_seconds != null ? ` · ${formatMSS(session.duration_seconds)}` : '');
   root.appendChild(meta);
 
   renderSessionTable(root, { session, template });
@@ -441,7 +443,8 @@ export function renderWorkoutDetail(root, { workout, templatesById, onDeleteChil
   const ts = workout.finalized_at ?? workout.started_at;
   const meta = document.createElement('p');
   meta.className = 'muted';
-  meta.textContent = (workout.finalized_at ? 'Submitted ' : 'Started ') + formatDate(ts);
+  meta.textContent = (workout.finalized_at ? 'Submitted ' : 'Started ') + formatDate(ts)
+    + (workout.duration_seconds != null ? ` · ${formatMSS(workout.duration_seconds)} total` : '');
   root.appendChild(meta);
 
   const sessions = workout.sessions ?? [];
@@ -464,7 +467,8 @@ export function renderWorkoutDetail(root, { workout, templatesById, onDeleteChil
 
     const sub = document.createElement('h3');
     sub.className = 'workout-exercise-name';
-    sub.textContent = template?.name ?? `Exercise #${session.template_id}`;
+    sub.textContent = (template?.name ?? `Exercise #${session.template_id}`)
+      + (session.duration_seconds != null ? ` · ${formatMSS(session.duration_seconds)}` : '');
     fg.appendChild(sub);
     renderSessionTable(fg, { session, template });
 
