@@ -100,6 +100,44 @@ test('migration 007: deleting a prescription sets workouts.prescription_id to NU
   assert.equal(row.prescription_id, null, 'workout.prescription_id should be NULL after prescription deleted');
 });
 
+test('migration 012: prescription_exercises table exists with expected columns', () => {
+  const cols = app.db.prepare('PRAGMA table_info(prescription_exercises)').all();
+  const names = cols.map(c => c.name);
+  assert.deepEqual(
+    names.sort(),
+    ['prescription_id', 'rest_seconds', 'template_id'].sort()
+  );
+  const pk = cols.filter(c => c.pk > 0).map(c => c.name).sort();
+  assert.deepEqual(pk, ['prescription_id', 'template_id'].sort());
+  const notNull = new Set(cols.filter(c => c.notnull).map(c => c.name));
+  for (const n of ['prescription_id', 'template_id']) {
+    assert.ok(notNull.has(n), `${n} must be NOT NULL`);
+  }
+  const restCol = cols.find(c => c.name === 'rest_seconds');
+  assert.equal(restCol.notnull, 0, 'rest_seconds must be nullable');
+});
+
+test('migration 012: prescription_exercises cascades on prescription delete', () => {
+  app.db.exec(`
+    INSERT INTO routines (name, created_at, sort_position) VALUES ('RestCascade', ${Date.now()}, 102);
+    INSERT INTO templates (name, created_at) VALUES ('RestCascadeTpl', ${Date.now()});
+  `);
+  const r = app.db.prepare(`SELECT id FROM routines WHERE name = 'RestCascade'`).get();
+  const t = app.db.prepare(`SELECT id FROM templates WHERE name = 'RestCascadeTpl'`).get();
+  const presIns = app.db.prepare(`
+    INSERT INTO prescriptions (routine_id, starts_on, ends_on, created_at)
+    VALUES (?, '2026-08-17', '2026-08-23', ?)
+  `).run(r.id, Date.now());
+  const presId = presIns.lastInsertRowid;
+  app.db.prepare(`
+    INSERT INTO prescription_exercises (prescription_id, template_id, rest_seconds)
+    VALUES (?, ?, 90)
+  `).run(presId, t.id);
+  app.db.prepare('DELETE FROM prescriptions WHERE id = ?').run(presId);
+  const row = app.db.prepare('SELECT * FROM prescription_exercises WHERE prescription_id = ?').get(presId);
+  assert.equal(row, undefined, 'prescription_exercises row should cascade-delete with prescription');
+});
+
 function nextId(prefix = 'p') {
   // Tests share the test app + DB; randomize routine/template names within a test
   // run by appending a monotonic counter so tests don't collide on UNIQUE name.
