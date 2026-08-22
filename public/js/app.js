@@ -9,6 +9,10 @@ import {
 import { installHideFlush, installOutboxDrainers, drainOutbox, readShadow } from './persistence.js';
 import { createSessionState } from './session-state.js';
 import {
+  createStopwatch, formatMSS,
+  loadStopwatchState, saveStopwatchState, clearStopwatchState,
+} from './stopwatch.js';
+import {
   renderSessionForm, renderStatus,
   renderHistoryList, renderSessionDetail, renderWorkoutDetail,
   renderManageList, applyPreviousHints,
@@ -97,6 +101,9 @@ const els = {
   teCancel: document.getElementById('te-cancel'),
   teSave: document.getElementById('te-save'),
   teErr: document.getElementById('te-err'),
+  stopwatchBar: document.getElementById('stopwatch-bar'),
+  stopwatchTime: document.getElementById('stopwatch-time'),
+  stopwatchBtn: document.getElementById('stopwatch-btn'),
   bodyMetricsForm: document.getElementById('body-metrics-form'),
   bmMetric: document.getElementById('bm-metric'),
   bmDate: document.getElementById('bm-date'),
@@ -114,6 +121,9 @@ let rtSelectedIds = [];
 let rtEditingId = null;         // null = creating; routine id = editing existing
 let activeWorkout = null;       // { routine, workoutId, workoutClientVersion, startedAt, currentIndex, sessionIds: {0: uuid, ...} }
 let detailOrigin = 'history';   // 'history' | 'runner'
+let stopwatch = null;           // created on workout start/resume, null otherwise
+let stopwatchTick = null;
+const STOPWATCH_AUTO_START = false; // flip to auto-start each exercise on advance
 
 function show(el) { el.hidden = false; }
 function hide(el) { el.hidden = true; }
@@ -135,6 +145,7 @@ async function tryResumeWorkout() {
 
   const local = await getWorkout(wid);
   if (!local) {
+    clearStopwatchState(wid);
     await clearActiveWorkoutId();
     return false;
   }
@@ -144,12 +155,14 @@ async function tryResumeWorkout() {
     server = await api.getWorkout(wid);
   } catch (err) {
     if (err.status === 404) {
+      clearStopwatchState(wid);
       await deleteWorkout(wid);
       return false;
     }
     // 401 / network: fall through on local copy.
   }
   if (server?.finalized_at) {
+    clearStopwatchState(wid);
     await deleteWorkout(wid);
     return false;
   }
@@ -157,6 +170,7 @@ async function tryResumeWorkout() {
   const routine = routines.find(r => r.id === local.routine_id);
   if (!routine || !routine.templates.length) {
     console.warn('cannot resume workout — routine missing or empty', local.routine_id);
+    clearStopwatchState(wid);
     await deleteWorkout(wid);
     return false;
   }
@@ -176,6 +190,10 @@ async function tryResumeWorkout() {
   els.resumeBanner.hidden = false;
   els.resumeBanner.textContent = `Resumed ${routine.name} at exercise ${idx + 1}`;
   setTimeout(() => { els.resumeBanner.hidden = true; }, 4000);
+
+  // A running timer resumes from its original epoch — away time counts.
+  stopwatch = createStopwatch({ exerciseIndex: idx, initial: loadStopwatchState(wid, idx) });
+  showStopwatchBar();
 
   await bindCurrentExercise();
   return true;
@@ -321,6 +339,41 @@ function renderHomeRoutines() {
   }
 }
 
+// The interval is cosmetic only — every render recomputes from Date.now()
+// against stored epochs, so a throttled/frozen tab never loses time.
+function renderStopwatchDisplay() {
+  els.stopwatchTime.textContent = formatMSS(stopwatch?.displaySeconds() ?? 0);
+  els.stopwatchBtn.textContent = stopwatch?.isRunning() ? 'Lap' : 'Start';
+}
+
+function showStopwatchBar() {
+  renderStopwatchDisplay();
+  show(els.stopwatchBar);
+  clearInterval(stopwatchTick);
+  stopwatchTick = setInterval(renderStopwatchDisplay, 250);
+}
+
+function hideStopwatchBar() {
+  hide(els.stopwatchBar);
+  clearInterval(stopwatchTick);
+  stopwatchTick = null;
+}
+
+function handleStopwatchBtn() {
+  if (!activeWorkout || !stopwatch) return;
+  if (stopwatch.isRunning()) stopwatch.lap();
+  else stopwatch.start();
+  saveStopwatchState(activeWorkout.workoutId, stopwatch);
+  renderStopwatchDisplay();
+}
+
+function maybeAutoStartStopwatch() {
+  if (!STOPWATCH_AUTO_START || !activeWorkout || !stopwatch || stopwatch.isRunning()) return;
+  stopwatch.start();
+  saveStopwatchState(activeWorkout.workoutId, stopwatch);
+  renderStopwatchDisplay();
+}
+
 async function handleRoutinePick(routine) {
   if (!routine.templates.length) {
     alert('This routine has no exercises.');
@@ -355,7 +408,11 @@ async function handleRoutinePick(routine) {
     return;
   }
   await persistActiveWorkout();
+  stopwatch = createStopwatch({ exerciseIndex: 0 });
+  saveStopwatchState(workoutId, stopwatch);
+  showStopwatchBar();
   await bindCurrentExercise();
+  maybeAutoStartStopwatch();
 }
 
 async function persistActiveWorkout() {
@@ -456,14 +513,24 @@ async function handleRunnerNext() {
   activeWorkout.currentIndex = isLast ? savedIndex : nextIndex;
   await persistActiveWorkout();
 
+  // Read the elapsed time before finalizing; reset the stopwatch only after
+  // finalize succeeds so a rollback leaves it running.
+  const durationSeconds = stopwatch?.exerciseSeconds() ?? null;
   try {
-    await currentSession.finalize();
+    await currentSession.finalize({ durationSeconds });
   } catch (err) {
     activeWorkout.currentIndex = savedIndex;
     await persistActiveWorkout();
     alert('Saving this exercise failed — try again.');
     els.runnerNext.disabled = false;
     return;
+  }
+
+  if (stopwatch) {
+    stopwatch.commitExercise();
+    stopwatch.setExerciseIndex(activeWorkout.currentIndex);
+    saveStopwatchState(activeWorkout.workoutId, stopwatch);
+    renderStopwatchDisplay();
   }
 
   if (isLast) {
@@ -474,6 +541,7 @@ async function handleRunnerNext() {
     return;
   }
   await bindCurrentExercise();
+  maybeAutoStartStopwatch();
   els.runnerNext.disabled = false;
 }
 
@@ -486,7 +554,10 @@ async function handleRunnerEnd() {
       v => v.value_num != null || (v.value_text != null && v.value_text !== ''),
     );
     if (hasValues) {
-      try { await currentSession.finalize(); } catch (err) {
+      try {
+        await currentSession.finalize({ durationSeconds: stopwatch?.exerciseSeconds() ?? null });
+        stopwatch?.commitExercise();
+      } catch (err) {
         console.warn('finalizing current exercise failed on end-early', err);
       }
     }
@@ -508,11 +579,14 @@ async function finalizeActiveWorkout() {
 
 async function resetRunner() {
   if (activeWorkout) {
+    clearStopwatchState(activeWorkout.workoutId);
     try { await deleteWorkout(activeWorkout.workoutId); } catch (_) {}
     try { await clearActiveWorkoutId(); } catch (_) {}
   }
   activeWorkout = null;
   currentSession = null;
+  stopwatch = null;
+  hideStopwatchBar();
 }
 
 async function handleRunnerBack() {
@@ -1371,6 +1445,13 @@ async function boot() {
   els.runnerBack.addEventListener('click', handleRunnerBack);
   els.runnerNext.addEventListener('click', handleRunnerNext);
   els.runnerEnd.addEventListener('click', handleRunnerEnd);
+  els.stopwatchBtn.addEventListener('click', handleStopwatchBtn);
+  // Repaint immediately on wake so the first visible frame is correct rather
+  // than one interval-tick stale after tab sleep / bfcache restore.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && stopwatch) renderStopwatchDisplay();
+  });
+  window.addEventListener('pageshow', () => { if (stopwatch) renderStopwatchDisplay(); });
   els.newTemplateBtn.addEventListener('click', openNewTemplate);
   els.newTplBack.addEventListener('click', goHome);
   els.newTplForm.addEventListener('submit', handleNewTemplateSubmit);

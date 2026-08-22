@@ -76,9 +76,11 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(draft),
   }),
-  finalize: (id, clientVersion) => request('/api/sessions/' + encodeURIComponent(id) + '/finalize', {
+  finalize: (id, clientVersion, durationSeconds = null) => request('/api/sessions/' + encodeURIComponent(id) + '/finalize', {
     method: 'POST',
-    body: JSON.stringify({ client_version: clientVersion }),
+    body: JSON.stringify(durationSeconds == null
+      ? { client_version: clientVersion }
+      : { client_version: clientVersion, duration_seconds: durationSeconds }),
   }),
   deleteSession: (id) => request('/api/sessions/' + encodeURIComponent(id), { method: 'DELETE' }),
   deleteWorkout: (id) => request('/api/workouts/' + encodeURIComponent(id), { method: 'DELETE' }),

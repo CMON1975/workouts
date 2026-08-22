@@ -50,6 +50,32 @@ header h1 {
   margin: 0;
 }
 
+/* Persistent stopwatch bar (routine runs). Sticky keeps it in flow — nothing
+   gets covered — while pinning it below the notch once the page scrolls. */
+.stopwatch-bar {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 40; /* under the .manage-row drag ghost (50) */
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.stopwatch-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+}
+
+.stopwatch-time {
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 main, section {
   padding: 16px;
   max-width: 640px;

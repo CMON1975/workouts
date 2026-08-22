@@ -11,7 +11,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <title>Workouts</title>
 <!-- ?v= busts stale phone caches; bump when the asset changes (no build step to do it for us) -->
-<link rel="stylesheet" href="/css/app.css?v=4">
+<link rel="stylesheet" href="/css/app.css?v=5">
 </head>
 <body>
   <header>
@@ -25,6 +25,14 @@
       </button>
     </div>
   </header>
+
+  <!-- Outside <main> so showView() never hides it; shown while a routine run is active. -->
+  <div id="stopwatch-bar" class="stopwatch-bar" hidden>
+    <div class="stopwatch-inner">
+      <span id="stopwatch-time" class="stopwatch-time">0:00</span>
+      <button id="stopwatch-btn" type="button">Start</button>
+    </div>
+  </div>
 
   <main id="app" hidden>
     <p id="resume-banner" class="banner" hidden></p>
@@ -225,6 +233,6 @@
     </dialog>
   </main>
 
-  <script type="module" src="/js/app.js?v=2"></script>
+  <script type="module" src="/js/app.js?v=3"></script>
 </body>
 </html>

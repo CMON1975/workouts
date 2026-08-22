@@ -68,11 +68,11 @@ export function createSessionState({ draft, onChange }) {
     await pushToServer();
   }
 
-  async function finalize() {
+  async function finalize({ durationSeconds = null } = {}) {
     await flushNow();
     setState(STATES.FINALIZING);
     try {
-      const res = await api.finalize(draft.id, draft.client_version);
+      const res = await api.finalize(draft.id, draft.client_version, durationSeconds);
       draft.finalized_at = res.finalized_at;
       await deleteDraft(draft.id);
       clearShadow(draft.id);
