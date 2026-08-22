@@ -80,6 +80,15 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
   };
 }
 
+// Prescribed rest for one template, from the cached /api/prescriptions/active
+// payload. Null-safe against a missing prescription, a stale cached shape
+// without `exercises`, and non-positive/non-integer values — null means
+// "no rest prescribed", which falls back to count-up Start/Lap.
+export function restSecondsFor(prescribed, templateId) {
+  const r = prescribed?.exercises?.find(e => e.template_id === templateId)?.rest_seconds;
+  return Number.isInteger(r) && r > 0 ? r : null;
+}
+
 function storageKey(workoutId) { return 'stopwatch:' + workoutId; }
 
 export function loadStopwatchState(workoutId, exerciseIndex, storage = globalThis.localStorage) {

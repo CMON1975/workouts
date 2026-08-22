@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  formatMSS, createStopwatch,
+  formatMSS, createStopwatch, restSecondsFor,
   loadStopwatchState, saveStopwatchState, clearStopwatchState,
 } from './stopwatch.js';
 
@@ -304,6 +304,29 @@ test('exerciseIndex mismatch idles the countdown too', () => {
   assert.equal(state.restEpoch, null);
   const restored = createStopwatch({ now: clock.now, exerciseIndex: 2, initial: state });
   assert.equal(restored.restRemaining(90), null);
+});
+
+test('restSecondsFor resolves the prescribed rest for a template', () => {
+  const prescribed = {
+    exercises: [
+      { template_id: 7, rest_seconds: 90 },
+      { template_id: 9, rest_seconds: null },
+    ],
+  };
+  assert.equal(restSecondsFor(prescribed, 7), 90);
+});
+
+test('restSecondsFor is null for every absent or invalid shape', () => {
+  assert.equal(restSecondsFor(null, 7), null);
+  assert.equal(restSecondsFor(undefined, 7), null);
+  assert.equal(restSecondsFor({}, 7), null, 'stale cached prescription without exercises');
+  assert.equal(restSecondsFor({ exercises: [] }, 7), null);
+  assert.equal(restSecondsFor({ exercises: [{ template_id: 9, rest_seconds: 90 }] }, 7), null);
+  assert.equal(restSecondsFor({ exercises: [{ template_id: 7, rest_seconds: null }] }, 7), null);
+  assert.equal(restSecondsFor({ exercises: [{ template_id: 7, rest_seconds: 0 }] }, 7), null);
+  assert.equal(restSecondsFor({ exercises: [{ template_id: 7, rest_seconds: -5 }] }, 7), null);
+  assert.equal(restSecondsFor({ exercises: [{ template_id: 7, rest_seconds: 1.5 }] }, 7), null);
+  assert.equal(restSecondsFor({ exercises: [{ template_id: 7, rest_seconds: '90' }] }, 7), null);
 });
 
 test('storage errors are swallowed (private mode, quota)', () => {
