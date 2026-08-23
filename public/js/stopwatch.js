@@ -13,7 +13,7 @@
 // exerciseIndex guards against restoring a running timer that belonged to an
 // already-finalized exercise (crash between finalize success and commit).
 
-const STATE_VERSION = 2;
+const STATE_VERSION = 3;
 
 export function formatMSS(seconds) {
   if (seconds == null || seconds < 0) return '0:00';
@@ -27,8 +27,32 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
   let startEpoch = initial?.startEpoch ?? null;
   let lapEpoch = initial?.lapEpoch ?? null;
   let restEpoch = initial?.restEpoch ?? null;
+  // Chained work/rest cycle for timed holds/carries: { epoch, phases } where
+  // phases = [{kind:'work', seconds|null, row}, ..., {kind:'rest', seconds}].
+  // Like everything else it is epoch-anchored — sync() folds phases that have
+  // fully elapsed (frozen-tab safe: auto-transitions need no ticks).
+  let chain = initial?.chain ?? null;
+  let completedWork = Array.isArray(initial?.completedWork) ? [...initial.completedWork] : [];
+  let completedRowsCount = initial?.completedRowsCount ?? 0;
 
   const elapsedFrom = (epoch) => Math.max(0, Math.floor((now() - epoch) / 1000));
+
+  function sync() {
+    while (chain) {
+      const p = chain.phases[0];
+      if (p == null) { chain = null; break; }
+      if (typeof p.seconds !== 'number') break; // open-ended: press advances it
+      const phaseEnd = chain.epoch + p.seconds * 1000;
+      if (now() < phaseEnd) break;
+      if (p.kind === 'work') {
+        completedWork.push({ row: p.row, seconds: p.seconds });
+        completedRowsCount += 1;
+      }
+      chain = chain.phases.length > 1
+        ? { epoch: phaseEnd, phases: chain.phases.slice(1) }
+        : null;
+    }
+  }
 
   function start() {
     if (startEpoch != null) return;
@@ -62,22 +86,133 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
     return ms > 0 ? ms : null;
   }
 
+  function startChain(phases) {
+    if (!Array.isArray(phases) || phases.length === 0) return;
+    if (startEpoch == null) {
+      startEpoch = now();
+      lapEpoch = startEpoch;
+    }
+    restEpoch = null;
+    chain = { epoch: now(), phases: phases.map(p => ({ ...p })) };
+  }
+
+  function chainPhase() {
+    sync();
+    if (!chain) return null;
+    const p = chain.phases[0];
+    const elapsed = elapsedFrom(chain.epoch);
+    const out = {
+      kind: p.kind,
+      seconds: p.seconds ?? null,
+      elapsed,
+      remaining: typeof p.seconds === 'number' ? p.seconds - elapsed : null,
+    };
+    if (p.kind === 'work') out.row = p.row;
+    return out;
+  }
+
+  // Press during a chain: work ends early (actual elapsed recorded), rest is
+  // cut short (chain done — the caller starts the next cycle's chain).
+  function advanceChain() {
+    sync();
+    if (!chain) return;
+    const p = chain.phases[0];
+    if (p.kind === 'work') {
+      completedWork.push({ row: p.row, seconds: elapsedFrom(chain.epoch) });
+      completedRowsCount += 1;
+      chain = chain.phases.length > 1
+        ? { epoch: now(), phases: chain.phases.slice(1) }
+        : null;
+    } else {
+      chain = null;
+    }
+  }
+
+  // Current phases + elapsed, for (re)scheduling the beep plan on wake.
+  function chainSnapshot() {
+    sync();
+    if (!chain) return null;
+    return {
+      phases: chain.phases.map(p => ({ ...p })),
+      elapsedMs: Math.max(0, now() - chain.epoch),
+    };
+  }
+
+  function completedRows() { sync(); return completedRowsCount; }
+
+  function takeCompletedWork() {
+    sync();
+    const out = completedWork;
+    completedWork = [];
+    return out;
+  }
+
   function commitExercise() {
     startEpoch = null;
     lapEpoch = null;
     restEpoch = null;
+    chain = null;
+    completedWork = [];
+    completedRowsCount = 0;
   }
 
   function setExerciseIndex(i) { idx = i; }
 
   function toJSON() {
-    return { v: STATE_VERSION, exerciseIndex: idx, startEpoch, lapEpoch, restEpoch };
+    sync();
+    return {
+      v: STATE_VERSION, exerciseIndex: idx, startEpoch, lapEpoch, restEpoch,
+      chain, completedWork, completedRowsCount,
+    };
   }
 
   return {
     start, lap, startRest, isRunning, exerciseSeconds, displaySeconds,
     restRemaining, restRemainingMs, commitExercise, setExerciseIndex, toJSON,
+    startChain, chainPhase, advanceChain, chainSnapshot, completedRows, takeCompletedWork,
   };
+}
+
+const isTimeColumn = (name) => typeof name === 'string' && name.trim().toLowerCase() === 'time';
+
+// Derive the chain (work phases then one rest) the next press should start.
+// Chain mode is active only when the template records time (a column named
+// "time", matched like the weight autofill) AND a rest is prescribed —
+// rep lifts have rest but no time column and keep the plain press-for-rest
+// behavior. Work durations come from numeric time-column targets, read as
+// seconds; a row without one counts up until pressed. rows_per_rest chains
+// that many rows before the rest (suitcase carry L/R = 2; default 1).
+export function workChainFor({ prescribed, template, completedRows = 0 }) {
+  if (!template?.columns?.some(c => isTimeColumn(c?.name))) return null;
+  const entry = prescribed?.exercises?.find(e => e.template_id === template.id);
+  const rest = entry?.rest_seconds;
+  if (!Number.isInteger(rest) || rest <= 0) return null;
+  const rpr = Number.isInteger(entry.rows_per_rest) && entry.rows_per_rest >= 1
+    ? entry.rows_per_rest : 1;
+
+  const rowSeconds = new Map();
+  let maxRow = -1;
+  for (const t of prescribed?.targets ?? []) {
+    if (t.template_id !== template.id) continue;
+    if (t.row_index > maxRow) maxRow = t.row_index;
+    if (isTimeColumn(t.column_name) && typeof t.target_num === 'number' && t.target_num > 0) {
+      rowSeconds.set(t.row_index, Math.round(t.target_num));
+    }
+  }
+
+  const phases = [];
+  const rowCount = maxRow + 1;
+  if (completedRows >= rowCount) {
+    // Beyond the prescription (or none): open-ended work, press to end it.
+    phases.push({ kind: 'work', seconds: null, row: completedRows });
+  } else {
+    const end = Math.min(completedRows + rpr, rowCount);
+    for (let r = completedRows; r < end; r++) {
+      phases.push({ kind: 'work', seconds: rowSeconds.get(r) ?? null, row: r });
+    }
+  }
+  phases.push({ kind: 'rest', seconds: rest });
+  return phases;
 }
 
 // Prescribed rest for one template, from the cached /api/prescriptions/active
@@ -101,13 +236,20 @@ export function loadStopwatchState(workoutId, exerciseIndex, storage = globalThi
   if (state.v === 1) {
     // v1 predates rest countdowns; upgrade so a deploy mid-workout keeps the
     // running exercise timer.
-    state = { ...state, v: STATE_VERSION, restEpoch: null };
+    state = { ...state, v: 2, restEpoch: null };
+  }
+  if (state.v === 2) {
+    // v2 predates chained work/rest cycles.
+    state = { ...state, v: STATE_VERSION, chain: null, completedWork: [], completedRowsCount: 0 };
   }
   if (state.v !== STATE_VERSION || typeof state.exerciseIndex !== 'number') return null;
   if (state.exerciseIndex !== exerciseIndex) {
     // A stored running timer for a different exercise means we crashed after
     // its finalize landed; its duration is already on the server. Idle out.
-    return { v: STATE_VERSION, exerciseIndex, startEpoch: null, lapEpoch: null, restEpoch: null };
+    return {
+      v: STATE_VERSION, exerciseIndex, startEpoch: null, lapEpoch: null, restEpoch: null,
+      chain: null, completedWork: [], completedRowsCount: 0,
+    };
   }
   return state;
 }

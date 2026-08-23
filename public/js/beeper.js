@@ -21,6 +21,25 @@ export function beepOffsets(remainingMs) {
   return plan;
 }
 
+// Plan the beeps for a whole work/rest chain from its phase list: every phase
+// boundary gets the T-3..T-1 shorts plus the done tone (the same language
+// everywhere — before a carry hand-switch they prime the exchange, before the
+// rest end they prime the next set). elapsedMs shifts the plan for a wake-time
+// reschedule mid-chain; already-past offsets drop out. Planning stops at an
+// open-ended (null seconds) phase — boundaries beyond it are unknowable until
+// the press that ends it, which reschedules.
+export function chainBeepPlan(phases, elapsedMs = 0) {
+  if (!Array.isArray(phases)) return [];
+  const plan = [];
+  let cumMs = 0;
+  for (const p of phases) {
+    if (typeof p?.seconds !== 'number' || p.seconds <= 0) break;
+    cumMs += p.seconds * 1000;
+    plan.push(...beepOffsets(cumMs - elapsedMs));
+  }
+  return plan;
+}
+
 // Tone shapes, tuned on-device: short marks at T-3..T-1, a longer higher
 // done tone at zero so the end is unambiguous without looking.
 const TONES = {

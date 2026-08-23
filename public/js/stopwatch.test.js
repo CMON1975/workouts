@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   formatMSS, createStopwatch, restSecondsFor,
-  loadStopwatchState, saveStopwatchState, clearStopwatchState,
+  loadStopwatchState, saveStopwatchState, clearStopwatchState, workChainFor,
 } from './stopwatch.js';
 
 const T0 = 1_755_850_000_000;
@@ -260,7 +260,7 @@ test('commitExercise clears the countdown', () => {
   assert.equal(sw.toJSON().restEpoch, null, 'an advance mid-countdown must not leak into the next exercise');
 });
 
-test('v2 state round-trips a countdown across eviction, away time counted', () => {
+test('stopwatch state round-trips a countdown across eviction, away time counted', () => {
   const clock = fakeClock();
   const storage = fakeStorage();
   const sw = createStopwatch({ now: clock.now, exerciseIndex: 1 });
@@ -271,7 +271,7 @@ test('v2 state round-trips a countdown across eviction, away time counted', () =
 
   clock.advance(30_000); // tab evicted mid-countdown
   const state = loadStopwatchState('w-6', 1, storage);
-  assert.equal(state.v, 2);
+  assert.equal(state.v, 3);
   const restored = createStopwatch({ now: clock.now, exerciseIndex: 1, initial: state });
   assert.equal(restored.restRemaining(90), 60, 'countdown continues from wall clock');
   assert.equal(restored.exerciseSeconds(), 35);
@@ -285,7 +285,7 @@ test('loadStopwatchState upgrades a v1 payload, keeping the running timer', () =
   }));
   const state = loadStopwatchState('w-7', 2, storage);
   assert.ok(state, 'v1 payload must upgrade, not reject');
-  assert.equal(state.v, 2);
+  assert.equal(state.v, 3);
   const restored = createStopwatch({ now: clock.now, exerciseIndex: 2, initial: state });
   assert.equal(restored.isRunning(), true);
   assert.equal(restored.exerciseSeconds(), 20, 'a deploy mid-workout keeps the running timer');
@@ -339,4 +339,190 @@ test('storage errors are swallowed (private mode, quota)', () => {
   assert.equal(loadStopwatchState('w-5', 0, throwing), null);
   saveStopwatchState('w-5', sw, throwing); // must not throw
   clearStopwatchState('w-5', throwing); // must not throw
+});
+
+// ---- Chained work/rest cycles (timed holds & carries) ----
+
+const PLANK = {
+  template: { id: 9, columns: [{ name: 'time' }] },
+  prescribed: {
+    exercises: [{ template_id: 9, rest_seconds: 60 }],
+    targets: [
+      { template_id: 9, row_index: 0, column_name: 'time', target_num: 45 },
+      { template_id: 9, row_index: 1, column_name: 'time', target_num: 45 },
+      { template_id: 9, row_index: 2, column_name: 'time', target_num: 40 },
+    ],
+  },
+};
+
+const CARRY = {
+  template: { id: 10, columns: [{ name: 'weight' }, { name: 'time' }, { name: 'side' }] },
+  prescribed: {
+    exercises: [{ template_id: 10, rest_seconds: 90, rows_per_rest: 2 }],
+    targets: [0, 1, 2, 3].flatMap(r => [
+      { template_id: 10, row_index: r, column_name: 'weight', target_num: 35 },
+      { template_id: 10, row_index: r, column_name: 'time', target_num: 30 },
+    ]),
+  },
+};
+
+test('workChainFor: plank derives one timed work row then rest', () => {
+  const phases = workChainFor({ ...PLANK, completedRows: 0 });
+  assert.deepEqual(phases, [
+    { kind: 'work', seconds: 45, row: 0 },
+    { kind: 'rest', seconds: 60 },
+  ]);
+  assert.deepEqual(workChainFor({ ...PLANK, completedRows: 2 }), [
+    { kind: 'work', seconds: 40, row: 2 },
+    { kind: 'rest', seconds: 60 },
+  ]);
+});
+
+test('workChainFor: rows_per_rest chains two carry sides before one rest', () => {
+  assert.deepEqual(workChainFor({ ...CARRY, completedRows: 0 }), [
+    { kind: 'work', seconds: 30, row: 0 },
+    { kind: 'work', seconds: 30, row: 1 },
+    { kind: 'rest', seconds: 90 },
+  ]);
+  assert.deepEqual(workChainFor({ ...CARRY, completedRows: 2 }), [
+    { kind: 'work', seconds: 30, row: 2 },
+    { kind: 'work', seconds: 30, row: 3 },
+    { kind: 'rest', seconds: 90 },
+  ]);
+});
+
+test('workChainFor: max hold (time column, no time targets) is open-ended work', () => {
+  const prescribed = {
+    exercises: [{ template_id: 9, rest_seconds: 60 }],
+    targets: [],
+  };
+  assert.deepEqual(workChainFor({ template: PLANK.template, prescribed, completedRows: 0 }), [
+    { kind: 'work', seconds: null, row: 0 },
+    { kind: 'rest', seconds: 60 },
+  ]);
+});
+
+test('workChainFor: prescribed rows exhausted falls back to open-ended work', () => {
+  assert.deepEqual(workChainFor({ ...PLANK, completedRows: 3 }), [
+    { kind: 'work', seconds: null, row: 3 },
+    { kind: 'rest', seconds: 60 },
+  ]);
+});
+
+test('workChainFor: inactive without rest_seconds or without a time column', () => {
+  const noRest = { exercises: [], targets: PLANK.prescribed.targets };
+  assert.equal(workChainFor({ template: PLANK.template, prescribed: noRest, completedRows: 0 }), null);
+  const repLift = { id: 4, columns: [{ name: 'reps' }, { name: 'weight' }] };
+  assert.equal(workChainFor({ template: repLift, prescribed: {
+    exercises: [{ template_id: 4, rest_seconds: 120 }],
+    targets: [{ template_id: 4, row_index: 0, column_name: 'reps', target_num: 8 }],
+  }, completedRows: 0 }), null);
+});
+
+test('chain: carry auto-advances L -> R -> rest -> done without presses', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.startChain(workChainFor({ ...CARRY, completedRows: 0 }));
+  assert.equal(sw.isRunning(), true, 'first press also starts the exercise timer');
+  assert.deepEqual(sw.chainPhase(), { kind: 'work', row: 0, seconds: 30, elapsed: 0, remaining: 30 });
+  clock.advance(30_000);
+  assert.equal(sw.chainPhase().row, 1, 'right side starts itself');
+  clock.advance(5_000);
+  assert.deepEqual(sw.chainPhase(), { kind: 'work', row: 1, seconds: 30, elapsed: 5, remaining: 25 });
+  clock.advance(25_000);
+  assert.equal(sw.chainPhase().kind, 'rest');
+  clock.advance(90_000);
+  assert.equal(sw.chainPhase(), null, 'chain complete, idle');
+  assert.equal(sw.completedRows(), 2);
+  assert.deepEqual(sw.takeCompletedWork(), [
+    { row: 0, seconds: 30 },
+    { row: 1, seconds: 30 },
+  ]);
+  assert.deepEqual(sw.takeCompletedWork(), [], 'drained');
+});
+
+test('chain: press mid-work ends the phase early and records actual elapsed', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.startChain(workChainFor({ ...PLANK, completedRows: 1 }));
+  clock.advance(33_000);
+  sw.advanceChain();
+  assert.equal(sw.chainPhase().kind, 'rest');
+  assert.equal(sw.chainPhase().remaining, 60, 'rest re-anchored at the press');
+  assert.deepEqual(sw.takeCompletedWork(), [{ row: 1, seconds: 33 }]);
+});
+
+test('chain: open-ended work never auto-advances; press moves it to rest', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.startChain(workChainFor({ ...PLANK, completedRows: 3 }));
+  clock.advance(600_000);
+  assert.deepEqual(sw.chainPhase(), { kind: 'work', row: 3, seconds: null, elapsed: 600, remaining: null });
+  sw.advanceChain();
+  assert.equal(sw.chainPhase().kind, 'rest');
+  assert.deepEqual(sw.takeCompletedWork(), [{ row: 3, seconds: 600 }]);
+});
+
+test('chain: press during rest completes the chain immediately', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.startChain(workChainFor({ ...PLANK, completedRows: 0 }));
+  clock.advance(45_000);
+  assert.equal(sw.chainPhase().kind, 'rest');
+  clock.advance(10_000);
+  sw.advanceChain();
+  assert.equal(sw.chainPhase(), null, 'rest cut short; armed for the next press');
+  assert.equal(sw.completedRows(), 1);
+});
+
+test('chain: survives eviction mid-chain and folds phases that elapsed while away', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now, exerciseIndex: 1 });
+  sw.startChain(workChainFor({ ...CARRY, completedRows: 0 }));
+  clock.advance(12_000);
+  const snapshot = JSON.parse(JSON.stringify(sw.toJSON()));
+  clock.advance(50_000); // away: L ends at 30s, R at 60s; we're 2s into rest
+  const restored = createStopwatch({ now: clock.now, exerciseIndex: 1, initial: snapshot });
+  assert.deepEqual(restored.chainPhase(), { kind: 'rest', seconds: 90, elapsed: 2, remaining: 88 });
+  assert.equal(restored.completedRows(), 2);
+  assert.deepEqual(restored.takeCompletedWork(), [
+    { row: 0, seconds: 30 },
+    { row: 1, seconds: 30 },
+  ]);
+});
+
+test('chain: v2 state upgrades to v3 with no chain and keeps epochs', () => {
+  const storage = fakeStorage();
+  storage.setItem('stopwatch:w1', JSON.stringify({
+    v: 2, exerciseIndex: 3, startEpoch: T0, lapEpoch: T0, restEpoch: T0 + 60_000,
+  }));
+  const state = loadStopwatchState('w1', 3, storage);
+  assert.equal(state.startEpoch, T0);
+  assert.equal(state.restEpoch, T0 + 60_000);
+  assert.equal(state.chain, null);
+  assert.deepEqual(state.completedWork, []);
+  assert.equal(state.completedRowsCount, 0);
+});
+
+test('chain: exercise-index mismatch resets chain state too', () => {
+  const clock = fakeClock();
+  const storage = fakeStorage();
+  const sw = createStopwatch({ now: clock.now, exerciseIndex: 1 });
+  sw.startChain(workChainFor({ ...PLANK, completedRows: 0 }));
+  saveStopwatchState('w1', sw, storage);
+  const state = loadStopwatchState('w1', 2, storage);
+  assert.equal(state.startEpoch, null);
+  assert.equal(state.chain, null);
+});
+
+test('chain: commitExercise clears chain, log, and row count', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.startChain(workChainFor({ ...PLANK, completedRows: 0 }));
+  clock.advance(45_000);
+  sw.commitExercise();
+  assert.equal(sw.chainPhase(), null);
+  assert.equal(sw.completedRows(), 0);
+  assert.deepEqual(sw.takeCompletedWork(), []);
+  assert.equal(sw.isRunning(), false);
 });
