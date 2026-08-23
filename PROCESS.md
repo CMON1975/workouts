@@ -207,3 +207,8 @@ Running log of work done with Claude Code.
 ---
 ## 2026-08-23 — Chain-cycles deploy to prod
 **What:** User pulled `297c52e` and restarted the service on the droplet. Verified live: new cache keys served, migration 013 applied, `/active` returns `rows_per_rest` (null on wk-17 rep lifts — legacy path, as designed), wk-17 prescriptions intact.
+
+---
+## 2026-08-23 — Wk 17 re-published onto the chain timers (health-repo side)
+**What:** Amended the health repo's `upcoming_week.*` and re-published wk 17 to prod (prescriptions 67-72): Plank rest 120 (cap countdown), Farmer carry rest 90, Suitcase carry rest 90 + rows_per_rest 2 with per-side rows. Health repo commit `446bc8b`; verified via /active. HANDOFF updated: dip "hold"-column caveat and the cardio never-pipe-rest warning.
+**Why:** User: "We might as well make the coming week use it." No workouts started against 61-66, so superseding was free.
