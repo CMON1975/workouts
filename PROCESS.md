@@ -187,3 +187,7 @@ Running log of work done with Claude Code.
 **What:** End early is now a solid-red circle-x button at the far-left of the runner footer (Next stays far-right; 212px apart at 390px wide), and its native `confirm()` became an in-app `<dialog>` modal ("Keep going" / red "End workout"). Commit `59664d7`; 240/240 tests green plus a scripted chromium pass (modal open, cancel keeps the run, confirm finalizes and returns home).
 **Why:** User request: avoid accidental presses next to Next/Finish and make the destructive action visually unmistakable.
 **Notes:** Modal uses `<form method="dialog">` so buttons close with their value as `returnValue` — no click handlers; Esc/backdrop-close yields `''` and counts as cancel. Modal buttons keep text labels on purpose (destructive confirms shouldn't be icon-only x-vs-circle-x). `#runner-end` needs `flex: 0 0 auto` because `button.small` stretches. New `button.danger` reuses the themed `--danger` var. Gotcha found while verifying: a "no unfinalized workouts" assertion against a copy of the dev DB fails on pre-existing/concurrent state — key such checks to the specific workout the test created.
+
+---
+## 2026-08-23 — Deployed icons/favicon/end-early to prod
+**What:** Pulled `ef643f9..bfea79e` on the droplet after user sign-off; static-only diff, no service restart. Verified live: favicon + touch icon 200, new cache keys served, end-early dialog present, API healthy.
