@@ -422,6 +422,14 @@ button.small svg.icon,
 /* Icon-only primary actions keep a comfortable tap width */
 #submit, #runner-next { min-width: 72px; }
 
+button.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* Far-left of the footer, opposite Next; don't stretch like other .small buttons */
+#runner-end { flex: 0 0 auto; }
+
 /* New-template form */
 
 #new-tpl-form {

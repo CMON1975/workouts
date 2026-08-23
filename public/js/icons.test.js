@@ -23,6 +23,12 @@ test('every registered icon renders non-empty markup', () => {
   }
 });
 
+test('circle-x is registered for the end-early action', () => {
+  const svg = iconSvg('circle-x');
+  assert.match(svg, /<circle cx="12" cy="12" r="10"\/>/);
+  assert.match(svg, /m15 9-6 6/, 'x stroke inside the circle');
+});
+
 test('unknown icon name throws instead of rendering an empty button', () => {
   assert.throws(() => iconSvg('does-not-exist'), /unknown icon/i);
 });

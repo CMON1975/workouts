@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>Workouts</title>
 <!-- ?v= busts stale phone caches; bump when the asset changes (no build step to do it for us) -->
-<link rel="stylesheet" href="/css/app.css?v=6">
+<link rel="stylesheet" href="/css/app.css?v=7">
 </head>
 <body>
   <header>
@@ -110,9 +110,9 @@
       </div>
       <div id="runner-root"></div>
       <div class="session-footer">
+        <button id="runner-end" type="button" class="danger small" aria-label="End early" title="End early"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></button>
         <span id="runner-status" class="status">Ready</span>
         <div class="runner-actions">
-          <button id="runner-end" type="button" class="secondary small" aria-label="End early" title="End early"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg></button>
           <button id="runner-next" type="button" aria-label="Next" title="Next"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
         </div>
       </div>
@@ -196,6 +196,18 @@
       <div id="detail-root"></div>
     </section>
 
+    <dialog id="end-early-dialog" class="modal-dialog">
+      <!-- method="dialog": buttons close the dialog with their value as returnValue -->
+      <form method="dialog">
+        <h3>End this workout now?</h3>
+        <p class="muted">Past exercises are saved; remaining ones are skipped.</p>
+        <div class="form-actions">
+          <button value="cancel" class="secondary">Keep going</button>
+          <button value="end" class="danger">End workout</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="tpl-edit-dialog" class="modal-dialog">
       <form id="tpl-edit-form">
         <h3>Edit exercise</h3>
@@ -232,6 +244,6 @@
     </dialog>
   </main>
 
-  <script type="module" src="/js/app.js?v=5"></script>
+  <script type="module" src="/js/app.js?v=6"></script>
 </body>
 </html>

@@ -86,6 +86,7 @@ const els = {
   runnerStep: document.getElementById('runner-step'),
   runnerNext: document.getElementById('runner-next'),
   runnerEnd: document.getElementById('runner-end'),
+  endEarlyDialog: document.getElementById('end-early-dialog'),
   resumeBanner: document.getElementById('resume-banner'),
   exercisesDisclosure: document.getElementById('exercises-disclosure'),
   tplEditDialog: document.getElementById('tpl-edit-dialog'),
@@ -586,9 +587,19 @@ async function handleRunnerNext() {
   els.runnerNext.disabled = false;
 }
 
+// Resolves true only on an explicit "End workout" — Esc/backdrop closes count as cancel.
+function confirmEndEarly() {
+  return new Promise(resolve => {
+    const dlg = els.endEarlyDialog;
+    dlg.addEventListener('close', () => resolve(dlg.returnValue === 'end'), { once: true });
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+
 async function handleRunnerEnd() {
   if (!activeWorkout) return;
-  if (!confirm('End this workout now? Past exercises are saved; remaining ones are skipped.')) return;
+  if (!(await confirmEndEarly())) return;
   if (currentSession) {
     const draft = currentSession.getDraft();
     const hasValues = draft.values.some(
