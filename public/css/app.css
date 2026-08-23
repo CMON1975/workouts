@@ -81,6 +81,11 @@ header h1 {
   color: var(--accent);
 }
 
+/* Work-phase countdown/count-up (timed holds & carries) */
+.stopwatch-time.working {
+  color: var(--saved);
+}
+
 main, section {
   padding: 16px;
   max-width: 640px;

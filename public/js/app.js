@@ -9,10 +9,10 @@ import {
 import { installHideFlush, installOutboxDrainers, drainOutbox, readShadow } from './persistence.js';
 import { createSessionState } from './session-state.js';
 import {
-  createStopwatch, formatMSS, restSecondsFor,
+  createStopwatch, formatMSS, restSecondsFor, workChainFor,
   loadStopwatchState, saveStopwatchState, clearStopwatchState,
 } from './stopwatch.js';
-import { createBeeper, beepOffsets } from './beeper.js';
+import { createBeeper, beepOffsets, chainBeepPlan } from './beeper.js';
 import { iconSvg, setButtonIcon } from './icons.js';
 import {
   renderSessionForm, renderStatus,
@@ -349,26 +349,90 @@ function currentRestSeconds() {
   return restSecondsFor(activeWorkout.prescribed, template?.id);
 }
 
+// Chain phases the next press should start for the current exercise; null =
+// not a timed exercise (no time column / no rest) → legacy behavior.
+function currentChainPhases() {
+  if (!activeWorkout) return null;
+  const template = activeWorkout.routine.templates[activeWorkout.currentIndex];
+  if (!template) return null;
+  return workChainFor({
+    prescribed: activeWorkout.prescribed,
+    template,
+    completedRows: stopwatch?.completedRows() ?? 0,
+  });
+}
+
+function timeColumnOf(template) {
+  return template?.columns?.find(
+    c => typeof c?.name === 'string' && c.name.trim().toLowerCase() === 'time',
+  ) ?? null;
+}
+
+// Completed work phases → the set's time input ("marking the total time I was
+// able to hold"). Goes through the input's own 'input' event so it persists
+// exactly like typed input; a cell the user already filled is never touched.
+function drainRecordedTimes() {
+  if (!activeWorkout || !stopwatch) return;
+  const template = activeWorkout.routine.templates[activeWorkout.currentIndex];
+  const col = timeColumnOf(template);
+  if (!col) return;
+  const done = stopwatch.takeCompletedWork();
+  if (!done.length) return;
+  for (const { row, seconds } of done) {
+    const input = els.runnerRoot.querySelector(
+      `input[data-row-index="${row}"][data-column-id="${col.id}"]`,
+    );
+    if (!input || input.value !== '') continue;
+    input.value = String(seconds);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  saveStopwatchState(activeWorkout.workoutId, stopwatch);
+}
+
 // The interval is cosmetic only — every render recomputes from Date.now()
 // against stored epochs, so a throttled/frozen tab never loses time.
 // Ticks at 4Hz — skip the innerHTML swap unless the state actually changed.
 function setStopwatchBtn(icon, label) {
-  if (els.stopwatchBtn.dataset.icon === icon) return;
-  els.stopwatchBtn.dataset.icon = icon;
+  const state = `${icon}:${label}`;
+  if (els.stopwatchBtn.dataset.state === state) return;
+  els.stopwatchBtn.dataset.state = state;
   setButtonIcon(els.stopwatchBtn, icon, label);
 }
 
 function renderStopwatchDisplay() {
+  const cls = els.stopwatchTime.classList;
+  const phases = currentChainPhases();
+  if (phases) {
+    drainRecordedTimes();
+    const phase = stopwatch?.chainPhase() ?? null;
+    if (phase == null) {
+      // Armed: preview what the press starts (the first work duration).
+      els.stopwatchTime.textContent = formatMSS(phases[0].seconds ?? 0);
+      cls.remove('resting'); cls.remove('working');
+      setStopwatchBtn('play', 'Start set');
+    } else if (phase.kind === 'work') {
+      // Countdown when prescribed, count-up when open-ended (max holds).
+      els.stopwatchTime.textContent = formatMSS(phase.remaining ?? phase.elapsed);
+      cls.remove('resting'); cls.add('working');
+      setStopwatchBtn('flag', 'Done');
+    } else {
+      els.stopwatchTime.textContent = formatMSS(phase.remaining);
+      cls.add('resting'); cls.remove('working');
+      setStopwatchBtn('play', 'Start set');
+    }
+    return;
+  }
+  cls.remove('working');
   const rest = currentRestSeconds();
   if (rest != null) {
     const remaining = stopwatch?.restRemaining(rest) ?? null;
     els.stopwatchTime.textContent = formatMSS(remaining ?? rest);
-    els.stopwatchTime.classList.toggle('resting', remaining != null);
+    cls.toggle('resting', remaining != null);
     if (stopwatch?.isRunning()) setStopwatchBtn('timer', 'Rest');
     else setStopwatchBtn('play', 'Start');
     return;
   }
-  els.stopwatchTime.classList.remove('resting');
+  cls.remove('resting');
   els.stopwatchTime.textContent = formatMSS(stopwatch?.displaySeconds() ?? 0);
   if (stopwatch?.isRunning()) setStopwatchBtn('flag', 'Lap');
   else setStopwatchBtn('play', 'Start');
@@ -392,6 +456,27 @@ function handleStopwatchBtn() {
   // Synchronously, on every press: the gesture is what unlocks audio on iOS,
   // and pressing Start warms the context before the first countdown needs it.
   beeper.ensureContext();
+  const phases = currentChainPhases();
+  if (phases) {
+    // Press = go: start the cycle when armed, end a work phase early when
+    // working, cut rest short (straight into the next cycle) when resting.
+    if (stopwatch.chainPhase() == null) {
+      stopwatch.startChain(phases);
+    } else {
+      stopwatch.advanceChain();
+      if (stopwatch.chainPhase() == null) {
+        const next = currentChainPhases(); // completedRows moved on
+        if (next) stopwatch.startChain(next);
+      }
+    }
+    // One gesture arms the beeps for every remaining boundary of the chain.
+    const snap = stopwatch.chainSnapshot();
+    beeper.schedule(snap ? chainBeepPlan(snap.phases, snap.elapsedMs) : []);
+    drainRecordedTimes();
+    saveStopwatchState(activeWorkout.workoutId, stopwatch);
+    renderStopwatchDisplay();
+    return;
+  }
   const rest = currentRestSeconds();
   if (!stopwatch.isRunning()) {
     stopwatch.start();
@@ -543,6 +628,7 @@ function updateRunnerHeader() {
 async function handleRunnerNext() {
   if (!activeWorkout || !currentSession) return;
   els.runnerNext.disabled = true;
+  drainRecordedTimes(); // a Done-then-Next race must not drop the last hold time
 
   const savedIndex = activeWorkout.currentIndex;
   const nextIndex = savedIndex + 1;
@@ -1508,9 +1594,16 @@ async function boot() {
   // were queued before the freeze may have been dropped with the context.
   const wakeStopwatch = () => {
     if (!stopwatch) return;
-    const rest = currentRestSeconds();
-    const ms = rest != null ? stopwatch.restRemainingMs(rest) : null;
-    if (ms != null && beeper.isArmed()) beeper.schedule(beepOffsets(ms));
+    if (beeper.isArmed()) {
+      const snap = stopwatch.chainSnapshot();
+      if (snap) {
+        beeper.schedule(chainBeepPlan(snap.phases, snap.elapsedMs));
+      } else {
+        const rest = currentRestSeconds();
+        const ms = rest != null ? stopwatch.restRemainingMs(rest) : null;
+        if (ms != null) beeper.schedule(beepOffsets(ms));
+      }
+    }
     renderStopwatchDisplay();
   };
   document.addEventListener('visibilitychange', () => {
