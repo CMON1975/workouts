@@ -407,6 +407,21 @@ button.secondary {
   outline-offset: 2px;
 }
 
+/* Inline Lucide icons (icons.js + index.html); color rides on currentColor */
+svg.icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+button > svg.icon { display: block; margin: 0 auto; }
+button.small svg.icon,
+.back-btn svg.icon,
+.body-metrics-form button svg.icon { width: 18px; height: 18px; }
+.icon-btn svg.icon,
+.row-action svg.icon { width: 22px; height: 22px; }
+/* Icon-only primary actions keep a comfortable tap width */
+#submit, #runner-next { min-width: 72px; }
+
 /* New-template form */
 
 #new-tpl-form {

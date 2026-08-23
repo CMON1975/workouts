@@ -13,6 +13,7 @@ import {
   loadStopwatchState, saveStopwatchState, clearStopwatchState,
 } from './stopwatch.js';
 import { createBeeper, beepOffsets } from './beeper.js';
+import { iconSvg, setButtonIcon } from './icons.js';
 import {
   renderSessionForm, renderStatus,
   renderHistoryList, renderSessionDetail, renderWorkoutDetail,
@@ -349,18 +350,27 @@ function currentRestSeconds() {
 
 // The interval is cosmetic only — every render recomputes from Date.now()
 // against stored epochs, so a throttled/frozen tab never loses time.
+// Ticks at 4Hz — skip the innerHTML swap unless the state actually changed.
+function setStopwatchBtn(icon, label) {
+  if (els.stopwatchBtn.dataset.icon === icon) return;
+  els.stopwatchBtn.dataset.icon = icon;
+  setButtonIcon(els.stopwatchBtn, icon, label);
+}
+
 function renderStopwatchDisplay() {
   const rest = currentRestSeconds();
   if (rest != null) {
     const remaining = stopwatch?.restRemaining(rest) ?? null;
     els.stopwatchTime.textContent = formatMSS(remaining ?? rest);
     els.stopwatchTime.classList.toggle('resting', remaining != null);
-    els.stopwatchBtn.textContent = stopwatch?.isRunning() ? 'Rest' : 'Start';
+    if (stopwatch?.isRunning()) setStopwatchBtn('timer', 'Rest');
+    else setStopwatchBtn('play', 'Start');
     return;
   }
   els.stopwatchTime.classList.remove('resting');
   els.stopwatchTime.textContent = formatMSS(stopwatch?.displaySeconds() ?? 0);
-  els.stopwatchBtn.textContent = stopwatch?.isRunning() ? 'Lap' : 'Start';
+  if (stopwatch?.isRunning()) setStopwatchBtn('flag', 'Lap');
+  else setStopwatchBtn('play', 'Start');
 }
 
 function showStopwatchBar() {
@@ -525,7 +535,8 @@ function updateRunnerHeader() {
   els.runnerRoutineName.textContent = routine.name;
   els.runnerStep.textContent = `${currentIndex + 1} / ${n} · ${template.name}`;
   els.runnerBack.hidden = currentIndex === 0;
-  els.runnerNext.textContent = currentIndex === n - 1 ? 'Finish' : 'Next';
+  if (currentIndex === n - 1) setButtonIcon(els.runnerNext, 'check', 'Finish');
+  else setButtonIcon(els.runnerNext, 'arrow-right', 'Next');
 }
 
 async function handleRunnerNext() {
@@ -835,7 +846,7 @@ function renderColBuilder() {
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'secondary small col-del';
-    delBtn.textContent = '×';
+    delBtn.innerHTML = iconSvg('x');
     delBtn.setAttribute('aria-label', 'Remove column');
     delBtn.disabled = rowColumns.length <= 1;
     delBtn.addEventListener('click', () => {
@@ -972,7 +983,8 @@ function renderTeColBuilder() {
     row.className = 'col-row';
 
     const up = document.createElement('button');
-    up.type = 'button'; up.className = 'secondary small'; up.textContent = '↑';
+    up.type = 'button'; up.className = 'secondary small';
+    setButtonIcon(up, 'chevron-up', 'Move up');
     up.disabled = i === 0;
     up.addEventListener('click', () => {
       [tplEditColumns[i - 1], tplEditColumns[i]] = [tplEditColumns[i], tplEditColumns[i - 1]];
@@ -981,7 +993,8 @@ function renderTeColBuilder() {
     row.appendChild(up);
 
     const down = document.createElement('button');
-    down.type = 'button'; down.className = 'secondary small'; down.textContent = '↓';
+    down.type = 'button'; down.className = 'secondary small';
+    setButtonIcon(down, 'chevron-down', 'Move down');
     down.disabled = i === tplEditColumns.length - 1;
     down.addEventListener('click', () => {
       [tplEditColumns[i], tplEditColumns[i + 1]] = [tplEditColumns[i + 1], tplEditColumns[i]];
@@ -1030,7 +1043,7 @@ function renderTeColBuilder() {
       const delBtn = document.createElement('button');
       delBtn.type = 'button';
       delBtn.className = 'secondary small col-del';
-      delBtn.textContent = '×';
+      delBtn.innerHTML = iconSvg('x');
       delBtn.setAttribute('aria-label', 'Remove column');
       delBtn.addEventListener('click', () => {
         tplEditColumns.splice(i, 1);
@@ -1162,7 +1175,7 @@ function openNewRoutine() {
   els.nrEditBanner.hidden = true;
   rtSelectedIds = [];
   els.newRtHeading.textContent = 'New routine';
-  els.nrSubmit.textContent = 'Save routine';
+  setButtonIcon(els.nrSubmit, 'check', 'Save routine');
   renderBuilder();
   els.nrSubmit.disabled = false;
   showView('newRt');
@@ -1197,7 +1210,7 @@ async function openEditRoutine(routine) {
   els.nrEditBanner.hidden = false;
   els.nrName.value = full.name;
   els.newRtHeading.textContent = 'Edit routine';
-  els.nrSubmit.textContent = 'Save changes';
+  setButtonIcon(els.nrSubmit, 'check', 'Save changes');
   renderBuilder();
   els.nrSubmit.disabled = false;
   showView('newRt');

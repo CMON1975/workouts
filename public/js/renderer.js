@@ -1,15 +1,14 @@
 import { attachSwipeReveal } from './swipe.js';
 import { isWeightColumn, planWeightAutofill } from './autofill.js';
 import { formatMSS } from './stopwatch.js';
-
-const TRASH_GLYPH = '🗑';
+import { iconSvg, setButtonIcon } from './icons.js';
 
 function makeTrashAction() {
   const action = document.createElement('button');
   action.type = 'button';
   action.className = 'row-action row-action-trash';
   action.setAttribute('aria-label', 'Delete');
-  action.textContent = TRASH_GLYPH;
+  action.innerHTML = iconSvg('trash-2');
   return action;
 }
 
@@ -626,16 +625,18 @@ export function renderRoutineBuilder({
     const ctrls = document.createElement('span');
     ctrls.className = 'rt-controls';
     const up = document.createElement('button');
-    up.type = 'button'; up.className = 'secondary small'; up.textContent = '↑';
+    up.type = 'button'; up.className = 'secondary small';
+    setButtonIcon(up, 'chevron-up', 'Move up');
     up.disabled = i === 0;
     up.addEventListener('click', () => onMoveUp(i));
     const down = document.createElement('button');
-    down.type = 'button'; down.className = 'secondary small'; down.textContent = '↓';
+    down.type = 'button'; down.className = 'secondary small';
+    setButtonIcon(down, 'chevron-down', 'Move down');
     down.disabled = i === selectedIds.length - 1;
     down.addEventListener('click', () => onMoveDown(i));
     ctrls.append(up, down);
     const rm = document.createElement('button');
-    rm.type = 'button'; rm.className = 'secondary small'; rm.textContent = '×';
+    rm.type = 'button'; rm.className = 'secondary small'; rm.innerHTML = iconSvg('x');
     rm.setAttribute('aria-label', 'Remove');
     rm.addEventListener('click', () => onRemove(id));
     ctrls.append(rm);
@@ -706,7 +707,7 @@ export function renderRoutineManageList(root, {
       const editBtn = document.createElement('button');
       editBtn.type = 'button';
       editBtn.className = 'secondary small';
-      editBtn.textContent = 'Edit';
+      setButtonIcon(editBtn, 'pencil', 'Edit');
       editBtn.addEventListener('click', () => onEdit(r));
       actions.appendChild(editBtn);
     }
@@ -714,7 +715,8 @@ export function renderRoutineManageList(root, {
     const archBtn = document.createElement('button');
     archBtn.type = 'button';
     archBtn.className = 'secondary small';
-    archBtn.textContent = r.archived_at ? 'Restore' : 'Archive';
+    if (r.archived_at) setButtonIcon(archBtn, 'archive-restore', 'Restore');
+    else setButtonIcon(archBtn, 'archive', 'Archive');
     archBtn.addEventListener('click', () => onArchiveToggle(r));
     actions.appendChild(archBtn);
 
@@ -925,14 +927,15 @@ export function renderManageList(root, { templates, onEdit, onArchiveToggle }) {
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
     editBtn.className = 'secondary small';
-    editBtn.textContent = 'Edit';
+    setButtonIcon(editBtn, 'pencil', 'Edit');
     editBtn.addEventListener('click', () => onEdit(t));
     actions.appendChild(editBtn);
 
     const archBtn = document.createElement('button');
     archBtn.type = 'button';
     archBtn.className = 'secondary small';
-    archBtn.textContent = t.archived_at ? 'Restore' : 'Archive';
+    if (t.archived_at) setButtonIcon(archBtn, 'archive-restore', 'Restore');
+    else setButtonIcon(archBtn, 'archive', 'Archive');
     archBtn.addEventListener('click', () => onArchiveToggle(t));
     actions.appendChild(archBtn);
 
