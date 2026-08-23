@@ -191,3 +191,9 @@ Running log of work done with Claude Code.
 ---
 ## 2026-08-23 — Deployed icons/favicon/end-early to prod
 **What:** Pulled `ef643f9..bfea79e` on the droplet after user sign-off; static-only diff, no service restart. Verified live: favicon + touch icon 200, new cache keys served, end-early dialog present, API healthy.
+
+---
+## 2026-08-23 — Timed-holds fixture on the dev DB
+**What:** Imported a "Timed Holds Demo" routine (Demo Plank 3×45s rest 60; Demo Suitcase Carry 4×30s/35lb/L-R rest 90) through the real `/api/prescriptions/import` path, dated 2026-08-24 → 2026-08-30 so it resolves active. Fixture only — no code change; payload kept at scratchpad `timed-holds-import.json`.
+**Why:** Testbed for the count-up-vs-countdown question (HANDOFF open item): drive the current behavior on hold/carry shapes and later verify the combined mode against it.
+**Notes:** Confirmed the gap concretely on a scratch copy: 3s into a "hold" the bar still shows a frozen 1:00 (full rest) — nothing counts the work. Carry's 4-row × 3-col layout fits at 390px; weight prefill and text targets (side L/R) render right. Demo-prefixed template names on purpose — template matching in import is by exact name, so a future real "Plank" from the health repo won't collide.
