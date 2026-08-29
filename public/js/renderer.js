@@ -493,6 +493,23 @@ function describeAge(ms) {
   return `${Math.floor(diffDays / 365)} years ago`;
 }
 
+// Per-cell "last: 12 · 7 days ago" hint text (user-specified format,
+// 2026-08-28 session note). Days are calendar days, not 24h buckets: a
+// weekly exercise checked a few hours early must still read "7 days ago",
+// and last evening's session is "1 day ago" next morning. Pure for tests;
+// the DOM shell passes real prev.finalized_at / Date.now().
+export function lastRecordHint(value, finalizedAtMs, nowMs = Date.now()) {
+  if (finalizedAtMs == null) return `last: ${value}`;
+  const then = new Date(finalizedAtMs);
+  const now = new Date(nowMs);
+  const days = Math.round(
+    (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+      - Date.UTC(then.getFullYear(), then.getMonth(), then.getDate())) / 86400000,
+  );
+  const age = days <= 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`;
+  return `last: ${value} · ${age}`;
+}
+
 function shortDate(ms) {
   const d = new Date(ms);
   const opts = { month: 'short', day: 'numeric' };
@@ -538,7 +555,7 @@ export function applyPreviousHints(root, { template, prev, prescribed = null }) 
     if (raw === '' || raw === null || raw === undefined) continue;
     const hint = document.createElement('span');
     hint.className = 'prev-hint';
-    hint.textContent = 'was ' + raw;
+    hint.textContent = lastRecordHint(raw, prev.finalized_at);
     field.appendChild(hint);
   }
 
