@@ -234,3 +234,7 @@ Running log of work done with Claude Code.
 **What:** The "Last session:" header now says "1 week ago" (singular units) and counts calendar days like the per-cell hints, so header and cells can never disagree across a midnight or an early check (`0dfaf49`, after refactor `4407f9d` extracting `calendarDaysAgo`). Checkbox hints joined the format: "was done" → "last: done · 7 days ago" (`0617200`). 271/271 green.
 **Why:** Both flagged during the hint-format change; user said take care of both.
 **Notes:** Droplet SSH access recorded in global CLAUDE.md (decision 2026-08-28): `c@cmon1975droplet` key-auth over tailnet, `/var/www/workouts` ACL-writable so pulls work, no passwordless sudo so restarts stay user-run. First attempted deploy pull over ssh was denied by the permission classifier — needs a settings allowlist rule (or per-call approval) before Claude can deploy pulls unattended. Droplet is behind by today's docs + hint commits; pull pending, no restart needed (static JS only).
+
+---
+## 2026-08-28 — Deploy: hint leftovers
+**What:** User pulled `85675ef` on the droplet (first use of the `!`-prefix ssh path; a Claude-side deploy pull still needs a permission rule). Verified live: new renderer on the wire, no restart needed.
