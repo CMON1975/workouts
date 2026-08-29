@@ -224,3 +224,7 @@ Running log of work done with Claude Code.
 **What:** Per-cell previous-value hints now read `last: 12 · 7 days ago` instead of `was 12`, per the user's 2026-08-28 Dead bug session note. Pure `lastRecordHint` helper exported from renderer.js and TDD'd in a new `renderer.test.js` (4 tests, renderer's first). Commit `e7bce33`; 268/268 green.
 **Why:** The bare "was X" didn't say how stale the record is at the point of use; the user wants the age next to the value, not just in the Last-session header.
 **Notes:** Ages are calendar days (local-midnight diff via the UTC trick), not 24h buckets — 6.9 elapsed days still reads "7 days ago" for weekly cadence checks; same-day reads "today". Deliberately not touched, flagged to user: checkbox hints still say "was done / was not done", and the `.prev-header`'s `describeAge` has a "1 weeks ago" grammar bug (also now slightly redundant with per-cell ages). Also this session: `serve.sh` tailnet runner created, and a "Multi Rest Demo" routine imported into the local DB (three Demo Curls clones at 10/12/15s rest — routine_templates UNIQUE forbids literal duplicates) for cross-exercise beeper testing.
+
+---
+## 2026-08-28 — Deploy: beeper fix + last-record hints
+**What:** User pulled `0fe0c31` and restarted on the droplet. Verified live: `?v=8` served, patched beeper (`state !== 'running'` resume) and `lastRecordHint` on the wire, API 200. Both of today's workout-note items are now in prod; real verification of the beep fix is the next on-device workout (screen-lock between sets).
