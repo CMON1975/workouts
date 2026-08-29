@@ -63,7 +63,11 @@ export function createBeeper() {
       const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
       if (!AC) return;
       if (!ctx) ctx = new AC();
-      if (ctx.state === 'suspended') ctx.resume();
+      // Anything but 'running' needs a resume — iOS parks a running context
+      // in the non-standard 'interrupted' state on screen lock / app switch
+      // and never leaves it on its own, which silenced every beep after the
+      // first lock of a workout.
+      if (ctx.state !== 'running') ctx.resume();
     } catch (_) {
       ctx = null;
     }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { beepOffsets, chainBeepPlan } from './beeper.js';
+import { beepOffsets, chainBeepPlan, createBeeper } from './beeper.js';
 
 test('beepOffsets plans three shorts and a done tone', () => {
   assert.deepEqual(beepOffsets(90_000), [
@@ -86,4 +86,67 @@ test('chainBeepPlan stops at an open-ended phase — boundaries beyond it are un
 test('chainBeepPlan on garbage input yields no beeps', () => {
   assert.deepEqual(chainBeepPlan(null, 0), []);
   assert.deepEqual(chainBeepPlan([], 0), []);
+});
+
+// ---- ensureContext vs. the AudioContext lifecycle ----
+//
+// The Web Audio nodes stay untested, but the state machine around resume()
+// is drivable with a fake AudioContext class — and it is where the field bug
+// lived: iOS flips a running context to the non-standard 'interrupted' state
+// on screen lock / app switch and never leaves it on its own.
+
+function installFakeAudioContext(t) {
+  const instances = [];
+  class FakeAudioContext {
+    constructor() {
+      this.state = 'suspended'; // fresh contexts start suspended on iOS
+      this.resumeCalls = 0;
+      instances.push(this);
+    }
+    resume() {
+      this.resumeCalls += 1;
+      this.state = 'running';
+      return Promise.resolve();
+    }
+  }
+  const prev = Object.getOwnPropertyDescriptor(globalThis, 'AudioContext');
+  globalThis.AudioContext = FakeAudioContext;
+  t.after(() => {
+    if (prev) Object.defineProperty(globalThis, 'AudioContext', prev);
+    else delete globalThis.AudioContext;
+  });
+  return instances;
+}
+
+test('ensureContext creates one context and resumes it out of suspended', (t) => {
+  const instances = installFakeAudioContext(t);
+  const beeper = createBeeper();
+  assert.equal(beeper.isArmed(), false);
+  beeper.ensureContext();
+  assert.equal(instances.length, 1);
+  assert.equal(instances[0].state, 'running');
+  assert.equal(beeper.isArmed(), true);
+  beeper.ensureContext();
+  assert.equal(instances.length, 1, 'later presses reuse the same context');
+});
+
+test('ensureContext does not redundantly resume a running context', (t) => {
+  const instances = installFakeAudioContext(t);
+  const beeper = createBeeper();
+  beeper.ensureContext();
+  const calls = instances[0].resumeCalls;
+  beeper.ensureContext();
+  assert.equal(instances[0].resumeCalls, calls);
+});
+
+test("ensureContext resumes a context iOS left in 'interrupted'", (t) => {
+  const instances = installFakeAudioContext(t);
+  const beeper = createBeeper();
+  beeper.ensureContext(); // first press: created + resumed
+  const ctx = instances[0];
+  ctx.state = 'interrupted'; // screen locked between sets
+  const calls = ctx.resumeCalls;
+  beeper.ensureContext(); // next press must bring the audio back
+  assert.equal(ctx.resumeCalls, calls + 1,
+    'an interrupted context must be resumed, not just a suspended one');
 });

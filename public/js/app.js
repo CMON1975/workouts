@@ -1595,6 +1595,11 @@ async function boot() {
   const wakeStopwatch = () => {
     if (!stopwatch) return;
     if (beeper.isArmed()) {
+      // Not a gesture, but once a press has unlocked audio WebKit allows a
+      // resume from here — without it a chain that was frozen mid-countdown
+      // stays interrupted (silent) until the next press, which chains never
+      // get. If WebKit refuses, the next press's ensureContext recovers.
+      beeper.ensureContext();
       const snap = stopwatch.chainSnapshot();
       if (snap) {
         beeper.schedule(chainBeepPlan(snap.phases, snap.elapsedMs));
