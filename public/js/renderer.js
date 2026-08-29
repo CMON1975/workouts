@@ -500,14 +500,18 @@ function describeAge(ms) {
 // the DOM shell passes real prev.finalized_at / Date.now().
 export function lastRecordHint(value, finalizedAtMs, nowMs = Date.now()) {
   if (finalizedAtMs == null) return `last: ${value}`;
-  const then = new Date(finalizedAtMs);
+  const days = calendarDaysAgo(finalizedAtMs, nowMs);
+  const age = days <= 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`;
+  return `last: ${value} · ${age}`;
+}
+
+function calendarDaysAgo(thenMs, nowMs) {
+  const then = new Date(thenMs);
   const now = new Date(nowMs);
-  const days = Math.round(
+  return Math.round(
     (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
       - Date.UTC(then.getFullYear(), then.getMonth(), then.getDate())) / 86400000,
   );
-  const age = days <= 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`;
-  return `last: ${value} · ${age}`;
 }
 
 function shortDate(ms) {
