@@ -15,6 +15,11 @@ test('lastRecordHint appends the age in days to the last record', () => {
     lastRecordHint('8/side', at(2026, 8, 14), at(2026, 8, 28)),
     'last: 8/side · 14 days ago',
   );
+  // Checkbox templates pass done / not done as the value.
+  assert.equal(
+    lastRecordHint('not done', at(2026, 8, 21), at(2026, 8, 28)),
+    'last: not done · 7 days ago',
+  );
 });
 
 test('lastRecordHint counts calendar days, not 24h buckets', () => {

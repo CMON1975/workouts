@@ -552,7 +552,7 @@ export function applyPreviousHints(root, { template, prev, prescribed = null }) 
       if (row.querySelector('.prev-hint')) continue;
       const hint = document.createElement('span');
       hint.className = 'prev-hint';
-      hint.textContent = v.value_num === 1 ? 'was done' : 'was not done';
+      hint.textContent = lastRecordHint(v.value_num === 1 ? 'done' : 'not done', prev.finalized_at);
       row.appendChild(hint);
       continue;
     }
