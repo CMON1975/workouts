@@ -228,3 +228,9 @@ Running log of work done with Claude Code.
 ---
 ## 2026-08-28 — Deploy: beeper fix + last-record hints
 **What:** User pulled `0fe0c31` and restarted on the droplet. Verified live: `?v=8` served, patched beeper (`state !== 'running'` resume) and `lastRecordHint` on the wire, API 200. Both of today's workout-note items are now in prod; real verification of the beep fix is the next on-device workout (screen-lock between sets).
+
+---
+## 2026-08-28 — Hint leftovers: describeAge grammar + checkbox hints
+**What:** The "Last session:" header now says "1 week ago" (singular units) and counts calendar days like the per-cell hints, so header and cells can never disagree across a midnight or an early check (`0dfaf49`, after refactor `4407f9d` extracting `calendarDaysAgo`). Checkbox hints joined the format: "was done" → "last: done · 7 days ago" (`0617200`). 271/271 green.
+**Why:** Both flagged during the hint-format change; user said take care of both.
+**Notes:** Droplet SSH access recorded in global CLAUDE.md (decision 2026-08-28): `c@cmon1975droplet` key-auth over tailnet, `/var/www/workouts` ACL-writable so pulls work, no passwordless sudo so restarts stay user-run. First attempted deploy pull over ssh was denied by the permission classifier — needs a settings allowlist rule (or per-call approval) before Claude can deploy pulls unattended. Droplet is behind by today's docs + hint commits; pull pending, no restart needed (static JS only).
