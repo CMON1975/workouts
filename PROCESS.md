@@ -212,3 +212,9 @@ Running log of work done with Claude Code.
 ## 2026-08-23 — Wk 17 re-published onto the chain timers (health-repo side)
 **What:** Amended the health repo's `upcoming_week.*` and re-published wk 17 to prod (prescriptions 67-72): Plank rest 120 (cap countdown), Farmer carry rest 90, Suitcase carry rest 90 + rows_per_rest 2 with per-side rows. Health repo commit `446bc8b`; verified via /active. HANDOFF updated: dip "hold"-column caveat and the cardio never-pipe-rest warning.
 **Why:** User: "We might as well make the coming week use it." No workouts started against 61-66, so superseding was free.
+
+---
+## 2026-08-28 — Beeper silent after first armed set (iOS interrupted state)
+**What:** Fixed the workout-note bug "beeps play for the first set where they're armed, then are silent for the rest of the routine." `ensureContext` only resumed a `'suspended'` AudioContext; iOS flips a running context to the non-standard `'interrupted'` state on screen lock / app switch and never leaves it on its own, so every schedule after the first lock landed on a frozen audio clock. Now resumes on any non-running state, and `wakeStopwatch` also attempts the resume (chains get no press between unlock and their next boundary; WebKit permits a gestureless resume once audio was unlocked). Commit `3b0a9a7`; 264/264 green.
+**Why:** User's 2026-08-28 Farmer-carry session note; degrades the chain/rest timers they use every workout.
+**Notes:** The Web Audio shell was "untestable" but the resume state machine isn't — drove it with a fake `globalThis.AudioContext` class (2 characterization tests + 1 red→green). Wall-clock stopwatch kept the visible countdown correct throughout, which is why only audio died. Not reproduced on-device (needs a real iPhone lock); the fix is the documented WebKit remedy for exactly this symptom — if beeps still drop next workout, next suspect is recreating the context instead of resuming. Bumped app.js to ?v=8. Droplet pull pending.
