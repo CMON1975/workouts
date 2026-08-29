@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lastRecordHint } from './renderer.js';
+import { lastRecordHint, describeAge } from './renderer.js';
 
 // Timestamps built via the local-time Date constructor so the expected
 // calendar-day gaps hold in any TZ the tests run in.
@@ -41,4 +41,27 @@ test('lastRecordHint says today for a same-day record', () => {
 test('lastRecordHint degrades to the bare value without a finalize time', () => {
   assert.equal(lastRecordHint(12, null, at(2026, 8, 28)), 'last: 12');
   assert.equal(lastRecordHint(12, undefined, at(2026, 8, 28)), 'last: 12');
+});
+
+// ---- describeAge (the "Last session:" header) ----
+
+test('describeAge uses singular units', () => {
+  assert.equal(describeAge(at(2026, 8, 21), at(2026, 8, 28)), '1 week ago');
+  assert.equal(describeAge(at(2026, 7, 29), at(2026, 8, 28)), '1 month ago');
+  assert.equal(describeAge(at(2025, 8, 28), at(2026, 8, 28)), '1 year ago');
+});
+
+test('describeAge keeps plural units plural', () => {
+  assert.equal(describeAge(at(2026, 8, 14), at(2026, 8, 28)), '2 weeks ago');
+  assert.equal(describeAge(at(2026, 6, 28), at(2026, 8, 28)), '2 months ago');
+  assert.equal(describeAge(at(2024, 8, 20), at(2026, 8, 28)), '2 years ago');
+  assert.equal(describeAge(at(2026, 8, 25), at(2026, 8, 28)), '3 days ago');
+});
+
+test('describeAge counts calendar days like the per-cell hints', () => {
+  // Same-form consistency: the header and the cell ages derive from the same
+  // finalized_at and must never disagree across a midnight or an early check.
+  assert.equal(describeAge(at(2026, 8, 27, 19), at(2026, 8, 28, 9)), 'yesterday');
+  assert.equal(describeAge(at(2026, 8, 21, 11), at(2026, 8, 28, 9)), '1 week ago');
+  assert.equal(describeAge(at(2026, 8, 28, 7), at(2026, 8, 28, 21)), 'today');
 });

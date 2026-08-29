@@ -483,14 +483,17 @@ export function renderWorkoutDetail(root, { workout, templatesById, onDeleteChil
   }
 }
 
-function describeAge(ms) {
-  const diffDays = Math.floor((Date.now() - ms) / 86400000);
-  if (diffDays === 0) return 'today';
+// Calendar days (like lastRecordHint), not 24h buckets, so the header can
+// never disagree with the per-cell ages derived from the same finalized_at.
+export function describeAge(ms, nowMs = Date.now()) {
+  const diffDays = calendarDaysAgo(ms, nowMs);
+  const unit = (n, word) => `${n} ${word}${n === 1 ? '' : 's'} ago`;
+  if (diffDays <= 0) return 'today';
   if (diffDays === 1) return 'yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-  return `${Math.floor(diffDays / 365)} years ago`;
+  if (diffDays < 7) return unit(diffDays, 'day');
+  if (diffDays < 30) return unit(Math.floor(diffDays / 7), 'week');
+  if (diffDays < 365) return unit(Math.floor(diffDays / 30), 'month');
+  return unit(Math.floor(diffDays / 365), 'year');
 }
 
 // Per-cell "last: 12 · 7 days ago" hint text (user-specified format,
