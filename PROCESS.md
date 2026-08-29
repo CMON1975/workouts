@@ -238,3 +238,8 @@ Running log of work done with Claude Code.
 ---
 ## 2026-08-28 — Deploy: hint leftovers
 **What:** User pulled `85675ef` on the droplet (first use of the `!`-prefix ssh path; a Claude-side deploy pull still needs a permission rule). Verified live: new renderer on the wire, no restart needed.
+
+---
+## 2026-08-28 — Dip column renamed "hold" → "time" on prod
+**What:** PATCHed template 31's column 54 to "time" (same id/unit/position, history intact) via the prod API, closing the HANDOFF either/or in favor of rename-over-widening. HANDOFF flagged for Sunday: wk 18 can pipe rest_seconds on dips.
+**Why:** Chain mode gates on a column named exactly "time"; dips were the only timed exercise locked out by name. Zero code beats a synonym list; if more name mismatches appear, the structural fix is gating on a declared marker (duration value_type or per-column flag), not more names.
