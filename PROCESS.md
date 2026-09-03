@@ -260,3 +260,9 @@ Running log of work done with Claude Code.
 ## 2026-09-02 — Deploy: auto-start clock, 3x timer, interval timer
 **What:** Pulled `34d6d1a..ed6e687` on the droplet over ssh after the user's smoke-test sign-off ("looks good"). Static side verified live at once: `?v=10` app.js/css served (js=200 css=200), index references the new keys (2), `intervalPhasesFor` and the `#stopwatch-label` span on the wire. Server side (route + migration 014) waits on the user's `systemctl restart workouts`; until then the old server runs, which the new client tolerates (no `intervals` key → not an interval exercise; the auto-start clock is client-only).
 **Notes:** First deploy pull that ran from Claude's side over ssh (auto mode); no permission rule change was needed this time.
+
+---
+## 2026-09-02 — No rest countdown after the final prescribed row
+**What:** `workChainFor` drops the trailing rest when a chain reaches the prescription's last row (plank row 3, carry pair 2), and the press handler only rolls into the next cycle when the phase just ended was a rest. Commit `86f8815`; 283/283 green (1 new test red first, 2 old pins retargeted to a middle row) plus a 13-check chromium pass driving the Timed Holds Demo plank and carry end to end.
+**Why:** HANDOFF UX item from the user's 2026-08-24 plank note ("after flagging my time here it went direct to rest").
+**Notes:** The headless pass caught what the unit test could not: pressing Done on the final row ended the chain and the handler, assuming chains always end in rest, immediately started an open-ended extra set. Sets beyond the prescription keep their rest (nothing is known to be final). Rep lifts unchanged on purpose — their rest is press-initiated. Also this session: moved the beeper item to Done in HANDOFF (fixed 08-28, before the Sunday note was written), and confirmed the prod restart landed (`/active` now carries the `intervals` key). Assets bumped to ?v=11.
