@@ -515,11 +515,14 @@ function handleStopwatchBtn() {
   if (phases) {
     // Press = go: start the cycle when armed, end a work phase early when
     // working, cut rest short (straight into the next cycle) when resting.
+    // A chain that ends on its final work row (no rest to chain into) just
+    // ends — the next press, not this one, starts an extra set.
     if (stopwatch.chainPhase() == null) {
       stopwatch.startChain(phases);
     } else {
+      const wasRest = stopwatch.chainPhase().kind === 'rest';
       stopwatch.advanceChain();
-      if (stopwatch.chainPhase() == null) {
+      if (wasRest && stopwatch.chainPhase() == null) {
         const next = currentChainPhases(); // completedRows moved on
         if (next) stopwatch.startChain(next);
       }

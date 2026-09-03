@@ -196,7 +196,10 @@ const isTimeColumn = (name) => typeof name === 'string' && name.trim().toLowerCa
 // rep lifts have rest but no time column and keep the plain press-for-rest
 // behavior. Work durations come from numeric time-column targets, read as
 // seconds; a row without one counts up until pressed. rows_per_rest chains
-// that many rows before the rest (suitcase carry L/R = 2; default 1).
+// that many rows before the rest (suitcase carry L/R = 2; default 1). The
+// rest only follows when a prescribed row is left to chain into — after the
+// final row the exercise just ends (no dead rest time); beyond the
+// prescription nothing is known to be final, so open-ended sets keep it.
 export function workChainFor({ prescribed, template, completedRows = 0 }) {
   if (!template?.columns?.some(c => isTimeColumn(c?.name))) return null;
   const entry = prescribed?.exercises?.find(e => e.template_id === template.id);
@@ -220,13 +223,14 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
   if (completedRows >= rowCount) {
     // Beyond the prescription (or none): open-ended work, press to end it.
     phases.push({ kind: 'work', seconds: null, row: completedRows });
-  } else {
-    const end = Math.min(completedRows + rpr, rowCount);
-    for (let r = completedRows; r < end; r++) {
-      phases.push({ kind: 'work', seconds: rowSeconds.get(r) ?? null, row: r });
-    }
+    phases.push({ kind: 'rest', seconds: rest });
+    return phases;
   }
-  phases.push({ kind: 'rest', seconds: rest });
+  const end = Math.min(completedRows + rpr, rowCount);
+  for (let r = completedRows; r < end; r++) {
+    phases.push({ kind: 'work', seconds: rowSeconds.get(r) ?? null, row: r });
+  }
+  if (end < rowCount) phases.push({ kind: 'rest', seconds: rest });
   return phases;
 }
 

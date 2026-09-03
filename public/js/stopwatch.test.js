@@ -373,10 +373,10 @@ test('workChainFor: plank derives one timed work row then rest', () => {
     { kind: 'work', seconds: 45, row: 0 },
     { kind: 'rest', seconds: 60 },
   ]);
-  assert.deepEqual(workChainFor({ ...PLANK, completedRows: 2 }), [
-    { kind: 'work', seconds: 40, row: 2 },
+  assert.deepEqual(workChainFor({ ...PLANK, completedRows: 1 }), [
+    { kind: 'work', seconds: 45, row: 1 },
     { kind: 'rest', seconds: 60 },
-  ]);
+  ], 'a middle row still rests');
 });
 
 test('workChainFor: rows_per_rest chains two carry sides before one rest', () => {
@@ -385,10 +385,23 @@ test('workChainFor: rows_per_rest chains two carry sides before one rest', () =>
     { kind: 'work', seconds: 30, row: 1 },
     { kind: 'rest', seconds: 90 },
   ]);
+});
+
+test('workChainFor: no rest after the final prescribed row (nothing to chain into)', () => {
+  // Plank: row 2 is the last of 3 — its chain is the hold alone; the exercise
+  // ends there instead of running dead rest time.
+  assert.deepEqual(workChainFor({ ...PLANK, completedRows: 2 }), [
+    { kind: 'work', seconds: 40, row: 2 },
+  ]);
+  // Carry: the second L/R pair is the last of 4 rows.
   assert.deepEqual(workChainFor({ ...CARRY, completedRows: 2 }), [
     { kind: 'work', seconds: 30, row: 2 },
     { kind: 'work', seconds: 30, row: 3 },
-    { kind: 'rest', seconds: 90 },
+  ]);
+  // Beyond the prescription no row is known to be final: the rest stays.
+  assert.deepEqual(workChainFor({ ...PLANK, completedRows: 3 }), [
+    { kind: 'work', seconds: null, row: 3 },
+    { kind: 'rest', seconds: 60 },
   ]);
 });
 
