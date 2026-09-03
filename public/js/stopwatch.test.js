@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   formatMSS, createStopwatch, restSecondsFor,
   loadStopwatchState, saveStopwatchState, clearStopwatchState, workChainFor,
+  intervalPhasesFor,
 } from './stopwatch.js';
 
 const T0 = 1_755_850_000_000;
@@ -271,7 +272,7 @@ test('stopwatch state round-trips a countdown across eviction, away time counted
 
   clock.advance(30_000); // tab evicted mid-countdown
   const state = loadStopwatchState('w-6', 1, storage);
-  assert.equal(state.v, 3);
+  assert.equal(state.v, 4);
   const restored = createStopwatch({ now: clock.now, exerciseIndex: 1, initial: state });
   assert.equal(restored.restRemaining(90), 60, 'countdown continues from wall clock');
   assert.equal(restored.exerciseSeconds(), 35);
@@ -285,7 +286,7 @@ test('loadStopwatchState upgrades a v1 payload, keeping the running timer', () =
   }));
   const state = loadStopwatchState('w-7', 2, storage);
   assert.ok(state, 'v1 payload must upgrade, not reject');
-  assert.equal(state.v, 3);
+  assert.equal(state.v, 4);
   const restored = createStopwatch({ now: clock.now, exerciseIndex: 2, initial: state });
   assert.equal(restored.isRunning(), true);
   assert.equal(restored.exerciseSeconds(), 20, 'a deploy mid-workout keeps the running timer');
@@ -525,4 +526,147 @@ test('chain: commitExercise clears chain, log, and row count', () => {
   assert.equal(sw.completedRows(), 0);
   assert.deepEqual(sw.takeCompletedWork(), []);
   assert.equal(sw.isRunning(), false);
+});
+
+// Interval programs: warmup, then work/easy x rounds, then cooldown (optionally
+// split into equal steps so a treadmill speed drop gets its own countdown).
+const INTERVALS = {
+  exercises: [{
+    template_id: 33,
+    rest_seconds: null,
+    rows_per_rest: null,
+    intervals: {
+      warmup_seconds: 480, work_seconds: 60, easy_seconds: 120, rounds: 8,
+      cooldown_seconds: 300, cooldown_step_seconds: 60,
+    },
+  }],
+};
+
+test('intervalPhasesFor: the full treadmill program, in order, with labels', () => {
+  const phases = intervalPhasesFor(INTERVALS, 33);
+  assert.equal(phases.length, 1 + 8 * 2 + 5);
+  assert.deepEqual(phases[0], { kind: 'warmup', seconds: 480, label: 'warmup' });
+  assert.deepEqual(phases[1], { kind: 'intense', seconds: 60, label: 'intense 1/8' });
+  assert.deepEqual(phases[2], { kind: 'easy', seconds: 120, label: 'easy 1/8' });
+  assert.deepEqual(phases[15], { kind: 'intense', seconds: 60, label: 'intense 8/8' });
+  assert.deepEqual(phases[16], { kind: 'easy', seconds: 120, label: 'easy 8/8' });
+  assert.deepEqual(phases[17], { kind: 'cooldown', seconds: 60, label: 'cooldown 1/5' });
+  assert.deepEqual(phases[21], { kind: 'cooldown', seconds: 60, label: 'cooldown 5/5' });
+  assert.equal(phases.reduce((a, p) => a + p.seconds, 0), 480 + 8 * 180 + 300);
+});
+
+test('intervalPhasesFor: adapts to different numbers and omitted sections', () => {
+  const build = (intervals) => intervalPhasesFor({ exercises: [{ template_id: 1, intervals }] }, 1);
+  // No warmup / no cooldown: just the rounds.
+  assert.deepEqual(build({ work_seconds: 30, easy_seconds: 30, rounds: 2 }), [
+    { kind: 'intense', seconds: 30, label: 'intense 1/2' },
+    { kind: 'easy', seconds: 30, label: 'easy 1/2' },
+    { kind: 'intense', seconds: 30, label: 'intense 2/2' },
+    { kind: 'easy', seconds: 30, label: 'easy 2/2' },
+  ]);
+  // Cooldown without a step is one countdown; with a step that doesn't divide
+  // evenly the last step carries the remainder.
+  assert.deepEqual(build({ work_seconds: 20, easy_seconds: 0, rounds: 1, cooldown_seconds: 90 }), [
+    { kind: 'intense', seconds: 20, label: 'intense 1/1' },
+    { kind: 'cooldown', seconds: 90, label: 'cooldown' },
+  ]);
+  assert.deepEqual(
+    build({ work_seconds: 20, easy_seconds: 0, rounds: 1, cooldown_seconds: 150, cooldown_step_seconds: 60 }).slice(1),
+    [
+      { kind: 'cooldown', seconds: 60, label: 'cooldown 1/3' },
+      { kind: 'cooldown', seconds: 60, label: 'cooldown 2/3' },
+      { kind: 'cooldown', seconds: 30, label: 'cooldown 3/3' },
+    ],
+  );
+  // A step at least as long as the cooldown is the same as no step.
+  assert.deepEqual(build({ work_seconds: 20, easy_seconds: 0, rounds: 1, cooldown_seconds: 60, cooldown_step_seconds: 60 }).slice(1), [
+    { kind: 'cooldown', seconds: 60, label: 'cooldown' },
+  ]);
+});
+
+test('intervalPhasesFor: null for every absent or unusable shape', () => {
+  assert.equal(intervalPhasesFor(null, 33), null);
+  assert.equal(intervalPhasesFor({}, 33), null);
+  assert.equal(intervalPhasesFor({ exercises: [] }, 33), null);
+  assert.equal(intervalPhasesFor(INTERVALS, 34), null, 'other template');
+  assert.equal(intervalPhasesFor({ exercises: [{ template_id: 1, rest_seconds: 90 }] }, 1), null, 'rest only');
+  assert.equal(intervalPhasesFor({ exercises: [{ template_id: 1, intervals: null }] }, 1), null);
+  assert.equal(intervalPhasesFor({ exercises: [{ template_id: 1, intervals: 'x' }] }, 1), null);
+  assert.equal(intervalPhasesFor({ exercises: [{ template_id: 1, intervals: { easy_seconds: 60, rounds: 4 } }] }, 1), null, 'no work');
+  assert.equal(intervalPhasesFor({ exercises: [{ template_id: 1, intervals: { work_seconds: 60, easy_seconds: 60, rounds: 0 } }] }, 1), null, 'no rounds');
+});
+
+test('chain: interval phases run continuously, carry labels, and end completed', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  assert.equal(sw.chainCompleted(), false, 'idle is not completed');
+  sw.startChain(intervalPhasesFor({
+    exercises: [{ template_id: 1, intervals: { warmup_seconds: 10, work_seconds: 5, easy_seconds: 5, rounds: 2, cooldown_seconds: 10, cooldown_step_seconds: 5 } }],
+  }, 1));
+  assert.equal(sw.isRunning(), true, 'starting the program starts the exercise clock');
+  assert.deepEqual(sw.chainPhase(), { kind: 'warmup', seconds: 10, elapsed: 0, remaining: 10, label: 'warmup' });
+  clock.advance(10_000);
+  assert.deepEqual(sw.chainPhase(), { kind: 'intense', seconds: 5, elapsed: 0, remaining: 5, label: 'intense 1/2' });
+  clock.advance(7_000);
+  assert.deepEqual(sw.chainPhase(), { kind: 'easy', seconds: 5, elapsed: 2, remaining: 3, label: 'easy 1/2' });
+  clock.advance(13_000); // through intense 2 and easy 2
+  assert.equal(sw.chainPhase().label, 'cooldown 1/2');
+  assert.equal(sw.chainCompleted(), false, 'still running');
+  clock.advance(10_000);
+  assert.equal(sw.chainPhase(), null);
+  assert.equal(sw.chainCompleted(), true, 'ran out by time');
+  assert.equal(sw.completedRows(), 0, 'interval phases are not work rows');
+  assert.deepEqual(sw.takeCompletedWork(), [], 'nothing to autofill');
+  assert.equal(sw.isRunning(), true, 'exercise clock keeps going after the program');
+});
+
+test('chain: a press skips to the next interval phase; skipping the last completes', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.startChain(intervalPhasesFor({
+    exercises: [{ template_id: 1, intervals: { warmup_seconds: 60, work_seconds: 5, easy_seconds: 5, rounds: 1 } }],
+  }, 1));
+  clock.advance(3_000);
+  sw.advanceChain();
+  assert.deepEqual(sw.chainPhase(), { kind: 'intense', seconds: 5, elapsed: 0, remaining: 5, label: 'intense 1/1' });
+  sw.advanceChain();
+  assert.equal(sw.chainPhase().kind, 'easy');
+  sw.advanceChain();
+  assert.equal(sw.chainPhase(), null);
+  assert.equal(sw.chainCompleted(), true, 'skipping the last phase completes the program');
+  assert.deepEqual(sw.takeCompletedWork(), []);
+});
+
+test('chain: completed flag clears on restart and on commitExercise, survives eviction', () => {
+  const clock = fakeClock();
+  const storage = fakeStorage();
+  const sw = createStopwatch({ now: clock.now });
+  const phases = [{ kind: 'intense', seconds: 5, label: 'intense 1/1' }];
+  sw.startChain(phases);
+  clock.advance(5_000);
+  assert.equal(sw.chainCompleted(), true);
+  saveStopwatchState('w1', sw, storage);
+  const restored = createStopwatch({ now: clock.now, initial: loadStopwatchState('w1', 0, storage) });
+  assert.equal(restored.chainCompleted(), true, 'done state persists across eviction');
+  sw.startChain(phases);
+  assert.equal(sw.chainCompleted(), false, 'restarted');
+  clock.advance(5_000);
+  assert.equal(sw.chainCompleted(), true);
+  sw.commitExercise();
+  assert.equal(sw.chainCompleted(), false, 'next exercise starts clean');
+});
+
+test('chain: v3 state upgrades to v4 with chainCompleted false and keeps the chain', () => {
+  const storage = fakeStorage();
+  const chain = { epoch: T0, phases: [{ kind: 'rest', seconds: 60 }] };
+  storage.setItem('stopwatch:w1', JSON.stringify({
+    v: 3, exerciseIndex: 2, startEpoch: T0, lapEpoch: T0, restEpoch: null,
+    chain, completedWork: [{ row: 0, seconds: 30 }], completedRowsCount: 1,
+  }));
+  const state = loadStopwatchState('w1', 2, storage);
+  assert.equal(state.chainCompleted, false);
+  assert.deepEqual(state.chain, chain);
+  assert.equal(state.completedRowsCount, 1);
+  const sw = createStopwatch({ now: () => T0 + 1_000, initial: state });
+  assert.equal(sw.chainPhase().kind, 'rest', 'mid-chain state still resumes');
 });

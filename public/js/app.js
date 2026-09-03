@@ -9,7 +9,7 @@ import {
 import { installHideFlush, installOutboxDrainers, drainOutbox, readShadow } from './persistence.js';
 import { createSessionState } from './session-state.js';
 import {
-  createStopwatch, formatMSS, restSecondsFor, workChainFor,
+  createStopwatch, formatMSS, restSecondsFor, workChainFor, intervalPhasesFor,
   loadStopwatchState, saveStopwatchState, clearStopwatchState,
 } from './stopwatch.js';
 import { createBeeper, beepOffsets, chainBeepPlan } from './beeper.js';
@@ -106,6 +106,7 @@ const els = {
   teErr: document.getElementById('te-err'),
   stopwatchBar: document.getElementById('stopwatch-bar'),
   stopwatchTime: document.getElementById('stopwatch-time'),
+  stopwatchLabel: document.getElementById('stopwatch-label'),
   stopwatchBtn: document.getElementById('stopwatch-btn'),
   bodyMetricsForm: document.getElementById('body-metrics-form'),
   bmMetric: document.getElementById('bm-metric'),
@@ -349,6 +350,14 @@ function currentRestSeconds() {
   return restSecondsFor(activeWorkout.prescribed, template?.id);
 }
 
+// Interval program (cardio interval days) for the exercise the runner is on;
+// null = not one. Takes precedence over chain and rest modes.
+function currentIntervalPhases() {
+  if (!activeWorkout) return null;
+  const template = activeWorkout.routine.templates[activeWorkout.currentIndex];
+  return intervalPhasesFor(activeWorkout.prescribed, template?.id);
+}
+
 // Chain phases the next press should start for the current exercise; null =
 // not a timed exercise (no time column / no rest) → legacy behavior.
 function currentChainPhases() {
@@ -399,8 +408,42 @@ function setStopwatchBtn(icon, label) {
   setButtonIcon(els.stopwatchBtn, icon, label);
 }
 
+// Phase label under the readout — interval programs only; hidden elsewhere.
+function setStopwatchLabel(text) {
+  if (text == null) {
+    hide(els.stopwatchLabel);
+    return;
+  }
+  if (els.stopwatchLabel.textContent !== text) els.stopwatchLabel.textContent = text;
+  show(els.stopwatchLabel);
+}
+
 function renderStopwatchDisplay() {
   const cls = els.stopwatchTime.classList;
+  const program = currentIntervalPhases();
+  if (program) {
+    const phase = stopwatch?.chainPhase() ?? null;
+    if (phase) {
+      els.stopwatchTime.textContent = formatMSS(phase.remaining);
+      cls.toggle('working', phase.kind === 'intense');
+      cls.toggle('resting', phase.kind === 'easy');
+      setStopwatchLabel(phase.label);
+      setStopwatchBtn('skip-forward', 'Skip');
+    } else if (stopwatch?.chainCompleted()) {
+      els.stopwatchTime.textContent = '0:00';
+      cls.remove('working'); cls.remove('resting');
+      setStopwatchLabel('done');
+      setStopwatchBtn('play', 'Restart intervals');
+    } else {
+      // Armed: preview the first section (usually the warmup).
+      els.stopwatchTime.textContent = formatMSS(program[0].seconds);
+      cls.remove('working'); cls.remove('resting');
+      setStopwatchLabel(program[0].label);
+      setStopwatchBtn('play', 'Start intervals');
+    }
+    return;
+  }
+  setStopwatchLabel(null);
   const phases = currentChainPhases();
   if (phases) {
     drainRecordedTimes();
@@ -456,6 +499,18 @@ function handleStopwatchBtn() {
   // Synchronously, on every press: the gesture is what unlocks audio on iOS,
   // and pressing Start warms the context before the first countdown needs it.
   beeper.ensureContext();
+  const program = currentIntervalPhases();
+  if (program) {
+    // One press runs the whole program (every phase is timed); a press
+    // mid-phase skips to the next section; a press after done restarts.
+    if (stopwatch.chainPhase() == null) stopwatch.startChain(program);
+    else stopwatch.advanceChain();
+    const snap = stopwatch.chainSnapshot();
+    beeper.schedule(snap ? chainBeepPlan(snap.phases, snap.elapsedMs) : []);
+    saveStopwatchState(activeWorkout.workoutId, stopwatch);
+    renderStopwatchDisplay();
+    return;
+  }
   const phases = currentChainPhases();
   if (phases) {
     // Press = go: start the cycle when armed, end a work phase early when

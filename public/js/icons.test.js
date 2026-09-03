@@ -32,3 +32,9 @@ test('circle-x is registered for the end-early action', () => {
 test('unknown icon name throws instead of rendering an empty button', () => {
   assert.throws(() => iconSvg('does-not-exist'), /unknown icon/i);
 });
+
+test('skip-forward is registered for the interval skip', () => {
+  const svg = iconSvg('skip-forward');
+  assert.match(svg, /M21 4v16/, 'end bar');
+  assert.match(svg, /9.997-5.998/, 'play triangle');
+});

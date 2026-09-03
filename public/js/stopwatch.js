@@ -10,10 +10,13 @@
 // restEpoch anchors an active rest countdown (null = none); a countdown whose
 // prescribed rest has fully elapsed reads as inactive again, so the display
 // snaps back to the full rest duration.
+// chainCompleted distinguishes "the program ran to its end" from "never
+// started" once the chain is gone — an interval program shows done, not
+// re-armed, after its cooldown (and after a reload past that point).
 // exerciseIndex guards against restoring a running timer that belonged to an
 // already-finalized exercise (crash between finalize success and commit).
 
-const STATE_VERSION = 3;
+const STATE_VERSION = 4;
 
 export function formatMSS(seconds) {
   if (seconds == null || seconds < 0) return '0:00';
@@ -34,6 +37,7 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
   let chain = initial?.chain ?? null;
   let completedWork = Array.isArray(initial?.completedWork) ? [...initial.completedWork] : [];
   let completedRowsCount = initial?.completedRowsCount ?? 0;
+  let chainCompleted = initial?.chainCompleted === true;
 
   const elapsedFrom = (epoch) => Math.max(0, Math.floor((now() - epoch) / 1000));
 
@@ -48,9 +52,12 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
         completedWork.push({ row: p.row, seconds: p.seconds });
         completedRowsCount += 1;
       }
-      chain = chain.phases.length > 1
-        ? { epoch: phaseEnd, phases: chain.phases.slice(1) }
-        : null;
+      if (chain.phases.length > 1) {
+        chain = { epoch: phaseEnd, phases: chain.phases.slice(1) };
+      } else {
+        chain = null;
+        chainCompleted = true;
+      }
     }
   }
 
@@ -93,6 +100,7 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
       lapEpoch = startEpoch;
     }
     restEpoch = null;
+    chainCompleted = false;
     chain = { epoch: now(), phases: phases.map(p => ({ ...p })) };
   }
 
@@ -108,11 +116,13 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
       remaining: typeof p.seconds === 'number' ? p.seconds - elapsed : null,
     };
     if (p.kind === 'work') out.row = p.row;
+    if (p.label != null) out.label = p.label;
     return out;
   }
 
   // Press during a chain: work ends early (actual elapsed recorded), rest is
-  // cut short (chain done — the caller starts the next cycle's chain).
+  // cut short (chain done — the caller starts the next cycle's chain). Interval
+  // phases (warmup/intense/easy/cooldown) skip straight to the next one.
   function advanceChain() {
     sync();
     if (!chain) return;
@@ -120,13 +130,16 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
     if (p.kind === 'work') {
       completedWork.push({ row: p.row, seconds: elapsedFrom(chain.epoch) });
       completedRowsCount += 1;
-      chain = chain.phases.length > 1
-        ? { epoch: now(), phases: chain.phases.slice(1) }
-        : null;
+    }
+    if (p.kind !== 'rest' && chain.phases.length > 1) {
+      chain = { epoch: now(), phases: chain.phases.slice(1) };
     } else {
       chain = null;
+      chainCompleted = true;
     }
   }
+
+  function chainCompleted_() { sync(); return chainCompleted; }
 
   // Current phases + elapsed, for (re)scheduling the beep plan on wake.
   function chainSnapshot() {
@@ -152,6 +165,7 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
     lapEpoch = null;
     restEpoch = null;
     chain = null;
+    chainCompleted = false;
     completedWork = [];
     completedRowsCount = 0;
   }
@@ -162,7 +176,7 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
     sync();
     return {
       v: STATE_VERSION, exerciseIndex: idx, startEpoch, lapEpoch, restEpoch,
-      chain, completedWork, completedRowsCount,
+      chain, completedWork, completedRowsCount, chainCompleted,
     };
   }
 
@@ -170,6 +184,7 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
     start, lap, startRest, isRunning, exerciseSeconds, displaySeconds,
     restRemaining, restRemainingMs, commitExercise, setExerciseIndex, toJSON,
     startChain, chainPhase, advanceChain, chainSnapshot, completedRows, takeCompletedWork,
+    chainCompleted: chainCompleted_,
   };
 }
 
@@ -215,6 +230,42 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
   return phases;
 }
 
+// Interval program phases for one template, from the prescription's
+// `intervals` object: warmup (if any), then (intense, easy) x rounds, then the
+// cooldown — split into equal steps when cooldown_step_seconds is shorter
+// than the cooldown, so each treadmill speed drop gets its own countdown and
+// beep. Every phase is timed, so the chain runs itself end to end from one
+// press. Labels are what the bar shows under the readout. Null = not an
+// interval exercise (or an unusable program).
+export function intervalPhasesFor(prescribed, templateId) {
+  const cfg = prescribed?.exercises?.find(e => e.template_id === templateId)?.intervals;
+  if (cfg == null || typeof cfg !== 'object') return null;
+  const secs = (v) => (Number.isInteger(v) && v > 0 ? v : 0);
+  const work = secs(cfg.work_seconds);
+  const easy = secs(cfg.easy_seconds);
+  const rounds = secs(cfg.rounds);
+  if (work === 0 || rounds === 0) return null;
+
+  const phases = [];
+  const warmup = secs(cfg.warmup_seconds);
+  if (warmup > 0) phases.push({ kind: 'warmup', seconds: warmup, label: 'warmup' });
+  for (let r = 1; r <= rounds; r++) {
+    phases.push({ kind: 'intense', seconds: work, label: `intense ${r}/${rounds}` });
+    if (easy > 0) phases.push({ kind: 'easy', seconds: easy, label: `easy ${r}/${rounds}` });
+  }
+  const cooldown = secs(cfg.cooldown_seconds);
+  const step = secs(cfg.cooldown_step_seconds);
+  if (cooldown > 0 && step > 0 && step < cooldown) {
+    const n = Math.ceil(cooldown / step);
+    for (let i = 1, left = cooldown; i <= n; i++, left -= step) {
+      phases.push({ kind: 'cooldown', seconds: Math.min(step, left), label: `cooldown ${i}/${n}` });
+    }
+  } else if (cooldown > 0) {
+    phases.push({ kind: 'cooldown', seconds: cooldown, label: 'cooldown' });
+  }
+  return phases;
+}
+
 // Prescribed rest for one template, from the cached /api/prescriptions/active
 // payload. Null-safe against a missing prescription, a stale cached shape
 // without `exercises`, and non-positive/non-integer values — null means
@@ -240,7 +291,11 @@ export function loadStopwatchState(workoutId, exerciseIndex, storage = globalThi
   }
   if (state.v === 2) {
     // v2 predates chained work/rest cycles.
-    state = { ...state, v: STATE_VERSION, chain: null, completedWork: [], completedRowsCount: 0 };
+    state = { ...state, v: 3, chain: null, completedWork: [], completedRowsCount: 0 };
+  }
+  if (state.v === 3) {
+    // v3 predates the completed flag (interval programs).
+    state = { ...state, v: STATE_VERSION, chainCompleted: false };
   }
   if (state.v !== STATE_VERSION || typeof state.exerciseIndex !== 'number') return null;
   if (state.exerciseIndex !== exerciseIndex) {
@@ -248,7 +303,7 @@ export function loadStopwatchState(workoutId, exerciseIndex, storage = globalThi
     // its finalize landed; its duration is already on the server. Idle out.
     return {
       v: STATE_VERSION, exerciseIndex, startEpoch: null, lapEpoch: null, restEpoch: null,
-      chain: null, completedWork: [], completedRowsCount: 0,
+      chain: null, completedWork: [], completedRowsCount: 0, chainCompleted: false,
     };
   }
   return state;

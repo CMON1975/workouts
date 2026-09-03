@@ -105,7 +105,7 @@ test('migration 012: prescription_exercises table exists with expected columns',
   const names = cols.map(c => c.name);
   assert.deepEqual(
     names.sort(),
-    ['prescription_id', 'rest_seconds', 'rows_per_rest', 'template_id'].sort()
+    ['intervals', 'prescription_id', 'rest_seconds', 'rows_per_rest', 'template_id'].sort()
   );
   const pk = cols.filter(c => c.pk > 0).map(c => c.name).sort();
   assert.deepEqual(pk, ['prescription_id', 'template_id'].sort());
@@ -345,7 +345,7 @@ test('GET /api/prescriptions/active — single mode carries exercises with rest_
 
   const res = await app.inject({ method: 'GET', url: `/api/prescriptions/active?routine_id=${routineId}` });
   assert.equal(res.statusCode, 200, res.body);
-  assert.deepEqual(res.json().exercises, [{ template_id: t.id, rest_seconds: 90, rows_per_rest: null }]);
+  assert.deepEqual(res.json().exercises, [{ template_id: t.id, rest_seconds: 90, rows_per_rest: null, intervals: null }]);
 });
 
 test('GET /api/prescriptions/active — exercises is an empty array when no rest prescribed', async () => {
@@ -395,7 +395,7 @@ test('GET /api/prescriptions/active — array mode carries exercises per routine
   assert.equal(res.statusCode, 200, res.body);
   const entry = res.json().find(e => e.routine_id === routineId);
   assert.ok(entry, 'array mode entry for the imported routine');
-  assert.deepEqual(entry.exercises, [{ template_id: t.id, rest_seconds: 75, rows_per_rest: null }]);
+  assert.deepEqual(entry.exercises, [{ template_id: t.id, rest_seconds: 75, rows_per_rest: null, intervals: null }]);
 });
 
 test('POST /api/prescriptions/import — find-or-create reuses existing routine + template', async () => {
@@ -1208,8 +1208,8 @@ test('POST /api/prescriptions/import — rows_per_rest lands and returns on /act
   assert.equal(active.statusCode, 200);
   const exercises = active.json().exercises;
   assert.deepEqual(exercises, [
-    { template_id: tCarry.id, rest_seconds: 90, rows_per_rest: 2 },
-    { template_id: tPlank.id, rest_seconds: 60, rows_per_rest: null },
+    { template_id: tCarry.id, rest_seconds: 90, rows_per_rest: 2, intervals: null },
+    { template_id: tPlank.id, rest_seconds: 60, rows_per_rest: null, intervals: null },
   ]);
 });
 
@@ -1250,5 +1250,88 @@ test('POST /api/prescriptions/import — invalid rows_per_rest rejected with 400
       },
     });
     assert.equal(res.statusCode, 400, `rows_per_rest ${JSON.stringify(bad)} should be rejected`);
+  }
+});
+
+// Interval programs (cardio interval days): a per-exercise, per-week object the
+// client turns into a continuous warmup / work-easy x rounds / cooldown timer.
+const INTERVALS = {
+  warmup_seconds: 480, work_seconds: 60, easy_seconds: 120, rounds: 8,
+  cooldown_seconds: 300, cooldown_step_seconds: 60,
+};
+
+test('POST /api/prescriptions/import — intervals stored as JSON in prescription_exercises', async () => {
+  const routineName = nextId('IntervalsRoutine');
+  const templateName = nextId('IntervalsTpl');
+  const imp = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-09-07',
+      week_ends_on: '2026-09-13',
+      days: [{
+        routine_name: routineName,
+        exercises: [{ ...sampleStandardExercise(templateName, []), intervals: INTERVALS }],
+      }],
+    },
+  });
+  assert.equal(imp.statusCode, 201, imp.body);
+  const presId = imp.json().prescriptions[0].id;
+  const rows = app.db.prepare(
+    'SELECT rest_seconds, rows_per_rest, intervals FROM prescription_exercises WHERE prescription_id = ?'
+  ).all(presId);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].rest_seconds, null);
+  assert.equal(rows[0].rows_per_rest, null);
+  assert.deepEqual(JSON.parse(rows[0].intervals), INTERVALS);
+});
+
+test('GET /api/prescriptions/active — intervals come back parsed, alongside rest fields', async () => {
+  const routineName = nextId('IntervalsActiveRoutine');
+  const templateName = nextId('IntervalsActiveTpl');
+  const imp = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-17',
+      week_ends_on: '2026-08-23',
+      days: [{
+        routine_name: routineName,
+        exercises: [{ ...sampleStandardExercise(templateName, []), intervals: { work_seconds: 30, easy_seconds: 30, rounds: 4 } }],
+      }],
+    },
+  });
+  assert.equal(imp.statusCode, 201, imp.body);
+  const routineId = imp.json().prescriptions[0].routine_id;
+  const t = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(templateName);
+  const res = await app.inject({ method: 'GET', url: `/api/prescriptions/active?routine_id=${routineId}` });
+  assert.equal(res.statusCode, 200, res.body);
+  assert.deepEqual(res.json().exercises, [{
+    template_id: t.id, rest_seconds: null, rows_per_rest: null,
+    intervals: { work_seconds: 30, easy_seconds: 30, rounds: 4 },
+  }]);
+});
+
+test('POST /api/prescriptions/import — invalid intervals rejected with 400', async () => {
+  const bads = [
+    { easy_seconds: 60, rounds: 4 },                       // work_seconds required
+    { work_seconds: 60, easy_seconds: 60 },                // rounds required
+    { work_seconds: 60, easy_seconds: 60, rounds: 0 },
+    { work_seconds: 0, easy_seconds: 60, rounds: 4 },
+    { work_seconds: 'sixty', easy_seconds: 60, rounds: 4 }, // '60' coerces, like rest_seconds
+    { work_seconds: 60, easy_seconds: 60, rounds: 4, cooldown_step_seconds: 0 },
+    'warmup 8 work 1 easy 2 x8',
+  ];
+  for (const bad of bads) {
+    const res = await app.inject({
+      method: 'POST', url: '/api/prescriptions/import',
+      payload: {
+        week_starts_on: '2026-08-17',
+        week_ends_on: '2026-08-23',
+        days: [{
+          routine_name: nextId('BadIntervalsRoutine'),
+          exercises: [{ ...sampleStandardExercise(nextId('BadIntervalsTpl'), []), intervals: bad }],
+        }],
+      },
+    });
+    assert.equal(res.statusCode, 400, `intervals ${JSON.stringify(bad)} should be rejected`);
   }
 });

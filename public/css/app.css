@@ -82,6 +82,23 @@ header h1 {
 #stopwatch-btn { padding: 12px 18px; }
 #stopwatch-btn svg.icon { width: 60px; height: 60px; }
 
+.stopwatch-readout {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Interval phase under the readout; the readout carries the phase color */
+.stopwatch-label {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.2;
+  margin-top: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* An active rest countdown, as opposed to the idle full-rest display. */
 .stopwatch-time.resting {
   color: var(--accent);
