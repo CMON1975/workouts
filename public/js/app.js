@@ -126,7 +126,6 @@ let activeWorkout = null;       // { routine, workoutId, workoutClientVersion, s
 let detailOrigin = 'history';   // 'history' | 'runner'
 let stopwatch = null;           // created on workout start/resume, null otherwise
 let stopwatchTick = null;
-const STOPWATCH_AUTO_START = false; // flip to auto-start each exercise on advance
 const beeper = createBeeper();  // inert until the first button gesture arms it
 
 function show(el) { el.hidden = false; }
@@ -199,6 +198,7 @@ async function tryResumeWorkout() {
   stopwatch = createStopwatch({ exerciseIndex: idx, initial: loadStopwatchState(wid, idx) });
   await bindCurrentExercise();
   showStopwatchBar();
+  maybeAutoStartStopwatch(); // idled-out restore (crash after finalize) or a pre-auto-start run
   return true;
 }
 
@@ -490,8 +490,12 @@ function handleStopwatchBtn() {
   renderStopwatchDisplay();
 }
 
+// Every exercise's clock starts the moment it is bound, so the workout is
+// timed from the routine pick to Finish/End early with no press: the button
+// is only ever the rest countdown (rep lifts) or the set control (timed
+// holds). Skips when a resumed timer is already running from its epoch.
 function maybeAutoStartStopwatch() {
-  if (!STOPWATCH_AUTO_START || !activeWorkout || !stopwatch || stopwatch.isRunning()) return;
+  if (!activeWorkout || !stopwatch || stopwatch.isRunning()) return;
   stopwatch.start();
   saveStopwatchState(activeWorkout.workoutId, stopwatch);
   renderStopwatchDisplay();
