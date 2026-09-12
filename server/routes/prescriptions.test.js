@@ -105,7 +105,7 @@ test('migration 012: prescription_exercises table exists with expected columns',
   const names = cols.map(c => c.name);
   assert.deepEqual(
     names.sort(),
-    ['intervals', 'prescription_id', 'rest_seconds', 'rows_per_rest', 'template_id'].sort()
+    ['intervals', 'lead_in_seconds', 'prescription_id', 'rest_seconds', 'rows_per_rest', 'template_id'].sort()
   );
   const pk = cols.filter(c => c.pk > 0).map(c => c.name).sort();
   assert.deepEqual(pk, ['prescription_id', 'template_id'].sort());
@@ -345,7 +345,7 @@ test('GET /api/prescriptions/active — single mode carries exercises with rest_
 
   const res = await app.inject({ method: 'GET', url: `/api/prescriptions/active?routine_id=${routineId}` });
   assert.equal(res.statusCode, 200, res.body);
-  assert.deepEqual(res.json().exercises, [{ template_id: t.id, rest_seconds: 90, rows_per_rest: null, intervals: null }]);
+  assert.deepEqual(res.json().exercises, [{ template_id: t.id, rest_seconds: 90, rows_per_rest: null, lead_in_seconds: null, intervals: null }]);
 });
 
 test('GET /api/prescriptions/active — exercises is an empty array when no rest prescribed', async () => {
@@ -395,7 +395,7 @@ test('GET /api/prescriptions/active — array mode carries exercises per routine
   assert.equal(res.statusCode, 200, res.body);
   const entry = res.json().find(e => e.routine_id === routineId);
   assert.ok(entry, 'array mode entry for the imported routine');
-  assert.deepEqual(entry.exercises, [{ template_id: t.id, rest_seconds: 75, rows_per_rest: null, intervals: null }]);
+  assert.deepEqual(entry.exercises, [{ template_id: t.id, rest_seconds: 75, rows_per_rest: null, lead_in_seconds: null, intervals: null }]);
 });
 
 test('POST /api/prescriptions/import — find-or-create reuses existing routine + template', async () => {
@@ -1208,8 +1208,8 @@ test('POST /api/prescriptions/import — rows_per_rest lands and returns on /act
   assert.equal(active.statusCode, 200);
   const exercises = active.json().exercises;
   assert.deepEqual(exercises, [
-    { template_id: tCarry.id, rest_seconds: 90, rows_per_rest: 2, intervals: null },
-    { template_id: tPlank.id, rest_seconds: 60, rows_per_rest: null, intervals: null },
+    { template_id: tCarry.id, rest_seconds: 90, rows_per_rest: 2, lead_in_seconds: null, intervals: null },
+    { template_id: tPlank.id, rest_seconds: 60, rows_per_rest: null, lead_in_seconds: null, intervals: null },
   ]);
 });
 
@@ -1305,7 +1305,7 @@ test('GET /api/prescriptions/active — intervals come back parsed, alongside re
   const res = await app.inject({ method: 'GET', url: `/api/prescriptions/active?routine_id=${routineId}` });
   assert.equal(res.statusCode, 200, res.body);
   assert.deepEqual(res.json().exercises, [{
-    template_id: t.id, rest_seconds: null, rows_per_rest: null,
+    template_id: t.id, rest_seconds: null, rows_per_rest: null, lead_in_seconds: null,
     intervals: { work_seconds: 30, easy_seconds: 30, rounds: 4 },
   }]);
 });
@@ -1333,5 +1333,74 @@ test('POST /api/prescriptions/import — invalid intervals rejected with 400', a
       },
     });
     assert.equal(res.statusCode, 400, `intervals ${JSON.stringify(bad)} should be rejected`);
+  }
+});
+
+// ---- lead_in_seconds (a get-set countdown before every timed work phase) ----
+
+test('migration 015: prescription_exercises gains nullable lead_in_seconds', () => {
+  const cols = app.db.prepare('PRAGMA table_info(prescription_exercises)').all();
+  const col = cols.find(c => c.name === 'lead_in_seconds');
+  assert.ok(col, 'lead_in_seconds column must exist');
+  assert.equal(col.notnull, 0, 'lead_in_seconds must be nullable');
+});
+
+test('POST /api/prescriptions/import — lead_in_seconds lands and returns on /active', async () => {
+  const routineName = nextId('LeadInRoutine');
+  const hold = nextId('LeadInHold');
+  const plank = nextId('LeadInPlank');
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-09-07',
+      week_ends_on: '2026-09-13',
+      days: [
+        {
+          routine_name: routineName,
+          exercises: [
+            { ...sampleStandardExercise(hold), rest_seconds: 10, rows_per_rest: 4, lead_in_seconds: 3 },
+            { ...sampleStandardExercise(plank), rest_seconds: 60 },
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 201, res.body);
+  const presId = res.json().prescriptions[0].id;
+  const routineId = res.json().prescriptions[0].routine_id;
+  const tHold = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(hold);
+  const tPlank = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(plank);
+  const rows = app.db.prepare(
+    'SELECT template_id, rest_seconds, rows_per_rest, lead_in_seconds FROM prescription_exercises WHERE prescription_id = ? ORDER BY template_id'
+  ).all(presId);
+  assert.deepEqual(rows, [
+    { template_id: tHold.id, rest_seconds: 10, rows_per_rest: 4, lead_in_seconds: 3 },
+    { template_id: tPlank.id, rest_seconds: 60, rows_per_rest: null, lead_in_seconds: null },
+  ]);
+
+  const active = await app.inject({ url: `/api/prescriptions/active?routine_id=${routineId}` });
+  assert.equal(active.statusCode, 200);
+  assert.deepEqual(active.json().exercises, [
+    { template_id: tHold.id, rest_seconds: 10, rows_per_rest: 4, lead_in_seconds: 3, intervals: null },
+    { template_id: tPlank.id, rest_seconds: 60, rows_per_rest: null, lead_in_seconds: null, intervals: null },
+  ]);
+});
+
+test('POST /api/prescriptions/import — invalid lead_in_seconds rejected with 400', async () => {
+  for (const bad of [0, 61, 1.5, 'three']) {
+    const res = await app.inject({
+      method: 'POST', url: '/api/prescriptions/import',
+      payload: {
+        week_starts_on: '2026-09-07',
+        week_ends_on: '2026-09-13',
+        days: [
+          {
+            routine_name: nextId('BadLeadInRoutine'),
+            exercises: [{ ...sampleStandardExercise(nextId('BadLeadInTpl')), lead_in_seconds: bad }],
+          },
+        ],
+      },
+    });
+    assert.equal(res.statusCode, 400, `lead_in_seconds ${JSON.stringify(bad)} should be rejected`);
   }
 });

@@ -150,3 +150,15 @@ test("ensureContext resumes a context iOS left in 'interrupted'", (t) => {
   assert.equal(ctx.resumeCalls, calls + 1,
     'an interrupted context must be resumed, not just a suspended one');
 });
+
+test('chainBeepPlan: a 3-s lead-in yields two shorts and a go tone, then the work boundary', () => {
+  const plan = chainBeepPlan([
+    { kind: 'lead_in', seconds: 3 },
+    { kind: 'work', seconds: 45, row: 0 },
+  ], 0);
+  assert.deepEqual(plan, [
+    { atMs: 1000, kind: 'short' }, { atMs: 2000, kind: 'short' }, { atMs: 3000, kind: 'done' },
+    { atMs: 45_000, kind: 'short' }, { atMs: 46_000, kind: 'short' }, { atMs: 47_000, kind: 'short' },
+    { atMs: 48_000, kind: 'done' },
+  ]);
+});

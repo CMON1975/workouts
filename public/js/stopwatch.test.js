@@ -683,3 +683,87 @@ test('chain: v3 state upgrades to v4 with chainCompleted false and keeps the cha
   const sw = createStopwatch({ now: () => T0 + 1_000, initial: state });
   assert.equal(sw.chainPhase().kind, 'rest', 'mid-chain state still resumes');
 });
+
+// ---- lead_in_seconds: a "get set" countdown before every timed work phase ----
+
+const HOLD = {
+  template: { id: 11, columns: [{ name: 'time' }] },
+  prescribed: {
+    exercises: [{ template_id: 11, rest_seconds: 10, rows_per_rest: 4, lead_in_seconds: 3 }],
+    targets: [0, 1, 2, 3].map(r => (
+      { template_id: 11, row_index: r, column_name: 'time', target_num: 45 }
+    )),
+  },
+};
+
+test('workChainFor: lead_in_seconds puts a lead-in before every work phase, none before rest', () => {
+  assert.deepEqual(workChainFor({ ...HOLD, completedRows: 0 }), [
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'work', seconds: 45, row: 0 },
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'work', seconds: 45, row: 1 },
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'work', seconds: 45, row: 2 },
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'work', seconds: 45, row: 3 },
+  ]);
+  // With a rest in the chain the lead-in still precedes each work row only.
+  const prescribed = {
+    ...HOLD.prescribed,
+    exercises: [{ template_id: 11, rest_seconds: 10, rows_per_rest: 2, lead_in_seconds: 3 }],
+  };
+  assert.deepEqual(workChainFor({ template: HOLD.template, prescribed, completedRows: 0 }), [
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'work', seconds: 45, row: 0 },
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'work', seconds: 45, row: 1 },
+    { kind: 'rest', seconds: 10 },
+  ]);
+});
+
+test('workChainFor: no lead-in without lead_in_seconds, or when it is invalid', () => {
+  assert.deepEqual(workChainFor({ ...PLANK, completedRows: 0 }).map(p => p.kind), ['work', 'rest']);
+  for (const bad of [0, -3, 1.5, '3', null]) {
+    const prescribed = {
+      ...HOLD.prescribed,
+      exercises: [{ template_id: 11, rest_seconds: 10, rows_per_rest: 4, lead_in_seconds: bad }],
+    };
+    assert.deepEqual(
+      workChainFor({ template: HOLD.template, prescribed, completedRows: 0 }).map(p => p.kind),
+      ['work', 'work', 'work', 'work'],
+      `lead_in_seconds ${JSON.stringify(bad)} must not add a lead-in`,
+    );
+  }
+});
+
+test('chain: lead-in runs itself into work, is never recorded, and a press skips it', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.startChain(workChainFor({ ...HOLD, completedRows: 0 }));
+  assert.deepEqual(sw.chainPhase(), { kind: 'lead_in', seconds: 3, elapsed: 0, remaining: 3, label: 'get set' });
+  clock.advance(3_000);
+  assert.deepEqual(sw.chainPhase(), { kind: 'work', row: 0, seconds: 45, elapsed: 0, remaining: 45 });
+  clock.advance(45_000);
+  assert.equal(sw.chainPhase().kind, 'lead_in', 'side switch gets its own lead-in');
+  clock.advance(1_000);
+  sw.advanceChain(); // pressed during the lead-in: straight to work
+  assert.deepEqual(sw.chainPhase(), { kind: 'work', row: 1, seconds: 45, elapsed: 0, remaining: 45 });
+  clock.advance(45_000 + 3_000 + 45_000 + 3_000 + 45_000);
+  assert.equal(sw.chainPhase(), null, 'chain complete');
+  assert.equal(sw.completedRows(), 4);
+  assert.deepEqual(sw.takeCompletedWork(), [
+    { row: 0, seconds: 45 }, { row: 1, seconds: 45 }, { row: 2, seconds: 45 }, { row: 3, seconds: 45 },
+  ]);
+});
+
+test('intervalPhasesFor: lead_in_seconds prefixes one lead-in before the program', () => {
+  const prescribed = {
+    exercises: [{ template_id: 33, lead_in_seconds: 3, intervals: { work_seconds: 30, easy_seconds: 30, rounds: 1 } }],
+  };
+  assert.deepEqual(intervalPhasesFor(prescribed, 33), [
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'intense', seconds: 30, label: 'intense 1/1' },
+    { kind: 'easy', seconds: 30, label: 'easy 1/1' },
+  ]);
+  assert.equal(intervalPhasesFor(INTERVALS, 33)[0].kind, 'warmup', 'no lead-in unless prescribed');
+});

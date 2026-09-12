@@ -54,6 +54,7 @@ const exerciseSchema = {
     rows_fixed: { type: 'integer', minimum: 0, maximum: 1 },
     rest_seconds: { type: 'integer', minimum: 1, maximum: 3600 },
     rows_per_rest: { type: 'integer', minimum: 1, maximum: 16 },
+    lead_in_seconds: { type: 'integer', minimum: 1, maximum: 60 },
     intervals: intervalsSchema,
     targets: { type: 'array', minItems: 0, maxItems: 200, items: targetSchema },
   },
@@ -116,7 +117,7 @@ function loadPrescription(db, id) {
      ORDER BY pt.template_id, pt.row_index, tc.position
   `).all(id);
   p.exercises = db.prepare(`
-    SELECT pe.template_id, pe.rest_seconds, pe.rows_per_rest, pe.intervals
+    SELECT pe.template_id, pe.rest_seconds, pe.rows_per_rest, pe.lead_in_seconds, pe.intervals
       FROM prescription_exercises pe
      WHERE pe.prescription_id = ?
      ORDER BY pe.template_id
@@ -329,11 +330,12 @@ export default async function prescriptionsRoutes(app) {
             templateIds.push(templateId);
             if (!perTemplateTargets.has(templateId)) perTemplateTargets.set(templateId, []);
             perTemplateTargets.get(templateId).push({ targets: ex.targets, template_name: ex.template_name });
-            if (ex.rest_seconds != null || ex.rows_per_rest != null || ex.intervals != null) {
+            if (ex.rest_seconds != null || ex.rows_per_rest != null || ex.lead_in_seconds != null || ex.intervals != null) {
               const entry = perTemplateRest.get(templateId)
-                ?? { rest_seconds: null, rows_per_rest: null, intervals: null };
+                ?? { rest_seconds: null, rows_per_rest: null, lead_in_seconds: null, intervals: null };
               if (ex.rest_seconds != null) entry.rest_seconds = ex.rest_seconds;
               if (ex.rows_per_rest != null) entry.rows_per_rest = ex.rows_per_rest;
+              if (ex.lead_in_seconds != null) entry.lead_in_seconds = ex.lead_in_seconds;
               if (ex.intervals != null) entry.intervals = JSON.stringify(ex.intervals);
               perTemplateRest.set(templateId, entry);
             }
@@ -367,11 +369,11 @@ export default async function prescriptionsRoutes(app) {
           }
 
           const restIns = db.prepare(`
-            INSERT INTO prescription_exercises (prescription_id, template_id, rest_seconds, rows_per_rest, intervals)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO prescription_exercises (prescription_id, template_id, rest_seconds, rows_per_rest, lead_in_seconds, intervals)
+            VALUES (?, ?, ?, ?, ?, ?)
           `);
           for (const [templateId, entry] of perTemplateRest) {
-            restIns.run(prescriptionId, templateId, entry.rest_seconds, entry.rows_per_rest, entry.intervals);
+            restIns.run(prescriptionId, templateId, entry.rest_seconds, entry.rows_per_rest, entry.lead_in_seconds, entry.intervals);
           }
 
           createdPrescriptions.push({

@@ -190,6 +190,16 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
 
 const isTimeColumn = (name) => typeof name === 'string' && name.trim().toLowerCase() === 'time';
 
+// Lead-in: a short "get set" countdown before a timed work phase (and before
+// an interval program), so the press or a side switch leaves time to get into
+// position. It runs itself into the work like any timed phase, beeps like any
+// boundary, and is never recorded — the chain machinery treats it as a
+// non-work, non-rest phase (a press skips straight to the work).
+const leadInSecondsOf = (entry) => (
+  Number.isInteger(entry?.lead_in_seconds) && entry.lead_in_seconds > 0 ? entry.lead_in_seconds : 0
+);
+const leadInPhase = (seconds) => ({ kind: 'lead_in', seconds, label: 'get set' });
+
 // Derive the chain (work phases then one rest) the next press should start.
 // Chain mode is active only when the template records time (a column named
 // "time", matched like the weight autofill) AND a rest is prescribed —
@@ -207,6 +217,7 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
   if (!Number.isInteger(rest) || rest <= 0) return null;
   const rpr = Number.isInteger(entry.rows_per_rest) && entry.rows_per_rest >= 1
     ? entry.rows_per_rest : 1;
+  const leadIn = leadInSecondsOf(entry);
 
   const rowSeconds = new Map();
   let maxRow = -1;
@@ -222,12 +233,14 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
   const rowCount = maxRow + 1;
   if (completedRows >= rowCount) {
     // Beyond the prescription (or none): open-ended work, press to end it.
+    if (leadIn) phases.push(leadInPhase(leadIn));
     phases.push({ kind: 'work', seconds: null, row: completedRows });
     phases.push({ kind: 'rest', seconds: rest });
     return phases;
   }
   const end = Math.min(completedRows + rpr, rowCount);
   for (let r = completedRows; r < end; r++) {
+    if (leadIn) phases.push(leadInPhase(leadIn));
     phases.push({ kind: 'work', seconds: rowSeconds.get(r) ?? null, row: r });
   }
   if (end < rowCount) phases.push({ kind: 'rest', seconds: rest });
@@ -242,7 +255,8 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
 // press. Labels are what the bar shows under the readout. Null = not an
 // interval exercise (or an unusable program).
 export function intervalPhasesFor(prescribed, templateId) {
-  const cfg = prescribed?.exercises?.find(e => e.template_id === templateId)?.intervals;
+  const entry = prescribed?.exercises?.find(e => e.template_id === templateId);
+  const cfg = entry?.intervals;
   if (cfg == null || typeof cfg !== 'object') return null;
   const secs = (v) => (Number.isInteger(v) && v > 0 ? v : 0);
   const work = secs(cfg.work_seconds);
@@ -251,6 +265,8 @@ export function intervalPhasesFor(prescribed, templateId) {
   if (work === 0 || rounds === 0) return null;
 
   const phases = [];
+  const leadIn = leadInSecondsOf(entry);
+  if (leadIn) phases.push(leadInPhase(leadIn));
   const warmup = secs(cfg.warmup_seconds);
   if (warmup > 0) phases.push({ kind: 'warmup', seconds: warmup, label: 'warmup' });
   for (let r = 1; r <= rounds; r++) {
