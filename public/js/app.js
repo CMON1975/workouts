@@ -14,6 +14,7 @@ import {
 } from './stopwatch.js';
 import { createBeeper, beepOffsets, chainBeepPlan } from './beeper.js';
 import { createWakeLock } from './wakelock.js';
+import { pickOpenWorkout, rebuildActiveWorkout } from './resume.js';
 import { iconSvg, setButtonIcon } from './icons.js';
 import {
   renderSessionForm, renderStatus,
@@ -147,13 +148,13 @@ function templatesById() {
 
 async function tryResumeWorkout() {
   const wid = await getActiveWorkoutId();
-  if (!wid) return false;
-
-  const local = await getWorkout(wid);
+  const local = wid ? await getWorkout(wid) : null;
   if (!local) {
-    clearStopwatchState(wid);
-    await clearActiveWorkoutId();
-    return false;
+    if (wid) {
+      clearStopwatchState(wid);
+      await clearActiveWorkoutId();
+    }
+    return tryResumeFromServer();
   }
 
   let server = null;
@@ -193,12 +194,47 @@ async function tryResumeWorkout() {
     sessionIds: local.session_ids || {},
   };
 
+  return mountResumedWorkout(`Resumed ${routine.name} at exercise ${idx + 1}`);
+}
+
+// The local record is gone (IndexedDB lost it, or never got to write it
+// while the tab was suspended). The server still has the open workout and
+// its sessions, so rebuild the runner from there rather than showing an
+// empty home screen — that is what produced the re-run phantom workouts.
+async function tryResumeFromServer() {
+  let open;
+  try {
+    open = await api.listWorkouts({ finalized: false, limit: 10 });
+  } catch (err) {
+    console.warn('open-workout lookup failed', err);
+    return false;
+  }
+  const workout = pickOpenWorkout({ workouts: open, routines });
+  if (!workout) return false;
+  const routine = routines.find(r => r.id === workout.routine_id);
+  const { complete, ...rebuilt } = rebuildActiveWorkout({ workout, routine });
+  if (complete) {
+    // Every exercise is finalized; only the Finish itself was lost.
+    try {
+      await api.finalizeWorkout(workout.id, (workout.client_version ?? 1) + 1);
+    } catch (err) {
+      console.warn('finalize of completed open workout failed', err);
+    }
+    return false;
+  }
+  activeWorkout = { routine, ...rebuilt };
+  await persistActiveWorkout();
+  return mountResumedWorkout(`Resumed ${routine.name} at exercise ${rebuilt.currentIndex + 1} (from server)`);
+}
+
+async function mountResumedWorkout(banner) {
+  const { workoutId, currentIndex: idx } = activeWorkout;
   els.resumeBanner.hidden = false;
-  els.resumeBanner.textContent = `Resumed ${routine.name} at exercise ${idx + 1}`;
+  els.resumeBanner.textContent = banner;
   setTimeout(() => { els.resumeBanner.hidden = true; }, 4000);
 
   // A running timer resumes from its original epoch — away time counts.
-  stopwatch = createStopwatch({ exerciseIndex: idx, initial: loadStopwatchState(wid, idx) });
+  stopwatch = createStopwatch({ exerciseIndex: idx, initial: loadStopwatchState(workoutId, idx) });
   await bindCurrentExercise();
   showStopwatchBar();
   maybeAutoStartStopwatch(); // idled-out restore (crash after finalize) or a pre-auto-start run
@@ -647,9 +683,18 @@ async function bindCurrentExercise() {
     const local = (await getDraft(sid)) || readShadow(sid);
     if (local && !local.finalized_at) {
       draft = local;
-      // workout_id may be missing from older shadows; make sure the belongs-to link is present.
-      draft.workout_id = activeWorkout.workoutId;
+    } else if (!local) {
+      // No local copy at all: the server may still hold the in-progress draft.
+      try {
+        const server = await api.getSession(sid);
+        if (server && !server.finalized_at) draft = server;
+      } catch (err) {
+        if (err.status !== 404) console.warn('session fetch failed', err);
+      }
     }
+    // workout_id may be missing from older shadows and from the server
+    // shape; make sure the belongs-to link is present.
+    if (draft) draft.workout_id = activeWorkout.workoutId;
   } else {
     sid = uuidv7();
     activeWorkout.sessionIds[currentIndex] = sid;
