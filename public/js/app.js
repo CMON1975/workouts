@@ -1713,7 +1713,8 @@ async function boot() {
       // Not a gesture, but once a press has unlocked audio WebKit allows a
       // resume from here — without it a chain that was frozen mid-countdown
       // stays interrupted (silent) until the next press, which chains never
-      // get. If WebKit refuses, the next press's ensureContext recovers.
+      // get. The beeper re-arms its plan whenever the context actually
+      // returns to running, and replaces a context whose resume never takes.
       beeper.ensureContext();
       const snap = stopwatch.chainSnapshot();
       if (snap) {

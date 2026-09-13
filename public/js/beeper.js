@@ -47,47 +47,50 @@ const TONES = {
   done: { freq: 1318, durMs: 450, gain: 0.3 },
 };
 
+// A resume that has not taken effect after this long is treated as refused
+// and the context is replaced (iOS can leave an 'interrupted' context stuck).
+export const RECREATE_AFTER_MS = 1500;
+
 // Thin Web Audio shell around beepOffsets. Beeps are scheduled on the audio
 // clock at press time — the app's 250ms display tick is cosmetic and dies
 // when the tab freezes, so it can never be the trigger. Everything degrades
 // to silence (no throw into the press path) when audio is unavailable;
 // hidden-tab / locked-screen playback is best-effort by platform design.
-export function createBeeper() {
+//
+// Surviving iOS interruptions: the audio clock freezes while the context is
+// interrupted (screen lock, app switch), so anything scheduled before the
+// freeze plays late by the away time — or never, if WebKit refuses the
+// resume. The last plan is kept anchored to the wall clock and re-armed on
+// every return to 'running', whenever that turns out to be; a resume that
+// does not take within RECREATE_AFTER_MS gets a fresh context instead.
+export function createBeeper({ now = Date.now, setTimeout = globalThis.setTimeout } = {}) {
   let ctx = null;
   let pending = [];
+  let plan = null;        // { at: wall ms, offsets } — the beeps still wanted
+  let wasRunning = false; // last observed ctx state, for edge detection
+  let recreateTimer = null;
 
-  // Must run synchronously in a user-gesture handler (iOS unlock). Called on
-  // every press so the context is warm one gesture before the first countdown.
-  function ensureContext() {
-    try {
-      const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
-      if (!AC) return;
-      if (!ctx) ctx = new AC();
-      // Anything but 'running' needs a resume — iOS parks a running context
-      // in the non-standard 'interrupted' state on screen lock / app switch
-      // and never leaves it on its own, which silenced every beep after the
-      // first lock of a workout.
-      if (ctx.state !== 'running') ctx.resume();
-    } catch (_) {
-      ctx = null;
-    }
-  }
+  function AC() { return globalThis.AudioContext || globalThis.webkitAudioContext; }
 
-  function cancel() {
+  function stopPending() {
     for (const osc of pending) {
       try { osc.stop(); osc.disconnect(); } catch (_) {}
     }
     pending = [];
   }
 
-  function schedule(offsets) {
-    cancel();
-    if (!ctx || !offsets?.length) return;
+  // Put the plan's still-future beeps on the audio clock as it stands now.
+  function arm() {
+    stopPending();
+    if (!ctx || !plan) return;
+    const elapsed = now() - plan.at;
     try {
       const base = ctx.currentTime;
-      for (const { atMs, kind } of offsets) {
+      for (const { atMs, kind } of plan.offsets) {
+        const rel = atMs - elapsed;
+        if (rel <= 0) continue;
         const { freq, durMs, gain } = TONES[kind];
-        const at = base + atMs / 1000;
+        const at = base + rel / 1000;
         const osc = ctx.createOscillator();
         const env = ctx.createGain();
         osc.frequency.value = freq;
@@ -99,8 +102,73 @@ export function createBeeper() {
         pending.push(osc);
       }
     } catch (_) {
-      cancel();
+      stopPending();
     }
+  }
+
+  // Re-arm on the not-running → running edge: the clock was frozen in
+  // between, so everything scheduled before it is stale.
+  function noteState() {
+    const running = ctx?.state === 'running';
+    if (running && !wasRunning) arm();
+    wasRunning = running;
+  }
+
+  function attach(c) {
+    ctx = c;
+    wasRunning = false;
+    try { c.onstatechange = noteState; } catch (_) {}
+  }
+
+  function resume() {
+    if (!ctx || ctx.state === 'running') return;
+    try {
+      const p = ctx.resume();
+      if (p?.then) p.then(noteState, () => {});
+    } catch (_) {}
+  }
+
+  function recreate() {
+    const old = ctx;
+    try { old?.close?.(); } catch (_) {}
+    try {
+      attach(new (AC())());
+      resume();
+      noteState();
+    } catch (_) {
+      ctx = null;
+    }
+  }
+
+  // Must run synchronously in a user-gesture handler (iOS unlock). Called on
+  // every press so the context is warm one gesture before the first countdown.
+  function ensureContext() {
+    try {
+      if (!AC()) return;
+      if (!ctx) attach(new (AC())());
+      if (ctx.state !== 'running') {
+        resume();
+        if (recreateTimer == null) {
+          recreateTimer = setTimeout(() => {
+            recreateTimer = null;
+            if (ctx && ctx.state !== 'running') recreate();
+          }, RECREATE_AFTER_MS);
+        }
+      }
+      noteState();
+    } catch (_) {
+      ctx = null;
+    }
+  }
+
+  function cancel() {
+    plan = null;
+    stopPending();
+  }
+
+  function schedule(offsets) {
+    plan = offsets?.length ? { at: now(), offsets } : null;
+    arm();
   }
 
   function isArmed() { return ctx != null; }

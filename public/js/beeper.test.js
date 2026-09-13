@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { beepOffsets, chainBeepPlan, createBeeper } from './beeper.js';
+import { beepOffsets, chainBeepPlan, createBeeper, RECREATE_AFTER_MS } from './beeper.js';
 
 test('beepOffsets plans three shorts and a done tone', () => {
   assert.deepEqual(beepOffsets(90_000), [
@@ -95,18 +95,43 @@ test('chainBeepPlan on garbage input yields no beeps', () => {
 // lived: iOS flips a running context to the non-standard 'interrupted' state
 // on screen lock / app switch and never leaves it on its own.
 
-function installFakeAudioContext(t) {
+function installFakeAudioContext(t, { resumeWorks = true } = {}) {
   const instances = [];
   class FakeAudioContext {
     constructor() {
       this.state = 'suspended'; // fresh contexts start suspended on iOS
       this.resumeCalls = 0;
+      this.closed = false;
+      this.currentTime = 0;
+      this.onstatechange = null;
+      this.starts = []; // audio-clock times oscillators were started at
+      this.destination = {};
       instances.push(this);
     }
     resume() {
       this.resumeCalls += 1;
-      this.state = 'running';
+      if (resumeWorks) this.state = 'running';
       return Promise.resolve();
+    }
+    close() { this.closed = true; return Promise.resolve(); }
+    // What iOS does on lock / app switch and on coming back.
+    setState(state) { this.state = state; this.onstatechange?.(); }
+    createOscillator() {
+      const ctx = this;
+      const osc = {
+        frequency: { value: 0 },
+        connect(n) { return n; },
+        disconnect() {},
+        start(at) { ctx.starts.push(at); osc.startedAt = at; },
+        stop() { osc.stopped = true; },
+      };
+      return osc;
+    }
+    createGain() {
+      return {
+        gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+        connect(n) { return n; },
+      };
     }
   }
   const prev = Object.getOwnPropertyDescriptor(globalThis, 'AudioContext');
@@ -161,4 +186,86 @@ test('chainBeepPlan: a 3-s lead-in yields two shorts and a go tone, then the wor
     { atMs: 45_000, kind: 'short' }, { atMs: 46_000, kind: 'short' }, { atMs: 47_000, kind: 'short' },
     { atMs: 48_000, kind: 'done' },
   ]);
+});
+
+// ---- Surviving iOS audio interruptions (HANDOFF 2026-09-13 beeps) ----
+// The audio clock freezes while the context is interrupted, so anything
+// scheduled before the freeze plays late by the away time — or never, when
+// WebKit refuses the resume. The plan is kept wall-clock-anchored and
+// re-armed on every return to 'running'; a resume that does not take gets
+// a fresh context.
+
+function clock(start = 100_000) {
+  let t = start;
+  return { now: () => t, advance: (ms) => { t += ms; } };
+}
+
+test('schedule starts oscillators on the audio clock at base + offset', (t) => {
+  const instances = installFakeAudioContext(t);
+  const beeper = createBeeper();
+  beeper.ensureContext();
+  instances[0].currentTime = 10;
+  beeper.schedule([{ atMs: 1000, kind: 'short' }, { atMs: 4000, kind: 'done' }]);
+  assert.deepEqual(instances[0].starts, [11, 14]);
+});
+
+test('a context that comes back to running re-arms the plan shifted by the wall time away', (t) => {
+  const instances = installFakeAudioContext(t);
+  const c = clock();
+  const beeper = createBeeper({ now: c.now });
+  beeper.ensureContext();
+  const ctx = instances[0];
+  beeper.schedule([{ atMs: 5000, kind: 'short' }, { atMs: 8000, kind: 'done' }, { atMs: 20_000, kind: 'done' }]);
+  ctx.starts = [];
+  ctx.setState('interrupted');   // screen lock: audio clock stops at 0
+  c.advance(9000);               // wall clock keeps going
+  ctx.currentTime = 0.5;         // WebKit resumes the clock roughly where it froze
+  ctx.setState('running');
+  // 5 s and 8 s beeps are in the past; the 20 s one is now 11 s out.
+  assert.deepEqual(ctx.starts, [11.5]);
+});
+
+test('ensureContext recreates the context when a resume does not take within the grace period', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const instances = installFakeAudioContext(t, { resumeWorks: false });
+  const c = clock();
+  const beeper = createBeeper({ now: c.now });
+  beeper.ensureContext();
+  const first = instances[0];
+  first.state = 'running';       // the gesture-backed first start worked
+  beeper.schedule([{ atMs: 30_000, kind: 'done' }]);
+  first.setState('interrupted'); // app switch
+  c.advance(10_000);
+  beeper.ensureContext();        // wake: resume() is refused, state stays interrupted
+  assert.equal(instances.length, 1);
+  t.mock.timers.tick(RECREATE_AFTER_MS);
+  assert.equal(instances.length, 2, 'a fresh context replaces the stuck one');
+  assert.equal(first.closed, true);
+  const second = instances[1];
+  second.setState('running');
+  assert.deepEqual(second.starts, [20], 'the plan is re-armed on the new context, shifted by the away time');
+  assert.equal(beeper.isArmed(), true);
+});
+
+test('ensureContext on a running context starts no recreate timer', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const instances = installFakeAudioContext(t);
+  const beeper = createBeeper();
+  beeper.ensureContext();
+  beeper.ensureContext();
+  t.mock.timers.tick(RECREATE_AFTER_MS * 2);
+  assert.equal(instances.length, 1);
+});
+
+test('cancel forgets the plan so a later return to running plays nothing', (t) => {
+  const instances = installFakeAudioContext(t);
+  const beeper = createBeeper();
+  beeper.ensureContext();
+  const ctx = instances[0];
+  beeper.schedule([{ atMs: 5000, kind: 'done' }]);
+  beeper.cancel();
+  ctx.starts = [];
+  ctx.setState('interrupted');
+  ctx.setState('running');
+  assert.deepEqual(ctx.starts, []);
 });
