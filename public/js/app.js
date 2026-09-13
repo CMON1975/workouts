@@ -1752,6 +1752,11 @@ async function boot() {
   els.teAddCol.addEventListener('click', handleTeAddCol);
 
   els.bodyMetricsForm.addEventListener('submit', handleBodyMetricSubmit);
+  // Free-text metrics: the iOS return key must not submit a half-typed
+  // sentence (row 187 ended at "a bag of"); the Log button submits.
+  els.bmValue.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && els.bmMetric.value === 'food') e.preventDefault();
+  });
   els.bmMetric.addEventListener('change', applyBmMetricUI);
   applyBmMetricUI();
   els.bmDate.value = todayISODate();
