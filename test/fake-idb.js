@@ -127,12 +127,19 @@ export function createFakeIndexedDB() {
   const backend = { stores: new Map(), version: 0, connections: [] };
   const idb = {
     opens: 0,
+    // When true, every open() fails — IndexedDB is unavailable to the page.
+    failOpens: false,
     open(name, version) {
       idb.opens += 1;
       const req = new FakeRequest();
       req.onupgradeneeded = null;
       req.onblocked = null;
       queueMicrotask(() => {
+        if (idb.failOpens) {
+          req.error = new DOMException('open refused', 'UnknownError');
+          req.onerror?.({ target: req });
+          return;
+        }
         const db = new FakeDatabase(backend);
         backend.connections.push(db);
         req.result = db;

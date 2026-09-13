@@ -38,7 +38,9 @@ export function createSessionState({ draft, onChange }) {
       await api.patchDraft(draft.id, draft);
       setState(STATES.SAVED);
     } catch (err) {
-      await enqueueFailedPatch(draft);
+      // The outbox is best-effort: if IDB is unavailable the shadow write
+      // above still holds the data, and finalize must not fail here.
+      try { await enqueueFailedPatch(draft); } catch (_) {}
       setState(STATES.DIRTY);
     }
   }
@@ -74,7 +76,9 @@ export function createSessionState({ draft, onChange }) {
     try {
       const res = await api.finalize(draft.id, draft.client_version, durationSeconds);
       draft.finalized_at = res.finalized_at;
-      await deleteDraft(draft.id);
+      // The server's answer is the truth from here: local cleanup failing
+      // (IDB gone after a tab suspend) must not read as a save failure.
+      try { await deleteDraft(draft.id); } catch (err) { console.warn('draft cleanup failed', err); }
       clearShadow(draft.id);
       setState(STATES.FINALIZED);
       return res;
