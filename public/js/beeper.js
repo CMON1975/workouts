@@ -33,7 +33,7 @@ export function chainBeepPlan(phases, elapsedMs = 0) {
   const plan = [];
   let cumMs = 0;
   for (const p of phases) {
-    if (typeof p?.seconds !== 'number' || p.seconds <= 0) break;
+    if (typeof p?.seconds !== 'number' || p.seconds < 0) break; // 0 = untimed set, passes through
     cumMs += p.seconds * 1000;
     plan.push(...beepOffsets(cumMs - elapsedMs));
   }

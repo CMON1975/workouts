@@ -269,3 +269,13 @@ test('cancel forgets the plan so a later return to running plays nothing', (t) =
   ctx.setState('running');
   assert.deepEqual(ctx.starts, []);
 });
+
+test('chainBeepPlan runs through a zero-length untimed set to the rest boundary', () => {
+  assert.deepEqual(chainBeepPlan([
+    { kind: 'work', seconds: 0, row: 1, untimed: true },
+    { kind: 'rest', seconds: 120 },
+  ]), [
+    { atMs: 117_000, kind: 'short' }, { atMs: 118_000, kind: 'short' },
+    { atMs: 119_000, kind: 'short' }, { atMs: 120_000, kind: 'done' },
+  ]);
+});

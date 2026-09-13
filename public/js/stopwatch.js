@@ -49,7 +49,7 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
       const phaseEnd = chain.epoch + p.seconds * 1000;
       if (now() < phaseEnd) break;
       if (p.kind === 'work') {
-        completedWork.push({ row: p.row, seconds: p.seconds });
+        if (!p.untimed) completedWork.push({ row: p.row, seconds: p.seconds });
         completedRowsCount += 1;
       }
       if (chain.phases.length > 1) {
@@ -128,7 +128,7 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
     if (!chain) return;
     const p = chain.phases[0];
     if (p.kind === 'work') {
-      completedWork.push({ row: p.row, seconds: elapsedFrom(chain.epoch) });
+      if (!p.untimed) completedWork.push({ row: p.row, seconds: elapsedFrom(chain.epoch) });
       completedRowsCount += 1;
     }
     if (p.kind !== 'rest' && chain.phases.length > 1) {
@@ -219,15 +219,25 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
     ? entry.rows_per_rest : 1;
   const leadIn = leadInSecondsOf(entry);
 
+  // Per row: a numeric time target makes a timed hold; a numeric target on
+  // any other column with no time target makes an untimed rep set (press =
+  // set done, straight to rest, nothing recorded — the dip partial sets);
+  // no numeric target at all is an open-ended max hold, press to end.
   const rowSeconds = new Map();
+  const repRows = new Set();
   let maxRow = -1;
   for (const t of prescribed?.targets ?? []) {
     if (t.template_id !== template.id) continue;
     if (t.row_index > maxRow) maxRow = t.row_index;
-    if (isTimeColumn(t.column_name) && typeof t.target_num === 'number' && t.target_num > 0) {
-      rowSeconds.set(t.row_index, Math.round(t.target_num));
-    }
+    if (typeof t.target_num !== 'number' || t.target_num <= 0) continue;
+    if (isTimeColumn(t.column_name)) rowSeconds.set(t.row_index, Math.round(t.target_num));
+    else repRows.add(t.row_index);
   }
+  const workPhase = (r) => {
+    if (rowSeconds.has(r)) return { kind: 'work', seconds: rowSeconds.get(r), row: r };
+    if (repRows.has(r)) return { kind: 'work', seconds: 0, row: r, untimed: true };
+    return { kind: 'work', seconds: null, row: r };
+  };
 
   const phases = [];
   const rowCount = maxRow + 1;
@@ -247,8 +257,9 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
   do {
     const end = Math.min(r + rpr, rowCount);
     for (; r < end; r++) {
-      if (leadIn) phases.push(leadInPhase(leadIn));
-      phases.push({ kind: 'work', seconds: rowSeconds.get(r) ?? null, row: r });
+      const work = workPhase(r);
+      if (leadIn && !work.untimed) phases.push(leadInPhase(leadIn));
+      phases.push(work);
     }
     if (r < rowCount) phases.push({ kind: 'rest', seconds: rest });
   } while (continuous && r < rowCount);

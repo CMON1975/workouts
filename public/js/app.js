@@ -488,10 +488,17 @@ function renderStopwatchDisplay() {
     drainRecordedTimes();
     const phase = stopwatch?.chainPhase() ?? null;
     if (phase == null) {
-      // Armed: preview what the press starts (the first work duration).
-      els.stopwatchTime.textContent = formatMSS(phases[0].seconds ?? 0);
       cls.remove('resting'); cls.remove('working');
-      setStopwatchBtn('play', 'Start set');
+      if (phases[0].untimed) {
+        // A rep set inside a timed template: the press is the set's end and
+        // starts the rest, like a rep lift — preview the rest, not a hold.
+        els.stopwatchTime.textContent = formatMSS(phases[1]?.seconds ?? 0);
+        setStopwatchBtn('timer', 'Rest');
+      } else {
+        // Armed: preview what the press starts (the first work duration).
+        els.stopwatchTime.textContent = formatMSS(phases[0].seconds ?? 0);
+        setStopwatchBtn('play', 'Start set');
+      }
     } else if (phase.kind === 'work') {
       // Countdown when prescribed, count-up when open-ended (max holds).
       els.stopwatchTime.textContent = formatMSS(phase.remaining ?? phase.elapsed);

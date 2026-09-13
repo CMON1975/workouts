@@ -808,3 +808,58 @@ test('intervalPhasesFor: lead_in_seconds prefixes one lead-in before the program
   ]);
   assert.equal(intervalPhasesFor(INTERVALS, 33)[0].kind, 'warmup', 'no lead-in unless prescribed');
 });
+
+// ---- Rep rows inside a timed template (HANDOFF 2026-09-06, dip 138 s) ----
+// Dip progression: row 0 is a 10-s support hold (time target), rows 1-3 are
+// partial-rep sets prescribed by reps only. A row whose only numeric targets
+// are on non-time columns is a rep set: the press means "set done", the rest
+// counts down, and nothing is recorded into the time cell. Open-ended
+// count-up stays reserved for rows with no numeric target at all (max holds).
+
+const DIP = {
+  template: { id: 31, columns: [{ name: 'time' }, { name: 'reps' }] },
+  prescribed: {
+    exercises: [{ template_id: 31, rest_seconds: 120 }],
+    targets: [
+      { template_id: 31, row_index: 0, column_name: 'time', target_num: 10 },
+      ...[1, 2, 3].map(r => ({ template_id: 31, row_index: r, column_name: 'reps', target_num: 3 })),
+    ],
+  },
+};
+
+test('workChainFor: a reps-only row is an untimed set — no count-up, straight to rest', () => {
+  assert.deepEqual(workChainFor({ ...DIP, completedRows: 0 }), [
+    { kind: 'work', seconds: 10, row: 0 },
+    { kind: 'rest', seconds: 120 },
+  ]);
+  assert.deepEqual(workChainFor({ ...DIP, completedRows: 1 }), [
+    { kind: 'work', seconds: 0, row: 1, untimed: true },
+    { kind: 'rest', seconds: 120 },
+  ]);
+  assert.deepEqual(workChainFor({ ...DIP, completedRows: 3 }), [
+    { kind: 'work', seconds: 0, row: 3, untimed: true },
+  ], 'last row: no rest to chain into');
+  // No lead-in before an untimed set (nothing to get set for), one before a hold.
+  const withLead = { ...DIP, prescribed: { ...DIP.prescribed,
+    exercises: [{ template_id: 31, rest_seconds: 120, lead_in_seconds: 3 }] } };
+  assert.deepEqual(workChainFor({ ...withLead, completedRows: 1 }).map(p => p.kind),
+    ['work', 'rest', 'work', 'rest', 'work']);
+  assert.deepEqual(workChainFor({ ...withLead, completedRows: 0 }).slice(0, 2).map(p => p.kind),
+    ['lead_in', 'work']);
+});
+
+test('chain: an untimed set folds straight into its rest and records no time', () => {
+  let t = 1_000_000;
+  const sw = createStopwatch({ now: () => t });
+  sw.start();
+  sw.startChain(workChainFor({ ...DIP, completedRows: 1 }));
+  const phase = sw.chainPhase();
+  assert.equal(phase.kind, 'rest');
+  assert.equal(phase.remaining, 120);
+  assert.equal(sw.completedRows(), 1);
+  assert.deepEqual(sw.takeCompletedWork(), []);
+  t += 120_000;
+  assert.equal(sw.chainPhase(), null);
+  assert.equal(sw.chainCompleted(), true);
+  assert.deepEqual(sw.takeCompletedWork(), []);
+});
