@@ -13,6 +13,7 @@ import {
   loadStopwatchState, saveStopwatchState, clearStopwatchState,
 } from './stopwatch.js';
 import { createBeeper, beepOffsets, chainBeepPlan } from './beeper.js';
+import { createWakeLock } from './wakelock.js';
 import { iconSvg, setButtonIcon } from './icons.js';
 import {
   renderSessionForm, renderStatus,
@@ -128,6 +129,7 @@ let detailOrigin = 'history';   // 'history' | 'runner'
 let stopwatch = null;           // created on workout start/resume, null otherwise
 let stopwatchTick = null;
 const beeper = createBeeper();  // inert until the first button gesture arms it
+const wakeLock = createWakeLock(); // held for the length of a routine run
 
 function show(el) { el.hidden = false; }
 function hide(el) { el.hidden = true; }
@@ -200,6 +202,7 @@ async function tryResumeWorkout() {
   await bindCurrentExercise();
   showStopwatchBar();
   maybeAutoStartStopwatch(); // idled-out restore (crash after finalize) or a pre-auto-start run
+  wakeLock.acquire(); // no gesture here — a refusal is retried on the next press
   return true;
 }
 
@@ -495,6 +498,7 @@ function hideStopwatchBar() {
 }
 
 function handleStopwatchBtn() {
+  wakeLock.reacquireIfWanted();
   if (!activeWorkout || !stopwatch) return;
   // Synchronously, on every press: the gesture is what unlocks audio on iOS,
   // and pressing Start warms the context before the first countdown needs it.
@@ -600,6 +604,7 @@ async function handleRoutinePick(routine) {
   await bindCurrentExercise();
   showStopwatchBar();
   maybeAutoStartStopwatch();
+  wakeLock.acquire();
 }
 
 async function persistActiveWorkout() {
@@ -689,6 +694,7 @@ function updateRunnerHeader() {
 
 async function handleRunnerNext() {
   if (!activeWorkout || !currentSession) return;
+  wakeLock.reacquireIfWanted();
   els.runnerNext.disabled = true;
   drainRecordedTimes(); // a Done-then-Next race must not drop the last hold time
 
@@ -788,6 +794,7 @@ async function resetRunner() {
   currentSession = null;
   stopwatch = null;
   beeper.cancel();
+  wakeLock.release();
   hideStopwatchBar();
 }
 
@@ -1655,6 +1662,7 @@ async function boot() {
   // countdown is still live, reschedule its remaining beeps — the ones that
   // were queued before the freeze may have been dropped with the context.
   const wakeStopwatch = () => {
+    wakeLock.reacquireIfWanted(); // the OS drops the lock whenever the page hides
     if (!stopwatch) return;
     if (beeper.isArmed()) {
       // Not a gesture, but once a press has unlocked audio WebKit allows a
