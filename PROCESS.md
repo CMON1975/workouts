@@ -326,3 +326,9 @@ Running log of work done with Claude Code.
 **What:** `completeness.js` (`blankPrescribedRows`, 4 tests red first) and a `confirm()` in the Finish branch of `handleRunnerNext`, after `drainRecordedTimes` so a just-recorded hold counts as entered. Commit `cec222f`, assets ?v=19, deployed. Also pinned a beeper schedule test to a fixed clock after a one-millisecond flake in a full run. 330/330. HANDOFF: last action item moved to Done; only FYIs remain in Open.
 **Why:** HANDOFF 09-04 idea, low priority; the only open item left after the day's run.
 **Notes:** Finish-only guard per the ask; Next on a middle exercise still seals a blank set silently. Day's tally from the Sunday handoff: IDB reconnect + finalize guard, wake lock, server-side fallback resume, beeper re-arm/recreate, body-metrics PATCH/DELETE + row fixes, Enter guard, continuous lead-in chains, untimed rep rows, Finish guard; three phantoms deleted by the user.
+
+---
+## 2026-09-13 — CDP smoke driver kept in scripts/
+**What:** `scripts/cdp-smoke.mjs` (from the session scratchpad): headless Chromium over the DevTools protocol, fresh profile, `--wait=ms`, evaluates expressions, prints console output, exits 1 on a page exception. Documented under Commands in CLAUDE.md. Verified against a seeded throwaway server (home visible, 3 routines).
+**Why:** The fallback-resume verification needed real waits; `--dump-dom` with a virtual-time budget was unusable, and the script would otherwise vanish with the scratchpad.
+**Notes:** Not wired into `npm test` (needs a running server and Chromium); it is a manual tool. Queue from the Sunday HANDOFF is empty.
