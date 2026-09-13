@@ -5,7 +5,7 @@ let _dbPromise = null;
 
 export function openDB() {
   if (_dbPromise) return _dbPromise;
-  _dbPromise = new Promise((resolve, reject) => {
+  const p = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VER);
     req.onupgradeneeded = () => {
       const db = req.result;
@@ -23,15 +23,36 @@ export function openDB() {
         db.createObjectStore('workouts', { keyPath: 'id' });
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      // WebKit closes connections while a tab is suspended (iOS sleep / app
+      // switch). Drop the cached handle so the next call reopens instead of
+      // throwing InvalidStateError forever; a hard refresh was the only way
+      // out before (HANDOFF 2026-09-13).
+      db.onclose = () => { if (_dbPromise === p) _dbPromise = null; };
+      db.onversionchange = () => { db.close(); if (_dbPromise === p) _dbPromise = null; };
+      resolve(db);
+    };
+    req.onerror = () => { if (_dbPromise === p) _dbPromise = null; reject(req.error); };
     req.onblocked = () => console.warn('IDB blocked — close other tabs');
   });
-  return _dbPromise;
+  _dbPromise = p;
+  return p;
 }
 
-function tx(db, stores, mode = 'readonly') {
-  return db.transaction(stores, mode);
+// Opens a transaction on the cached connection, reopening once if the handle
+// is dead. iOS does not reliably fire `close`, so the InvalidStateError from
+// transaction() is the other signal that the connection went away.
+async function tx(stores, mode = 'readonly') {
+  const db = await openDB();
+  try {
+    return db.transaction(stores, mode);
+  } catch (err) {
+    if (err?.name !== 'InvalidStateError') throw err;
+    if (_dbPromise && (await _dbPromise) === db) _dbPromise = null;
+    const fresh = await openDB();
+    return fresh.transaction(stores, mode);
+  }
 }
 
 function awaitReq(req) {
@@ -50,21 +71,18 @@ function awaitTx(t) {
 }
 
 export async function putDraft(draft) {
-  const db = await openDB();
-  const t = tx(db, ['drafts', 'meta'], 'readwrite');
+  const t = await tx(['drafts', 'meta'], 'readwrite');
   t.objectStore('drafts').put(draft);
   t.objectStore('meta').put({ k: 'lastActiveSessionId', v: draft.id });
   await awaitTx(t);
 }
 
 export async function getDraft(id) {
-  const db = await openDB();
-  return awaitReq(tx(db, 'drafts').objectStore('drafts').get(id));
+  return awaitReq((await tx('drafts')).objectStore('drafts').get(id));
 }
 
 export async function deleteDraft(id) {
-  const db = await openDB();
-  const t = tx(db, ['drafts', 'meta'], 'readwrite');
+  const t = await tx(['drafts', 'meta'], 'readwrite');
   t.objectStore('drafts').delete(id);
   const metaReq = t.objectStore('meta').get('lastActiveSessionId');
   await new Promise((res) => {
@@ -78,45 +96,38 @@ export async function deleteDraft(id) {
 }
 
 export async function getLastActiveSessionId() {
-  const db = await openDB();
-  const r = await awaitReq(tx(db, 'meta').objectStore('meta').get('lastActiveSessionId'));
+  const r = await awaitReq((await tx('meta')).objectStore('meta').get('lastActiveSessionId'));
   return r?.v ?? null;
 }
 
 export async function listDrafts() {
-  const db = await openDB();
-  return awaitReq(tx(db, 'drafts').objectStore('drafts').getAll());
+  return awaitReq((await tx('drafts')).objectStore('drafts').getAll());
 }
 
 export async function enqueueOutbox(entry) {
-  const db = await openDB();
-  const t = tx(db, 'outbox', 'readwrite');
+  const t = await tx('outbox', 'readwrite');
   t.objectStore('outbox').add(entry);
   await awaitTx(t);
 }
 
 export async function listOutbox() {
-  const db = await openDB();
-  return awaitReq(tx(db, 'outbox').objectStore('outbox').getAll());
+  return awaitReq((await tx('outbox')).objectStore('outbox').getAll());
 }
 
 export async function deleteOutbox(id) {
-  const db = await openDB();
-  const t = tx(db, 'outbox', 'readwrite');
+  const t = await tx('outbox', 'readwrite');
   t.objectStore('outbox').delete(id);
   await awaitTx(t);
 }
 
 export async function updateOutbox(entry) {
-  const db = await openDB();
-  const t = tx(db, 'outbox', 'readwrite');
+  const t = await tx('outbox', 'readwrite');
   t.objectStore('outbox').put(entry);
   await awaitTx(t);
 }
 
 export async function deleteOutboxByDraftId(draftId) {
-  const db = await openDB();
-  const t = tx(db, 'outbox', 'readwrite');
+  const t = await tx('outbox', 'readwrite');
   const store = t.objectStore('outbox');
   const all = await awaitReq(store.getAll());
   for (const entry of all) {
@@ -128,21 +139,18 @@ export async function deleteOutboxByDraftId(draftId) {
 // --- Workouts (routine-run wrappers) ---
 
 export async function putWorkout(workout) {
-  const db = await openDB();
-  const t = tx(db, ['workouts', 'meta'], 'readwrite');
+  const t = await tx(['workouts', 'meta'], 'readwrite');
   t.objectStore('workouts').put(workout);
   t.objectStore('meta').put({ k: 'activeWorkoutId', v: workout.id });
   await awaitTx(t);
 }
 
 export async function getWorkout(id) {
-  const db = await openDB();
-  return awaitReq(tx(db, 'workouts').objectStore('workouts').get(id));
+  return awaitReq((await tx('workouts')).objectStore('workouts').get(id));
 }
 
 export async function deleteWorkout(id) {
-  const db = await openDB();
-  const t = tx(db, ['workouts', 'meta'], 'readwrite');
+  const t = await tx(['workouts', 'meta'], 'readwrite');
   t.objectStore('workouts').delete(id);
   const metaReq = t.objectStore('meta').get('activeWorkoutId');
   await new Promise((res) => {
@@ -156,14 +164,12 @@ export async function deleteWorkout(id) {
 }
 
 export async function getActiveWorkoutId() {
-  const db = await openDB();
-  const r = await awaitReq(tx(db, 'meta').objectStore('meta').get('activeWorkoutId'));
+  const r = await awaitReq((await tx('meta')).objectStore('meta').get('activeWorkoutId'));
   return r?.v ?? null;
 }
 
 export async function clearActiveWorkoutId() {
-  const db = await openDB();
-  const t = tx(db, 'meta', 'readwrite');
+  const t = await tx('meta', 'readwrite');
   t.objectStore('meta').delete('activeWorkoutId');
   await awaitTx(t);
 }
