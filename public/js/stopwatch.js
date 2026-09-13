@@ -238,12 +238,20 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
     phases.push({ kind: 'rest', seconds: rest });
     return phases;
   }
-  const end = Math.min(completedRows + rpr, rowCount);
-  for (let r = completedRows; r < end; r++) {
-    if (leadIn) phases.push(leadInPhase(leadIn));
-    phases.push({ kind: 'work', seconds: rowSeconds.get(r) ?? null, row: r });
-  }
-  if (end < rowCount) phases.push({ kind: 'rest', seconds: rest });
+  // With a lead-in the rest runs on into the next get-set by itself, so the
+  // whole remaining prescription is one chain (one press per exercise, rests
+  // kept). Without one, a group ends on its rest and the next press starts
+  // the next group.
+  const continuous = leadIn > 0;
+  let r = completedRows;
+  do {
+    const end = Math.min(r + rpr, rowCount);
+    for (; r < end; r++) {
+      if (leadIn) phases.push(leadInPhase(leadIn));
+      phases.push({ kind: 'work', seconds: rowSeconds.get(r) ?? null, row: r });
+    }
+    if (r < rowCount) phases.push({ kind: 'rest', seconds: rest });
+  } while (continuous && r < rowCount);
   return phases;
 }
 

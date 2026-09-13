@@ -707,7 +707,8 @@ test('workChainFor: lead_in_seconds puts a lead-in before every work phase, none
     { kind: 'lead_in', seconds: 3, label: 'get set' },
     { kind: 'work', seconds: 45, row: 3 },
   ]);
-  // With a rest in the chain the lead-in still precedes each work row only.
+  // With rests in the chain the lead-in still precedes each work row only,
+  // and the rest runs on into the next get-set: one press per exercise.
   const prescribed = {
     ...HOLD.prescribed,
     exercises: [{ template_id: 11, rest_seconds: 10, rows_per_rest: 2, lead_in_seconds: 3 }],
@@ -718,6 +719,46 @@ test('workChainFor: lead_in_seconds puts a lead-in before every work phase, none
     { kind: 'lead_in', seconds: 3, label: 'get set' },
     { kind: 'work', seconds: 45, row: 1 },
     { kind: 'rest', seconds: 10 },
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'work', seconds: 45, row: 2 },
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'work', seconds: 45, row: 3 },
+  ]);
+});
+
+// HANDOFF 2026-09-13 (third ask): with a lead-in prescribed the whole
+// exercise runs from one press, rests included — work, rest, get set, work …
+// to the last row. Without a lead-in the rest still ends on a press.
+test('workChainFor: lead_in_seconds makes the chain continuous through every rest', () => {
+  const prescribed = {
+    exercises: [{ template_id: 11, rest_seconds: 90, rows_per_rest: 1, lead_in_seconds: 3 }],
+    targets: [0, 1, 2].map(r => (
+      { template_id: 11, row_index: r, column_name: 'time', target_num: 45 }
+    )),
+  };
+  const lead = { kind: 'lead_in', seconds: 3, label: 'get set' };
+  assert.deepEqual(workChainFor({ template: HOLD.template, prescribed, completedRows: 0 }), [
+    lead, { kind: 'work', seconds: 45, row: 0 }, { kind: 'rest', seconds: 90 },
+    lead, { kind: 'work', seconds: 45, row: 1 }, { kind: 'rest', seconds: 90 },
+    lead, { kind: 'work', seconds: 45, row: 2 },
+  ]);
+  // Resuming mid-exercise picks up from the next row, still continuous.
+  assert.deepEqual(workChainFor({ template: HOLD.template, prescribed, completedRows: 1 }), [
+    lead, { kind: 'work', seconds: 45, row: 1 }, { kind: 'rest', seconds: 90 },
+    lead, { kind: 'work', seconds: 45, row: 2 },
+  ]);
+  // An open-ended (max-hold) row inside the chain stays press-ended, then
+  // the rest and the following rows carry on by themselves.
+  const withMax = { ...prescribed, targets: prescribed.targets.filter(t => t.row_index !== 1) };
+  assert.deepEqual(workChainFor({ template: HOLD.template, prescribed: withMax, completedRows: 0 }), [
+    lead, { kind: 'work', seconds: 45, row: 0 }, { kind: 'rest', seconds: 90 },
+    lead, { kind: 'work', seconds: null, row: 1 }, { kind: 'rest', seconds: 90 },
+    lead, { kind: 'work', seconds: 45, row: 2 },
+  ]);
+  // No lead-in: unchanged, one group then a press-ended rest.
+  const noLead = { ...prescribed, exercises: [{ template_id: 11, rest_seconds: 90, rows_per_rest: 1 }] };
+  assert.deepEqual(workChainFor({ template: HOLD.template, prescribed: noLead, completedRows: 0 }), [
+    { kind: 'work', seconds: 45, row: 0 }, { kind: 'rest', seconds: 90 },
   ]);
 });
 
