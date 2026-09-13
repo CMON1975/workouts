@@ -202,7 +202,7 @@ function clock(start = 100_000) {
 
 test('schedule starts oscillators on the audio clock at base + offset', (t) => {
   const instances = installFakeAudioContext(t);
-  const beeper = createBeeper();
+  const beeper = createBeeper({ now: clock().now }); // fixed clock: no ms drift between plan and arm
   beeper.ensureContext();
   instances[0].currentTime = 10;
   beeper.schedule([{ atMs: 1000, kind: 'short' }, { atMs: 4000, kind: 'done' }]);
