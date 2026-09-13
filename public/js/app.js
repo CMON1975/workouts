@@ -15,6 +15,7 @@ import {
 import { createBeeper, beepOffsets, chainBeepPlan } from './beeper.js';
 import { createWakeLock } from './wakelock.js';
 import { pickOpenWorkout, rebuildActiveWorkout } from './resume.js';
+import { blankPrescribedRows } from './completeness.js';
 import { iconSvg, setButtonIcon } from './icons.js';
 import {
   renderSessionForm, renderStatus,
@@ -753,6 +754,21 @@ async function handleRunnerNext() {
   const savedIndex = activeWorkout.currentIndex;
   const nextIndex = savedIndex + 1;
   const isLast = nextIndex >= activeWorkout.routine.templates.length;
+
+  // Finish seals the exercise with no edit path: confirm when a prescribed
+  // set was never entered (a Finish tapped instead of typing the last set).
+  if (isLast) {
+    const blanks = blankPrescribedRows({
+      draft: currentSession.getDraft(),
+      template: activeWorkout.routine.templates[savedIndex],
+      prescribed: activeWorkout.prescribed,
+    });
+    if (blanks.length) {
+      const sets = blanks.map(r => r + 1).join(', ');
+      const ok = confirm(`Set ${sets} of this exercise ${blanks.length === 1 ? 'is' : 'are'} still blank. Finish anyway?`);
+      if (!ok) { els.runnerNext.disabled = false; return; }
+    }
+  }
 
   // Persist the advance *before* finalizing, so a crash/lock mid-finalize
   // doesn't leave IDB pointing at the just-finished exercise. If finalize
