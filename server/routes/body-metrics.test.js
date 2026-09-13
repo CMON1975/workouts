@@ -204,3 +204,71 @@ test('multiple food entries on the same date coexist (no clobber)', async () => 
   assert.equal(rows.length, 2, 'both same-day food entries persist');
   for (const r of rows) assert.equal(r.metric, 'food');
 });
+
+// ---- Edit / delete (HANDOFF 2026-09-06 row 170, 2026-09-13 row 187) ----
+
+async function create(payload) {
+  const res = await app.inject({ method: 'POST', url: '/api/body-metrics', payload });
+  assert.equal(res.statusCode, 201);
+  return res.json();
+}
+
+test('PATCH /api/body-metrics/:id updates the value and returns the row', async () => {
+  const row = await create({ date: '2026-08-31', metric: 'body_weight', value: '182' });
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/body-metrics/${row.id}`, payload: { value: '102.0' },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), { ...row, value: '102.0' });
+  const list = await app.inject({ method: 'GET', url: '/api/body-metrics?from=2026-08-31&to=2026-08-31' });
+  assert.equal(list.json().find(r => r.id === row.id).value, '102.0');
+});
+
+test('PATCH can move a row to another date or metric', async () => {
+  const row = await create({ date: '2026-09-08', metric: 'food', value: 'a bag of' });
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/body-metrics/${row.id}`,
+    payload: { date: '2026-09-09', metric: 'food', value: 'a bag of gummy nerds' },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().date, '2026-09-09');
+  assert.equal(res.json().value, 'a bag of gummy nerds');
+});
+
+test('PATCH rejects an unknown id, an empty body, a blank value, and an unknown metric', async () => {
+  const row = await create({ date: '2026-09-01', metric: 'waist', value: '99' });
+  const cases = [
+    [`/api/body-metrics/999999`, { value: '1' }, 404],
+    [`/api/body-metrics/${row.id}`, {}, 400],
+    [`/api/body-metrics/${row.id}`, { value: '   ' }, 400],
+    [`/api/body-metrics/${row.id}`, { metric: 'shoe_size' }, 400],
+    [`/api/body-metrics/not-a-number`, { value: '1' }, 400],
+  ];
+  for (const [url, payload, status] of cases) {
+    const res = await app.inject({ method: 'PATCH', url, payload });
+    assert.equal(res.statusCode, status, `${url} ${JSON.stringify(payload)}`);
+  }
+  const unchanged = await app.inject({ method: 'GET', url: '/api/body-metrics?metric=waist&from=2026-09-01&to=2026-09-01' });
+  assert.equal(unchanged.json().find(r => r.id === row.id).value, '99');
+});
+
+test('PATCH strips unknown fields (Fastify default), same as POST', async () => {
+  const row = await create({ date: '2026-09-03', metric: 'waist', value: '98' });
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/body-metrics/${row.id}`, payload: { value: '97', extra: true },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), { ...row, value: '97' });
+});
+
+test('DELETE /api/body-metrics/:id removes the row; a second delete is 404', async () => {
+  const row = await create({ date: '2026-09-02', metric: 'resting_hr', value: '58' });
+  let res = await app.inject({ method: 'DELETE', url: `/api/body-metrics/${row.id}` });
+  assert.equal(res.statusCode, 204);
+  const list = await app.inject({ method: 'GET', url: '/api/body-metrics?metric=resting_hr' });
+  assert.equal(list.json().some(r => r.id === row.id), false);
+  res = await app.inject({ method: 'DELETE', url: `/api/body-metrics/${row.id}` });
+  assert.equal(res.statusCode, 404);
+  res = await app.inject({ method: 'DELETE', url: '/api/body-metrics/not-a-number' });
+  assert.equal(res.statusCode, 400);
+});

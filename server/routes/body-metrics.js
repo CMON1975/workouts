@@ -15,6 +15,22 @@ const createBodySchema = {
   },
 };
 
+const patchBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  minProperties: 1,
+  properties: {
+    date: { type: 'string', pattern: DATE_PATTERN },
+    metric: { type: 'string', enum: METRICS },
+    value: { type: 'string', minLength: 1, maxLength: 500 },
+  },
+};
+
+const idParamsSchema = {
+  type: 'object',
+  properties: { id: { type: 'integer', minimum: 1 } },
+};
+
 const listQuerySchema = {
   type: 'object',
   additionalProperties: false,
@@ -55,5 +71,30 @@ export default async function bodyMetricsRoutes(app) {
         FROM body_metrics WHERE id = ?
     `).get(info.lastInsertRowid);
     return reply.code(201).send(row);
+  });
+
+  app.patch('/api/body-metrics/:id', {
+    schema: { params: idParamsSchema, body: patchBodySchema },
+  }, async (req, reply) => {
+    const { id } = req.params;
+    const existing = app.db.prepare('SELECT id FROM body_metrics WHERE id = ?').get(id);
+    if (!existing) return reply.code(404).send({ error: 'not found' });
+    const patch = { ...req.body };
+    if (patch.value !== undefined) {
+      patch.value = patch.value.trim();
+      if (!patch.value) return reply.code(400).send({ error: 'value cannot be blank' });
+    }
+    const sets = Object.keys(patch).map(k => `${k} = ?`).join(', ');
+    app.db.prepare(`UPDATE body_metrics SET ${sets} WHERE id = ?`).run(...Object.values(patch), id);
+    return app.db.prepare(`
+      SELECT id, date, metric, value, created_at
+        FROM body_metrics WHERE id = ?
+    `).get(id);
+  });
+
+  app.delete('/api/body-metrics/:id', { schema: { params: idParamsSchema } }, async (req, reply) => {
+    const info = app.db.prepare('DELETE FROM body_metrics WHERE id = ?').run(req.params.id);
+    if (info.changes === 0) return reply.code(404).send({ error: 'not found' });
+    return reply.code(204).send();
   });
 }
