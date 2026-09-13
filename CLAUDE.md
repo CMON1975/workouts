@@ -32,6 +32,7 @@ on my Digital Ocean droplet.
 - `npm test` — Node's built-in test runner over `server/*.test.js` and `server/**/*.test.js`.
 - `node --test --test-name-pattern='<regex>' server/routes/templates.test.js` — run a single file or filter by name.
 - `npm run seed` — wipes `data/workouts.db` and reseeds broad fixtures. Refuses if `NODE_ENV=production` or `DB_PATH` escapes `./data`.
+- `node scripts/cdp-smoke.mjs <url> [--wait=ms] <expr>...` — real-browser smoke: headless Chromium over the DevTools protocol with a fresh profile, real waits, then evaluates expressions in the page and prints console output. Use this for runner checks; `--dump-dom` with a virtual-time budget fires before the app's fetch chain finishes.
 `.env` only needs `DB_PATH`, `PORT`, `HOST`, `NODE_ENV` (see `.env.example`). No secrets — there is no in-app auth.
 
 ## Architecture
