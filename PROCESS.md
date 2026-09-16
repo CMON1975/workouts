@@ -356,3 +356,9 @@ Running log of work done with Claude Code.
 **What:** `previousReading` (latest same-metric row on or before the date, excluding the row being edited; earliest later row as a backfill fallback), `jumpWarning` (numeric metrics only; null at exactly 10%), `needsJumpCheck` (skips the history fetch for food / BP); 6 tests red first. `confirmJump` in app.js runs before `saveBodyMetric` and passes on a failed fetch. Commit `27eab33`, js ?v=23. 343/343; Chromium run covers decline / in-range / food / accept. Deployed by `git pull` (no restart).
 **Why:** The last unbuilt piece of the 09-06 HANDOFF body-metrics item.
 **Notes:** Neighbour is by date, not by insertion, so editing an old row compares to that week's reading rather than today's. Blood pressure stays unchecked (free text); comparing systolic would be a small follow-up if a typo ever lands there.
+
+---
+## 2026-09-16 — Blood pressure joins the jump confirm at 25%; deployed
+**What:** `JUMP_RATIO` is a per-metric map (10% weight / waist / resting HR, 25% BP); `components()` parses "sys/dia" (spaces tolerated, exactly two positive numbers or no check) and the prompt reports the bigger swing of the two sides. 2 tests red first (one rewrite of the "stays quiet" case). Commit `35f0bfc`, js ?v=24. 344/344; Chromium run: 160/100 vs 120/80 prompts at 33%, 135/88 logs silently. Deployed by `git pull`.
+**Why:** User: BP is "numeric-ish"; 10% would be too conservative for it.
+**Notes:** A mid-rewrite of the module dropped `previousReading`; the suite caught it at import. Every 09-06 body-metrics ask is now closed.
