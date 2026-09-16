@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>Workouts</title>
 <!-- ?v= busts stale phone caches; bump when the asset changes (no build step to do it for us) -->
-<link rel="stylesheet" href="/css/app.css?v=14">
+<link rel="stylesheet" href="/css/app.css?v=15">
 </head>
 <body>
   <header>
@@ -203,6 +203,7 @@
       <h2>Past sessions</h2>
       <div id="history-list"></div>
       <p id="history-empty" class="muted" hidden>No past sessions yet.</p>
+      <button id="history-more" type="button" class="secondary load-more" hidden>Load more</button>
     </section>
 
     <section id="logs" class="view" hidden>
@@ -265,6 +266,6 @@
     </dialog>
   </main>
 
-  <script type="module" src="/js/app.js?v=24"></script>
+  <script type="module" src="/js/app.js?v=25"></script>
 </body>
 </html>

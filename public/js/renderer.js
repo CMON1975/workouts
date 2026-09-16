@@ -287,8 +287,9 @@ export function renderHistoryList(root, {
   items, templatesById,
   onPickSession, onPickWorkout,
   onDeleteSession, onDeleteWorkout,
+  append = false,               // Load more: keep the rows already shown
 }) {
-  root.innerHTML = '';
+  if (!append) root.innerHTML = '';
   for (const item of items) {
     if (item.type === 'workout') {
       const w = item.workout;

@@ -668,3 +668,21 @@ test('GET workouts list and detail expose duration_seconds on workout and child 
   assert.equal(inList.duration_seconds, 75);
   assert.equal(inList.sessions[0].duration_seconds, 75);
 });
+
+test('GET /api/workouts?before pages on the list sort key (finalized_at, else started_at)', async () => {
+  for (const [n, ts] of [[901, 1_000], [902, 2_000], [903, 3_000]]) {
+    await app.inject({
+      method: 'PATCH', url: `/api/workouts/${wuuid(n)}`,
+      payload: { id: wuuid(n), routine_id: armsRoutineId, started_at: ts, updated_at: ts, client_version: 1 },
+    });
+    await app.inject({ method: 'POST', url: `/api/workouts/${wuuid(n)}/finalize`, payload: { client_version: 1 } });
+    app.db.prepare('UPDATE workouts SET finalized_at = ? WHERE id = ?').run(ts, wuuid(n));
+  }
+  const page = await app.inject({ method: 'GET', url: '/api/workouts?finalized=true&before=3000&limit=50' });
+  assert.equal(page.statusCode, 200);
+  const ids = page.json().map(w => w.id).filter(id => [wuuid(901), wuuid(902), wuuid(903)].includes(id));
+  assert.deepEqual(ids, [wuuid(902), wuuid(901)]);
+
+  const bad = await app.inject({ method: 'GET', url: '/api/workouts?before=-1' });
+  assert.equal(bad.statusCode, 400);
+});

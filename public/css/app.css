@@ -842,6 +842,8 @@ button.small {
   gap: 8px;
 }
 
+.load-more { width: 100%; margin-top: 12px; }
+
 /* Log rows: tap loads the entry into the home quick-log form; food text can be long */
 .log-value { color: var(--fg); overflow-wrap: anywhere; }
 

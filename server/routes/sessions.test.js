@@ -211,3 +211,22 @@ test('GET /api/sessions and /api/sessions/:id include duration_seconds', async (
   const one = await app.inject({ method: 'GET', url: `/api/sessions/${id}` });
   assert.equal(one.json().duration_seconds, 95);
 });
+
+test('GET /api/sessions?before pages on the list sort key (finalized_at, else started_at)', async () => {
+  // Three finalized ad-hoc sessions pinned to known finalize times.
+  for (const [n, ts] of [[901, 1_000], [902, 2_000], [903, 3_000]]) {
+    await createDraft(suuid(n));
+    await finalizeSession(suuid(n));
+    app.db.prepare('UPDATE sessions SET finalized_at = ? WHERE id = ?').run(ts, suuid(n));
+  }
+  const page = await app.inject({
+    method: 'GET', url: '/api/sessions?finalized=true&include_workout_sessions=false&before=3000&limit=50',
+  });
+  assert.equal(page.statusCode, 200);
+  const ids = page.json().map(s => s.id).filter(id => [suuid(901), suuid(902), suuid(903)].includes(id));
+  // Strictly older than the cursor, newest first.
+  assert.deepEqual(ids, [suuid(902), suuid(901)]);
+
+  const bad = await app.inject({ method: 'GET', url: '/api/sessions?before=yesterday' });
+  assert.equal(bad.statusCode, 400);
+});

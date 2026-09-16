@@ -8,12 +8,15 @@ export default async function sessionsRoutes(app) {
           limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
           finalized: { type: 'boolean' },
           include_workout_sessions: { type: 'boolean', default: true },
+          // Paging cursor: the sort key (finalized_at, else started_at) of the
+          // last row the client has; rows strictly older come back.
+          before: { type: 'integer', minimum: 0 },
         },
       },
     },
   }, async (req) => {
     const db = app.db;
-    const { template_id, limit, finalized, include_workout_sessions } = req.query;
+    const { template_id, limit, finalized, include_workout_sessions, before } = req.query;
 
     const where = [];
     const params = [];
@@ -28,6 +31,10 @@ export default async function sessionsRoutes(app) {
     }
     if (include_workout_sessions === false) {
       where.push('workout_id IS NULL');
+    }
+    if (before !== undefined) {
+      where.push('COALESCE(finalized_at, started_at) < ?');
+      params.push(before);
     }
     const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 

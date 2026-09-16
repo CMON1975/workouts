@@ -47,12 +47,14 @@ export default async function workoutsRoutes(app) {
           routine_id: { type: 'integer' },
           limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
           finalized: { type: 'boolean' },
+          // Paging cursor, same key as the ORDER BY below; strictly older rows.
+          before: { type: 'integer', minimum: 0 },
         },
       },
     },
   }, async (req) => {
     const db = app.db;
-    const { routine_id, limit, finalized } = req.query;
+    const { routine_id, limit, finalized, before } = req.query;
 
     const where = [];
     const params = [];
@@ -62,6 +64,10 @@ export default async function workoutsRoutes(app) {
     }
     if (finalized === true) where.push('w.finalized_at IS NOT NULL');
     else if (finalized === false) where.push('w.finalized_at IS NULL');
+    if (before !== undefined) {
+      where.push('COALESCE(w.finalized_at, w.started_at) < ?');
+      params.push(before);
+    }
     const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
     const rows = db.prepare(`

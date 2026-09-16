@@ -24,6 +24,7 @@ import {
   renderRoutineList, renderRoutineBuilder, renderRoutineManageList,
 } from './renderer.js';
 import { saveBodyMetric, editingHint, previousReading, jumpWarning, needsJumpCheck } from './body-metrics.js';
+import { mergeHistoryPage } from './history-paging.js';
 
 const els = {
   app: document.getElementById('app'),
@@ -50,6 +51,7 @@ const els = {
   historyBack: document.getElementById('history-back'),
   historyList: document.getElementById('history-list'),
   historyEmpty: document.getElementById('history-empty'),
+  historyMore: document.getElementById('history-more'),
   detail: document.getElementById('detail'),
   detailBack: document.getElementById('detail-back'),
   detailRoot: document.getElementById('detail-root'),
@@ -933,26 +935,55 @@ async function handleDeleteLogEntry(row, wrap) {
   if (!els.logList.children.length) show(els.logEmpty);
 }
 
+const HISTORY_PAGE = 50;
+// Cursors per list (null = exhausted) plus rows held back by the merge.
+let historyPaging = null;
+
 async function openHistory() {
   showView('history');
   els.historyList.innerHTML = '';
   hide(els.historyEmpty);
+  hide(els.historyMore);
+  historyPaging = { sessionsBefore: undefined, workoutsBefore: undefined, carry: [] };
+  await loadHistoryPage();
+}
+
+async function loadHistoryPage() {
+  const paging = historyPaging;
+  if (!paging) return;
+  els.historyMore.disabled = true;
   try {
     const [sessions, workouts] = await Promise.all([
-      api.listSessions({ finalized: true, include_workout_sessions: false, limit: 100 }),
-      api.listWorkouts({ finalized: true, limit: 100 }),
+      paging.sessionsBefore === null ? [] : api.listSessions({
+        finalized: true, include_workout_sessions: false, limit: HISTORY_PAGE, before: paging.sessionsBefore,
+      }),
+      paging.workoutsBefore === null ? [] : api.listWorkouts({
+        finalized: true, limit: HISTORY_PAGE, before: paging.workoutsBefore,
+      }),
     ]);
-    const items = [
-      ...sessions.map(s => ({ type: 'session', session: s, ts: s.finalized_at ?? s.started_at })),
-      ...workouts.map(w => ({ type: 'workout', workout: w, ts: w.finalized_at ?? w.started_at })),
-    ].sort((a, b) => b.ts - a.ts);
+    if (historyPaging !== paging) return; // view was reopened mid-fetch
+    const { items, carry, next } = mergeHistoryPage({
+      sessions, workouts, limit: HISTORY_PAGE, carry: paging.carry,
+      sessionsExhausted: paging.sessionsBefore === null,
+      workoutsExhausted: paging.workoutsBefore === null,
+    });
+    paging.carry = carry;
+    if (next) {
+      paging.sessionsBefore = next.sessionsBefore;
+      paging.workoutsBefore = next.workoutsBefore;
+      show(els.historyMore);
+    } else {
+      hide(els.historyMore);
+      historyPaging = null;     // exhausted: a stray click must not refetch the tail
+    }
 
-    if (!items.length) {
+    if (!items.length && !els.historyList.children.length) {
       show(els.historyEmpty);
       return;
     }
     renderHistoryList(els.historyList, {
       items,
+      append: true,
       templatesById: templatesById(),
       onPickSession: (s) => openDetail(s),
       onPickWorkout: (w) => openWorkoutDetail(w),
@@ -962,6 +993,9 @@ async function openHistory() {
   } catch (err) {
     console.error(err);
     els.historyList.textContent = 'Failed to load history.';
+    hide(els.historyMore);
+  } finally {
+    els.historyMore.disabled = false;
   }
 }
 
@@ -1827,6 +1861,7 @@ async function boot() {
   els.menuLogHistory.addEventListener('click', openLogs);
   els.sessionBack.addEventListener('click', goHome);
   els.historyBack.addEventListener('click', openHistoryMenu);
+  els.historyMore.addEventListener('click', loadHistoryPage);
   els.logsBack.addEventListener('click', openHistoryMenu);
   els.detailBack.addEventListener('click', () => {
     if (detailOrigin === 'runner' && activeWorkout) showView('runner');
