@@ -23,7 +23,7 @@ import {
   renderManageList, applyPreviousHints,
   renderRoutineList, renderRoutineBuilder, renderRoutineManageList,
 } from './renderer.js';
-import { saveBodyMetric, editingHint } from './body-metrics.js';
+import { saveBodyMetric, editingHint, previousReading, jumpWarning, needsJumpCheck } from './body-metrics.js';
 
 const els = {
   app: document.getElementById('app'),
@@ -1747,6 +1747,21 @@ function cancelLogEdit() {
   bmFlash('');
 }
 
+// A reading more than 10% off its neighbour gets a confirm (row 170's "182"
+// for 102.0 would have been caught here). Offline or a failed fetch skips
+// the check rather than blocking the log.
+async function confirmJump({ editingId, date, metric, value }) {
+  if (!needsJumpCheck(metric)) return true;
+  let rows;
+  try {
+    rows = await api.listBodyMetrics({ metric });
+  } catch (_) {
+    return true;
+  }
+  const warning = jumpWarning(metric, value, previousReading(rows, { date, excludeId: editingId }));
+  return warning == null || confirm(warning);
+}
+
 async function handleBodyMetricSubmit(e) {
   e.preventDefault();
   const date = els.bmDate.value;
@@ -1759,6 +1774,7 @@ async function handleBodyMetricSubmit(e) {
   els.bmSubmit.disabled = true;
   try {
     const editingId = bmEditing?.id ?? null;
+    if (!(await confirmJump({ editingId, date, metric, value }))) return;
     const row = await saveBodyMetric(api, { editingId, date, metric, value });
     if (editingId != null) {
       cancelLogEdit();
