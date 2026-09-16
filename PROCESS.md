@@ -350,3 +350,9 @@ Running log of work done with Claude Code.
 **What:** `body-metrics.js` (`saveBodyMetric` picks PATCH when a row is loaded, POST otherwise; `editingHint`; 3 tests red first). Tapping a Log history row calls `startLogEdit`: form prefilled, hint in the status line, a `Cancel edit` button in a new grid cell; a successful edit clears the form and reopens the list. Commit `690275f`, css ?v=14, js ?v=22. 337/337; Chromium run shows the row corrected in place with no second row. Deployed by `git pull` on the droplet (static only, no restart).
 **Why:** Row 170 (182 → 102.0) needed the API; the health side warned two rows on one date confuse its review pull, so a correction must be a PATCH.
 **Notes:** Log rows are buttons now (tap = edit, swipe = delete), same as session rows. The 09-06 "confirm a >10% jump" idea is still not built.
+
+---
+## 2026-09-16 — >10% jump confirm on numeric quick-log entries; deployed
+**What:** `previousReading` (latest same-metric row on or before the date, excluding the row being edited; earliest later row as a backfill fallback), `jumpWarning` (numeric metrics only; null at exactly 10%), `needsJumpCheck` (skips the history fetch for food / BP); 6 tests red first. `confirmJump` in app.js runs before `saveBodyMetric` and passes on a failed fetch. Commit `27eab33`, js ?v=23. 343/343; Chromium run covers decline / in-range / food / accept. Deployed by `git pull` (no restart).
+**Why:** The last unbuilt piece of the 09-06 HANDOFF body-metrics item.
+**Notes:** Neighbour is by date, not by insertion, so editing an old row compares to that week's reading rather than today's. Blood pressure stays unchecked (free text); comparing systolic would be a small follow-up if a typo ever lands there.
