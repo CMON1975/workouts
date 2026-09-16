@@ -68,16 +68,30 @@ test('jumpWarning fires only past 10% either way and names the last reading', ()
 
 test('jumpWarning stays quiet for free-text metrics, unparseable values, and no history', () => {
   assert.equal(jumpWarning('food', 'a bag of chips', { metric: 'food', value: 'toast', date: '2026-09-15' }), null);
-  assert.equal(jumpWarning('blood_pressure', '160/100', { metric: 'blood_pressure', value: '120/80', date: '2026-09-15' }), null);
+  assert.equal(jumpWarning('blood_pressure', '160/100', { metric: 'blood_pressure', value: 'high', date: '2026-09-15' }), null);
+  assert.equal(jumpWarning('blood_pressure', '160', { metric: 'blood_pressure', value: '120/80', date: '2026-09-15' }), null);
   assert.equal(jumpWarning('body_weight', 'abc', { metric: 'body_weight', value: '102.0', date: '2026-09-15' }), null);
   assert.equal(jumpWarning('body_weight', '102', { metric: 'body_weight', value: 'n/a', date: '2026-09-15' }), null);
   assert.equal(jumpWarning('body_weight', '102', null), null);
 });
 
-test('needsJumpCheck is true only for the numeric metrics (skips the history fetch otherwise)', () => {
+test('needsJumpCheck is true for every metric but food (skips the history fetch there)', () => {
   assert.equal(needsJumpCheck('body_weight'), true);
   assert.equal(needsJumpCheck('waist'), true);
   assert.equal(needsJumpCheck('resting_hr'), true);
+  assert.equal(needsJumpCheck('blood_pressure'), true);
   assert.equal(needsJumpCheck('food'), false);
-  assert.equal(needsJumpCheck('blood_pressure'), false);
+});
+
+test('jumpWarning compares blood pressure per side at a 25% threshold and reports the bigger swing', () => {
+  const prev = { metric: 'blood_pressure', value: '120/80', date: '2026-09-15' };
+  assert.equal(jumpWarning('blood_pressure', '160/100', prev),
+    'blood pressure 160/100 is 33% above the last reading (120/80 on Tue, Sep 15). Log it anyway?');
+  // Diastolic alone can trip it (80 → 55 is 31%) while systolic stays close.
+  assert.equal(jumpWarning('blood_pressure', '118/55', prev),
+    'blood pressure 118/55 is 31% below the last reading (120/80 on Tue, Sep 15). Log it anyway?');
+  assert.equal(jumpWarning('blood_pressure', '150/100', prev), null); // exactly 25% both sides
+  assert.equal(jumpWarning('blood_pressure', '135/88', prev), null);
+  // Tolerates spaces around the slash, the way a phone keyboard tends to leave them.
+  assert.equal(jumpWarning('blood_pressure', '135 / 88', prev), null);
 });

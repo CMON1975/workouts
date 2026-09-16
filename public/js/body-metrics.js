@@ -16,12 +16,24 @@ export function editingHint(row) {
 }
 
 // Sanity check at entry: row 170 was "182" for 102.0 and sat there for a
-// week. Only the numeric metrics compare; food and blood pressure are text.
-const NUMERIC_METRICS = new Set(['body_weight', 'waist', 'resting_hr']);
-const JUMP_RATIO = 0.10;
+// week. Food is free text and skips the check. Blood pressure is
+// "systolic/diastolic"; each side compares on its own, at a looser
+// threshold since day-to-day BP swings more than weight or waist.
+const JUMP_RATIO = { body_weight: 0.10, waist: 0.10, resting_hr: 0.10, blood_pressure: 0.25 };
 
 export function needsJumpCheck(metric) {
-  return NUMERIC_METRICS.has(metric);
+  return metric in JUMP_RATIO;
+}
+
+// Numeric components of a value: one for plain metrics, two for BP.
+// null when the value doesn't parse the way the metric expects.
+function components(metric, value) {
+  const parts = metric === 'blood_pressure'
+    ? String(value).split('/').map(p => p.trim())
+    : [String(value).trim()];
+  if (metric === 'blood_pressure' && parts.length !== 2) return null;
+  const nums = parts.map(Number);
+  return nums.every(n => Number.isFinite(n) && n > 0) ? nums : null;
 }
 
 // The reading this entry follows: the latest row of the metric on or before
@@ -36,12 +48,18 @@ export function previousReading(rows, { date, excludeId = null }) {
 }
 
 export function jumpWarning(metric, value, prev) {
-  if (!NUMERIC_METRICS.has(metric) || !prev) return null;
-  const now = Number(value);
-  const was = Number(prev.value);
-  if (!Number.isFinite(now) || !Number.isFinite(was) || was <= 0) return null;
-  const ratio = (now - was) / was;
-  if (Math.abs(ratio) <= JUMP_RATIO + 1e-9) return null;
+  const limit = JUMP_RATIO[metric];
+  if (limit == null || !prev) return null;
+  const now = components(metric, value);
+  const was = components(metric, prev.value);
+  if (!now || !was || now.length !== was.length) return null;
+  // Report the side that moved the most (BP); a single component otherwise.
+  let ratio = 0;
+  for (let i = 0; i < now.length; i += 1) {
+    const r = (now[i] - was[i]) / was[i];
+    if (Math.abs(r) > Math.abs(ratio)) ratio = r;
+  }
+  if (Math.abs(ratio) <= limit + 1e-9) return null;
   const { label, date } = describeLogEntry(prev);
   const pct = Math.round(Math.abs(ratio) * 100);
   const dir = ratio > 0 ? 'above' : 'below';
