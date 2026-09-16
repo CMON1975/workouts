@@ -107,4 +107,5 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
+  deleteBodyMetric: (id) => request('/api/body-metrics/' + encodeURIComponent(id), { method: 'DELETE' }),
 };

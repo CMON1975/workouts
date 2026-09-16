@@ -19,7 +19,7 @@ import { blankPrescribedRows } from './completeness.js';
 import { iconSvg, setButtonIcon } from './icons.js';
 import {
   renderSessionForm, renderStatus,
-  renderHistoryList, renderLogList, renderSessionDetail, renderWorkoutDetail,
+  renderHistoryList, renderLogList, logDeletePrompt, renderSessionDetail, renderWorkoutDetail,
   renderManageList, applyPreviousHints,
   renderRoutineList, renderRoutineBuilder, renderRoutineManageList,
 } from './renderer.js';
@@ -905,11 +905,29 @@ async function openLogs() {
       show(els.logEmpty);
       return;
     }
-    renderLogList(els.logList, { items: rows });
+    renderLogList(els.logList, {
+      items: rows,
+      onDelete: (row, wrap) => handleDeleteLogEntry(row, wrap),
+    });
   } catch (err) {
     console.error(err);
     els.logList.textContent = 'Failed to load log history.';
   }
+}
+
+async function handleDeleteLogEntry(row, wrap) {
+  if (!confirm(logDeletePrompt(row))) return;
+  try {
+    await api.deleteBodyMetric(row.id);
+  } catch (err) {
+    // 404: already gone (deleted from another device / the health side); drop the row anyway.
+    if (err.status !== 404) {
+      alert('Could not delete entry.');
+      return;
+    }
+  }
+  wrap.remove();
+  if (!els.logList.children.length) show(els.logEmpty);
 }
 
 async function openHistory() {

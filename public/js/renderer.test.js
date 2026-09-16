@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lastRecordHint, describeAge, describeLogEntry } from './renderer.js';
+import { lastRecordHint, describeAge, describeLogEntry, logDeletePrompt } from './renderer.js';
 
 // Timestamps built via the local-time Date constructor so the expected
 // calendar-day gaps hold in any TZ the tests run in.
@@ -92,4 +92,11 @@ test('describeLogEntry formats the YYYY-MM-DD date as a local calendar day, not 
 
 test('describeLogEntry passes the value through untouched', () => {
   assert.equal(describeLogEntry({ metric: 'food', value: '300g potato chips', date: '2026-09-16' }).value, '300g potato chips');
+});
+
+test('logDeletePrompt names the entry the swipe is about to remove', () => {
+  assert.equal(
+    logDeletePrompt({ metric: 'body_weight', value: '182', date: '2026-08-31' }),
+    'Delete the weight entry "182" on Mon, Aug 31? This cannot be undone.',
+  );
 });

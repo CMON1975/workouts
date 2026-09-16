@@ -366,13 +366,21 @@ export function renderHistoryList(root, {
   }
 }
 
-export function renderLogList(root, { items }) {
+export function logDeletePrompt(row) {
+  const { label, value, date } = describeLogEntry(row);
+  return `Delete the ${label} entry "${value}" on ${date}? This cannot be undone.`;
+}
+
+export function renderLogList(root, { items, onDelete }) {
   root.innerHTML = '';
   for (const row of items) {
     const { label, value, date } = describeLogEntry(row);
+    const wrap = document.createElement('div');
+    wrap.className = 'row-wrap';
+    wrap.dataset.logId = row.id;
+
     const div = document.createElement('div');
-    div.className = 'history-row log-row';
-    div.dataset.logId = row.id;
+    div.className = 'history-row log-row row-foreground';
 
     const primary = document.createElement('div');
     primary.className = 'history-primary';
@@ -387,7 +395,9 @@ export function renderLogList(root, { items }) {
     summary.textContent = value;
 
     div.append(primary, summary, meta);
-    root.appendChild(div);
+    wrap.append(div, makeTrashAction());
+    root.appendChild(wrap);
+    attachSwipeReveal(wrap, { onAction: () => onDelete(row, wrap) });
   }
 }
 
