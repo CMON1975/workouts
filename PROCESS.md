@@ -362,3 +362,9 @@ Running log of work done with Claude Code.
 **What:** `JUMP_RATIO` is a per-metric map (10% weight / waist / resting HR, 25% BP); `components()` parses "sys/dia" (spaces tolerated, exactly two positive numbers or no check) and the prompt reports the bigger swing of the two sides. 2 tests red first (one rewrite of the "stays quiet" case). Commit `35f0bfc`, js ?v=24. 344/344; Chromium run: 160/100 vs 120/80 prompts at 33%, 135/88 logs silently. Deployed by `git pull`.
 **Why:** User: BP is "numeric-ish"; 10% would be too conservative for it.
 **Notes:** A mid-rewrite of the module dropped `previousReading`; the suite caught it at import. Every 09-06 body-metrics ask is now closed.
+
+---
+## 2026-09-16 — Past sessions pages with Load more
+**What:** `before` query cursor on `GET /api/sessions` and `GET /api/workouts` (2 route tests red first). `history-paging.js` `mergeHistoryPage` (6 tests red first): merges the two lists newest first, holds back rows older than a full list's last item in a carry, returns per-list cursors (null = exhausted). `renderHistoryList` gained `append`; `loadHistoryPage` drives the button and nulls the state once exhausted. Commit `0380736`, css ?v=15, js ?v=25. 352/352; Chromium against 65 sessions + 24 workouts: 73 rows, then 89, button hides, no dups, sorted; the seeded rows were removed afterwards. Deployed by `git pull`; server routes changed so the restart is the user's.
+**Why:** The list hard-capped at 100 + 100 with no paging.
+**Notes:** Page size 50 per list. Cursor is strict `<` on millisecond timestamps; a same-ms tie across two rows would drop one, which cannot happen for finalize times on a single phone.
