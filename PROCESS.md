@@ -344,3 +344,9 @@ Running log of work done with Claude Code.
 **What:** `renderLogList` wraps each row in the `row-wrap` / trash-action pattern from the session list and calls `onDelete(row, wrap)`; `handleDeleteLogEntry` confirms with `logDeletePrompt` (1 test red first), calls the new `api.deleteBodyMetric`, and treats a 404 as already gone. Menu order flipped to Log history / Past sessions. Commit `fbbb1db`; js ?v=21. 334/334; delete verified end to end in Chromium (DOM row gone, server list agrees, reload agrees).
 **Why:** User ask after the first cut; the DELETE route existed since 09-13 but had no UI.
 **Notes:** `cdp-smoke.mjs` now passes `awaitPromise: true`, so `new Promise(r => setTimeout(...))` expressions wait for a fetch chain inline; earlier reads raced the async render and returned stale/empty lists. Edit (PATCH) of a log row still has no UI.
+
+---
+## 2026-09-16 — Tap-to-edit log rows (PATCH over POST); deployed
+**What:** `body-metrics.js` (`saveBodyMetric` picks PATCH when a row is loaded, POST otherwise; `editingHint`; 3 tests red first). Tapping a Log history row calls `startLogEdit`: form prefilled, hint in the status line, a `Cancel edit` button in a new grid cell; a successful edit clears the form and reopens the list. Commit `690275f`, css ?v=14, js ?v=22. 337/337; Chromium run shows the row corrected in place with no second row. Deployed by `git pull` on the droplet (static only, no restart).
+**Why:** Row 170 (182 → 102.0) needed the API; the health side warned two rows on one date confuse its review pull, so a correction must be a PATCH.
+**Notes:** Log rows are buttons now (tap = edit, swipe = delete), same as session rows. The 09-06 "confirm a >10% jump" idea is still not built.
