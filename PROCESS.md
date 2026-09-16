@@ -338,3 +338,9 @@ Running log of work done with Claude Code.
 **What:** The header clock icon opens a `history-menu` view (Past sessions / Log history). `logs` view lists `GET /api/body-metrics` newest first via `renderLogList` + `describeLogEntry` (metric key → the quick-log labels, YYYY-MM-DD built with the local-time constructor; 3 tests red first). The `Workouts` title is a button that returns to the main page. Commit `faf4e8e`, assets ?v=13 css / ?v=20 js. 333/333; driven end to end in headless Chromium against the tailnet dev server.
 **Why:** Quick-log entries (weight, food, BP) were write-only in the app; the only way to see them was the export.
 **Notes:** "Main page" mid-run is the runner (`goMain`): history → back used to call `goHome()`, which stranded an active run on home and nulled `currentSession`. Log rows are read-only for now; the PATCH/DELETE routes exist, so swipe-to-delete on a log row is the obvious next step. Not deployed; awaiting the user's on-device pass.
+
+---
+## 2026-09-16 — Swipe-to-delete on log rows; Log history first in the menu
+**What:** `renderLogList` wraps each row in the `row-wrap` / trash-action pattern from the session list and calls `onDelete(row, wrap)`; `handleDeleteLogEntry` confirms with `logDeletePrompt` (1 test red first), calls the new `api.deleteBodyMetric`, and treats a 404 as already gone. Menu order flipped to Log history / Past sessions. Commit `fbbb1db`; js ?v=21. 334/334; delete verified end to end in Chromium (DOM row gone, server list agrees, reload agrees).
+**Why:** User ask after the first cut; the DELETE route existed since 09-13 but had no UI.
+**Notes:** `cdp-smoke.mjs` now passes `awaitPromise: true`, so `new Promise(r => setTimeout(...))` expressions wait for a fetch chain inline; earlier reads raced the async render and returned stale/empty lists. Edit (PATCH) of a log row still has no UI.
