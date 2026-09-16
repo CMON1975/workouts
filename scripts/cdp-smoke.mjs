@@ -6,6 +6,9 @@
 //
 //   node scripts/cdp-smoke.mjs <url> [--wait=ms] <expr> [<expr> ...]
 //
+// An expression that returns a Promise is awaited, so a fetch chain can be
+// waited on inline: 'new Promise(r => setTimeout(() => r(...), 800))'.
+//
 // e.g. against a dev server with an open workout on it:
 //   node scripts/cdp-smoke.mjs http://127.0.0.1:8787/ \
 //     'document.getElementById("runner").hidden' \
@@ -68,7 +71,8 @@ try {
   await send('Page.navigate', { url });
   await sleep(waitMs);
   for (const e of exprs) {
-    const r = await send('Runtime.evaluate', { expression: e, returnByValue: true });
+    // awaitPromise: an expression may return a Promise (e.g. a setTimeout wait for a fetch chain)
+    const r = await send('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true });
     const val = r.result?.result?.value ?? r.result?.exceptionDetails?.text;
     console.log(e, '=>', JSON.stringify(val));
   }
