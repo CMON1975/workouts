@@ -23,6 +23,7 @@ import {
   renderManageList, applyPreviousHints,
   renderRoutineList, renderRoutineBuilder, renderRoutineManageList,
 } from './renderer.js';
+import { saveBodyMetric, editingHint } from './body-metrics.js';
 
 const els = {
   app: document.getElementById('app'),
@@ -126,6 +127,7 @@ const els = {
   bmValue: document.getElementById('bm-value'),
   bmSubmit: document.getElementById('bm-submit'),
   bmStatus: document.getElementById('bm-status'),
+  bmCancel: document.getElementById('bm-cancel'),
 };
 
 const VIEWS = ['home', 'session', 'historyMenu', 'history', 'logs', 'detail', 'newTpl', 'manage', 'newRt', 'manageRt', 'runner'];
@@ -907,6 +909,7 @@ async function openLogs() {
     }
     renderLogList(els.logList, {
       items: rows,
+      onPick: (row) => startLogEdit(row),
       onDelete: (row, wrap) => handleDeleteLogEntry(row, wrap),
     });
   } catch (err) {
@@ -1719,6 +1722,31 @@ function bmFlash(msg, isError = false) {
   }
 }
 
+let bmEditing = null;           // Log history row loaded into the quick-log form, or null
+
+// Tap on a Log history row: load it into the home form so the save PATCHes it.
+function startLogEdit(row) {
+  bmEditing = row;
+  els.bmMetric.value = row.metric;
+  applyBmMetricUI();
+  els.bmDate.value = row.date;
+  els.bmValue.value = row.value;
+  show(els.bmCancel);
+  if (bmStatusTimer) clearTimeout(bmStatusTimer);
+  els.bmStatus.textContent = editingHint(row);
+  els.bmStatus.classList.remove('err');
+  showView('home');
+  els.bmValue.focus();
+}
+
+function cancelLogEdit() {
+  bmEditing = null;
+  hide(els.bmCancel);
+  els.bmValue.value = '';
+  els.bmDate.value = todayISODate();
+  bmFlash('');
+}
+
 async function handleBodyMetricSubmit(e) {
   e.preventDefault();
   const date = els.bmDate.value;
@@ -1730,7 +1758,13 @@ async function handleBodyMetricSubmit(e) {
   }
   els.bmSubmit.disabled = true;
   try {
-    const row = await api.createBodyMetric({ date, metric, value });
+    const editingId = bmEditing?.id ?? null;
+    const row = await saveBodyMetric(api, { editingId, date, metric, value });
+    if (editingId != null) {
+      cancelLogEdit();
+      openLogs();            // show the corrected row where the edit started
+      return;
+    }
     bmFlash(`Logged ${row.metric} ${row.value} on ${row.date}`);
     els.bmValue.value = '';
     els.bmValue.focus();
@@ -1836,6 +1870,7 @@ async function boot() {
   els.teAddCol.addEventListener('click', handleTeAddCol);
 
   els.bodyMetricsForm.addEventListener('submit', handleBodyMetricSubmit);
+  els.bmCancel.addEventListener('click', cancelLogEdit);
   // Free-text metrics: the iOS return key must not submit a half-typed
   // sentence (row 187 ended at "a bag of"); the Log button submits.
   els.bmValue.addEventListener('keydown', (e) => {

@@ -371,7 +371,7 @@ export function logDeletePrompt(row) {
   return `Delete the ${label} entry "${value}" on ${date}? This cannot be undone.`;
 }
 
-export function renderLogList(root, { items, onDelete }) {
+export function renderLogList(root, { items, onPick, onDelete }) {
   root.innerHTML = '';
   for (const row of items) {
     const { label, value, date } = describeLogEntry(row);
@@ -379,8 +379,10 @@ export function renderLogList(root, { items, onDelete }) {
     wrap.className = 'row-wrap';
     wrap.dataset.logId = row.id;
 
-    const div = document.createElement('div');
+    const div = document.createElement('button');
+    div.type = 'button';
     div.className = 'history-row log-row row-foreground';
+    div.addEventListener('click', () => onPick(row));
 
     const primary = document.createElement('div');
     primary.className = 'history-primary';

@@ -174,7 +174,7 @@ button:disabled { opacity: 0.5; }
   grid-template-areas:
     'metric date'
     'value  submit'
-    'status status';
+    'status cancel';
   gap: 6px;
   align-items: stretch;
   margin: 0 0 16px;
@@ -183,6 +183,8 @@ button:disabled { opacity: 0.5; }
 .body-metrics-form input[type='date'] { grid-area: date; }
 .body-metrics-form input[type='text'] { grid-area: value; }
 .body-metrics-form button { grid-area: submit; }
+/* Shown only while a Log history row is loaded into the form */
+.body-metrics-form #bm-cancel { grid-area: cancel; min-height: 32px; padding: 4px 10px; }
 .body-metrics-form select,
 .body-metrics-form input[type='date'],
 .body-metrics-form input[type='text'] {
@@ -840,8 +842,7 @@ button.small {
   gap: 8px;
 }
 
-/* Log rows are plain divs (no detail view behind them); food text can be long */
-.log-row { border-radius: 8px; }
+/* Log rows: tap loads the entry into the home quick-log form; food text can be long */
 .log-value { color: var(--fg); overflow-wrap: anywhere; }
 
 .history-row {

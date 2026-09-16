@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>Workouts</title>
 <!-- ?v= busts stale phone caches; bump when the asset changes (no build step to do it for us) -->
-<link rel="stylesheet" href="/css/app.css?v=13">
+<link rel="stylesheet" href="/css/app.css?v=14">
 </head>
 <body>
   <header>
@@ -53,6 +53,7 @@
         <input id="bm-value" type="text" inputmode="decimal" aria-label="Value" placeholder="value" required>
         <button id="bm-submit" type="submit" aria-label="Log metric" title="Log metric"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
         <span id="bm-status" class="bm-status" aria-live="polite"></span>
+        <button id="bm-cancel" type="button" class="secondary small" hidden>Cancel edit</button>
       </form>
 
       <h2>Start a session</h2>
@@ -264,6 +265,6 @@
     </dialog>
   </main>
 
-  <script type="module" src="/js/app.js?v=21"></script>
+  <script type="module" src="/js/app.js?v=22"></script>
 </body>
 </html>
