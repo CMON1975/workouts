@@ -332,3 +332,9 @@ Running log of work done with Claude Code.
 **What:** `scripts/cdp-smoke.mjs` (from the session scratchpad): headless Chromium over the DevTools protocol, fresh profile, `--wait=ms`, evaluates expressions, prints console output, exits 1 on a page exception. Documented under Commands in CLAUDE.md. Verified against a seeded throwaway server (home visible, 3 routines).
 **Why:** The fallback-resume verification needed real waits; `--dump-dom` with a virtual-time budget was unusable, and the script would otherwise vanish with the scratchpad.
 **Notes:** Not wired into `npm test` (needs a running server and Chromium); it is a manual tool. Queue from the Sunday HANDOFF is empty.
+
+---
+## 2026-09-16 — Log history view behind a history menu; header title goes home
+**What:** The header clock icon opens a `history-menu` view (Past sessions / Log history). `logs` view lists `GET /api/body-metrics` newest first via `renderLogList` + `describeLogEntry` (metric key → the quick-log labels, YYYY-MM-DD built with the local-time constructor; 3 tests red first). The `Workouts` title is a button that returns to the main page. Commit `faf4e8e`, assets ?v=13 css / ?v=20 js. 333/333; driven end to end in headless Chromium against the tailnet dev server.
+**Why:** Quick-log entries (weight, food, BP) were write-only in the app; the only way to see them was the export.
+**Notes:** "Main page" mid-run is the runner (`goMain`): history → back used to call `goHome()`, which stranded an active run on home and nulled `currentSession`. Log rows are read-only for now; the PATCH/DELETE routes exist, so swipe-to-delete on a log row is the obvious next step. Not deployed; awaiting the user's on-device pass.
