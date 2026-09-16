@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lastRecordHint, describeAge } from './renderer.js';
+import { lastRecordHint, describeAge, describeLogEntry } from './renderer.js';
 
 // Timestamps built via the local-time Date constructor so the expected
 // calendar-day gaps hold in any TZ the tests run in.
@@ -69,4 +69,27 @@ test('describeAge counts calendar days like the per-cell hints', () => {
   assert.equal(describeAge(at(2026, 8, 27, 19), at(2026, 8, 28, 9)), 'yesterday');
   assert.equal(describeAge(at(2026, 8, 21, 11), at(2026, 8, 28, 9)), '1 week ago');
   assert.equal(describeAge(at(2026, 8, 28, 7), at(2026, 8, 28, 21)), 'today');
+});
+
+// ---- describeLogEntry (the Log history rows) ----
+
+test('describeLogEntry maps metric keys to the labels the quick-log menu shows', () => {
+  assert.equal(describeLogEntry({ metric: 'body_weight', value: '102.0', date: '2026-09-16' }).label, 'weight');
+  assert.equal(describeLogEntry({ metric: 'resting_hr', value: '58', date: '2026-09-16' }).label, 'resting HR');
+  assert.equal(describeLogEntry({ metric: 'blood_pressure', value: '120/80', date: '2026-09-16' }).label, 'blood pressure');
+  assert.equal(describeLogEntry({ metric: 'food', value: 'a bag of chips', date: '2026-09-16' }).label, 'food');
+  // Unknown keys (a future enum addition before the client catches up) fall back to the raw key.
+  assert.equal(describeLogEntry({ metric: 'sleep', value: '7', date: '2026-09-16' }).label, 'sleep');
+});
+
+test('describeLogEntry formats the YYYY-MM-DD date as a local calendar day, not UTC midnight', () => {
+  // new Date('2026-09-16') is UTC midnight, which is still Sep 15 west of
+  // Greenwich; the row's date must come out as the day that was typed.
+  const { date } = describeLogEntry({ metric: 'waist', value: '90', date: '2026-09-16' });
+  assert.match(date, /Sep 16/);
+  assert.match(date, /Wed/);
+});
+
+test('describeLogEntry passes the value through untouched', () => {
+  assert.equal(describeLogEntry({ metric: 'food', value: '300g potato chips', date: '2026-09-16' }).value, '300g potato chips');
 });

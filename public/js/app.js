@@ -19,7 +19,7 @@ import { blankPrescribedRows } from './completeness.js';
 import { iconSvg, setButtonIcon } from './icons.js';
 import {
   renderSessionForm, renderStatus,
-  renderHistoryList, renderSessionDetail, renderWorkoutDetail,
+  renderHistoryList, renderLogList, renderSessionDetail, renderWorkoutDetail,
   renderManageList, applyPreviousHints,
   renderRoutineList, renderRoutineBuilder, renderRoutineManageList,
 } from './renderer.js';
@@ -30,7 +30,16 @@ const els = {
   templateList: document.getElementById('template-list'),
   newTemplateBtn: document.getElementById('new-template'),
   manageBtn: document.getElementById('manage-templates'),
+  homeTitle: document.getElementById('home-title'),
   openHistory: document.getElementById('open-history'),
+  historyMenu: document.getElementById('history-menu'),
+  historyMenuBack: document.getElementById('history-menu-back'),
+  menuPastSessions: document.getElementById('menu-past-sessions'),
+  menuLogHistory: document.getElementById('menu-log-history'),
+  logs: document.getElementById('logs'),
+  logsBack: document.getElementById('logs-back'),
+  logList: document.getElementById('log-list'),
+  logEmpty: document.getElementById('log-empty'),
   session: document.getElementById('session'),
   sessionBack: document.getElementById('session-back'),
   sessionRoot: document.getElementById('session-root'),
@@ -119,7 +128,7 @@ const els = {
   bmStatus: document.getElementById('bm-status'),
 };
 
-const VIEWS = ['home', 'session', 'history', 'detail', 'newTpl', 'manage', 'newRt', 'manageRt', 'runner'];
+const VIEWS = ['home', 'session', 'historyMenu', 'history', 'logs', 'detail', 'newTpl', 'manage', 'newRt', 'manageRt', 'runner'];
 
 let currentSession = null;
 let templates = [];
@@ -882,6 +891,27 @@ async function handleRunnerBack() {
   }
 }
 
+function openHistoryMenu() {
+  showView('historyMenu');
+}
+
+async function openLogs() {
+  showView('logs');
+  els.logList.innerHTML = '';
+  hide(els.logEmpty);
+  try {
+    const rows = await api.listBodyMetrics();
+    if (!rows.length) {
+      show(els.logEmpty);
+      return;
+    }
+    renderLogList(els.logList, { items: rows });
+  } catch (err) {
+    console.error(err);
+    els.logList.textContent = 'Failed to load log history.';
+  }
+}
+
 async function openHistory() {
   showView('history');
   els.historyList.innerHTML = '';
@@ -1014,6 +1044,14 @@ async function handleDeleteChildSession(s, wrap) {
 function goHome() {
   currentSession = null;
   showView('home');
+}
+
+// The "main page" is the runner while a routine run is active: dropping to
+// home would strand the run (routine picks refuse while one is open, and
+// only a reload resumes it), and goHome() would null the bound session.
+function goMain() {
+  if (activeWorkout) showView('runner');
+  else goHome();
 }
 
 let rowColumns = [];
@@ -1714,9 +1752,14 @@ async function handleSubmit() {
 
 async function boot() {
   els.submit.addEventListener('click', handleSubmit);
-  els.openHistory.addEventListener('click', openHistory);
+  els.homeTitle.addEventListener('click', goMain);
+  els.openHistory.addEventListener('click', openHistoryMenu);
+  els.historyMenuBack.addEventListener('click', goMain);
+  els.menuPastSessions.addEventListener('click', openHistory);
+  els.menuLogHistory.addEventListener('click', openLogs);
   els.sessionBack.addEventListener('click', goHome);
-  els.historyBack.addEventListener('click', goHome);
+  els.historyBack.addEventListener('click', openHistoryMenu);
+  els.logsBack.addEventListener('click', openHistoryMenu);
   els.detailBack.addEventListener('click', () => {
     if (detailOrigin === 'runner' && activeWorkout) showView('runner');
     else openHistory();

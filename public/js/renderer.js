@@ -258,6 +258,31 @@ function summarizeValues(session, template) {
   return firstCol.unit ? `${joined} ${firstCol.unit}` : joined;
 }
 
+// Body-metric rows for the Log history view. Labels match the quick-log
+// <select> on home so an entry reads back the way it was picked.
+const METRIC_LABELS = {
+  body_weight: 'weight',
+  waist: 'waist',
+  food: 'food',
+  resting_hr: 'resting HR',
+  blood_pressure: 'blood pressure',
+};
+
+export function describeLogEntry(row) {
+  // row.date is YYYY-MM-DD; build it via the local-time constructor, since
+  // the ISO-string parse is UTC midnight and lands a day early west of GMT.
+  const [y, m, d] = row.date.split('-').map(Number);
+  let date;
+  try {
+    date = new Date(y, m - 1, d).toLocaleDateString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric',
+    });
+  } catch (_) {
+    date = row.date;
+  }
+  return { label: METRIC_LABELS[row.metric] ?? row.metric, value: row.value, date };
+}
+
 export function renderHistoryList(root, {
   items, templatesById,
   onPickSession, onPickWorkout,
@@ -338,6 +363,31 @@ export function renderHistoryList(root, {
     wrap.appendChild(action);
     root.appendChild(wrap);
     attachSwipeReveal(wrap, { onAction: () => onDeleteSession(s, wrap) });
+  }
+}
+
+export function renderLogList(root, { items }) {
+  root.innerHTML = '';
+  for (const row of items) {
+    const { label, value, date } = describeLogEntry(row);
+    const div = document.createElement('div');
+    div.className = 'history-row log-row';
+    div.dataset.logId = row.id;
+
+    const primary = document.createElement('div');
+    primary.className = 'history-primary';
+    primary.textContent = label;
+
+    const meta = document.createElement('div');
+    meta.className = 'history-meta';
+    meta.textContent = date;
+
+    const summary = document.createElement('div');
+    summary.className = 'history-summary log-value';
+    summary.textContent = value;
+
+    div.append(primary, summary, meta);
+    root.appendChild(div);
   }
 }
 

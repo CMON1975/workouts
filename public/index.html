@@ -13,13 +13,13 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>Workouts</title>
 <!-- ?v= busts stale phone caches; bump when the asset changes (no build step to do it for us) -->
-<link rel="stylesheet" href="/css/app.css?v=12">
+<link rel="stylesheet" href="/css/app.css?v=13">
 </head>
 <body>
   <header>
-    <h1>Workouts</h1>
+    <h1><button id="home-title" type="button" class="title-btn">Workouts</button></h1>
     <div class="header-actions">
-      <button id="open-history" type="button" class="icon-btn" hidden aria-label="View history">
+      <button id="open-history" type="button" class="icon-btn" hidden aria-label="History">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
       </button>
     </div>
@@ -188,11 +188,27 @@
       </div>
     </section>
 
+    <section id="history-menu" class="view" hidden>
+      <button id="history-menu-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <h2>History</h2>
+      <div class="menu-list">
+        <button id="menu-past-sessions" type="button" class="template-btn">Past sessions</button>
+        <button id="menu-log-history" type="button" class="template-btn">Log history</button>
+      </div>
+    </section>
+
     <section id="history" class="view" hidden>
       <button id="history-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <h2>Past sessions</h2>
       <div id="history-list"></div>
       <p id="history-empty" class="muted" hidden>No past sessions yet.</p>
+    </section>
+
+    <section id="logs" class="view" hidden>
+      <button id="logs-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <h2>Log history</h2>
+      <div id="log-list"></div>
+      <p id="log-empty" class="muted" hidden>Nothing logged yet.</p>
     </section>
 
     <section id="detail" class="view" hidden>
@@ -248,6 +264,6 @@
     </dialog>
   </main>
 
-  <script type="module" src="/js/app.js?v=19"></script>
+  <script type="module" src="/js/app.js?v=20"></script>
 </body>
 </html>
