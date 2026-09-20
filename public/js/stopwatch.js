@@ -194,7 +194,9 @@ const isTimeColumn = (name) => typeof name === 'string' && name.trim().toLowerCa
 // an interval program), so the press or a side switch leaves time to get into
 // position. It runs itself into the work like any timed phase, beeps like any
 // boundary, and is never recorded — the chain machinery treats it as a
-// non-work, non-rest phase (a press skips straight to the work).
+// non-work, non-rest phase (a press skips straight to the work). A work
+// phase straight after a rest gets none: the rest's own T-3 beeps are the
+// get-set (HANDOFF 2026-09-20).
 const leadInSecondsOf = (entry) => (
   Number.isInteger(entry?.lead_in_seconds) && entry.lead_in_seconds > 0 ? entry.lead_in_seconds : 0
 );
@@ -248,7 +250,7 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
     phases.push({ kind: 'rest', seconds: rest });
     return phases;
   }
-  // With a lead-in the rest runs on into the next get-set by itself, so the
+  // With a lead-in the rest runs on into the next work by itself, so the
   // whole remaining prescription is one chain (one press per exercise, rests
   // kept). Without one, a group ends on its rest and the next press starts
   // the next group.
@@ -258,7 +260,8 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
     const end = Math.min(r + rpr, rowCount);
     for (; r < end; r++) {
       const work = workPhase(r);
-      if (leadIn && !work.untimed) phases.push(leadInPhase(leadIn));
+      const afterRest = phases.at(-1)?.kind === 'rest';
+      if (leadIn && !work.untimed && !afterRest) phases.push(leadInPhase(leadIn));
       phases.push(work);
     }
     if (r < rowCount) phases.push({ kind: 'rest', seconds: rest });
