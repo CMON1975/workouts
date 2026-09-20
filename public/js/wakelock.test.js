@@ -7,10 +7,11 @@ function fakeNavigator({ reject = null } = {}) {
   const nav = {
     requests: [],
     sentinels,
+    reject,
     wakeLock: {
       async request(type) {
         nav.requests.push(type);
-        if (reject) throw reject;
+        if (nav.reject) throw nav.reject;
         const listeners = {};
         const s = {
           released: false,
@@ -72,4 +73,53 @@ test('missing API or a refused request resolves false without throwing', async (
   // Still wanted: a later gesture-backed acquire retries.
   await wl.reacquireIfWanted();
   assert.deepEqual(nav.requests, ['screen', 'screen']);
+});
+
+// HANDOFF 2026-09-20: the 70-min walk lost the lock while the page stayed
+// visible (low power / thermal release), and nothing asked for it back until
+// the next press. An OS release with the page still visible re-requests at
+// once; a refusal is reported so the runner can say so instead of going dark.
+test('an OS release while visible re-requests by itself', async () => {
+  const nav = fakeNavigator();
+  const doc = { visibilityState: 'visible' };
+  const lost = [];
+  const wl = createWakeLock({ navigator: nav, document: doc, onLost: () => lost.push(1) });
+  await wl.acquire();
+  nav.sentinels[0].osRelease();
+  await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(nav.requests, ['screen', 'screen']);
+  assert.equal(wl.isHeld(), true);
+  assert.equal(lost.length, 0);
+  // Hidden: the release is expected, so wait for the visibility wake.
+  doc.visibilityState = 'hidden';
+  nav.sentinels[1].osRelease();
+  await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(nav.requests, ['screen', 'screen']);
+  assert.equal(wl.isHeld(), false);
+  assert.equal(lost.length, 0);
+});
+
+test('a refused re-request reports the lock as lost, once per loss', async () => {
+  const nav = fakeNavigator();
+  const doc = { visibilityState: 'visible' };
+  const lost = [];
+  const wl = createWakeLock({ navigator: nav, document: doc, onLost: () => lost.push(1) });
+  await wl.acquire();
+  nav.reject = new DOMException('low power', 'NotAllowedError');
+  nav.sentinels[0].osRelease();
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(wl.isHeld(), false);
+  assert.equal(lost.length, 1);
+  // The visibility wake / press path reports too when it is still refused.
+  assert.equal(await wl.reacquireIfWanted(), false);
+  assert.equal(lost.length, 2);
+  // Granted again: silent.
+  nav.reject = null;
+  assert.equal(await wl.reacquireIfWanted(), true);
+  assert.equal(lost.length, 2);
+  // Not wanted (run over): a refusal is not a loss.
+  await wl.release();
+  nav.reject = new DOMException('nope', 'NotAllowedError');
+  await wl.reacquireIfWanted();
+  assert.equal(lost.length, 2);
 });

@@ -144,10 +144,21 @@ let detailOrigin = 'history';   // 'history' | 'runner'
 let stopwatch = null;           // created on workout start/resume, null otherwise
 let stopwatchTick = null;
 const beeper = createBeeper();  // inert until the first button gesture arms it
-const wakeLock = createWakeLock(); // held for the length of a routine run
+// Held for the length of a routine run. A lost lock (refused re-request:
+// low power mode, battery) is said out loud — the screen going dark mid-walk
+// with no word is the failure the 2026-09-20 handoff names.
+const wakeLock = createWakeLock({ onLost: () => showBanner('Screen lock lost — the screen may sleep. Tap the timer to retry.', 8000) });
 
 function show(el) { el.hidden = false; }
 function hide(el) { el.hidden = true; }
+
+let bannerTimer = null;
+function showBanner(text, ms = 4000) {
+  els.resumeBanner.hidden = false;
+  els.resumeBanner.textContent = text;
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => { els.resumeBanner.hidden = true; }, ms);
+}
 
 function showView(name) {
   for (const v of VIEWS) {
@@ -243,9 +254,7 @@ async function tryResumeFromServer() {
 
 async function mountResumedWorkout(banner) {
   const { workoutId, currentIndex: idx } = activeWorkout;
-  els.resumeBanner.hidden = false;
-  els.resumeBanner.textContent = banner;
-  setTimeout(() => { els.resumeBanner.hidden = true; }, 4000);
+  showBanner(banner);
 
   // A running timer resumes from its original epoch — away time counts.
   stopwatch = createStopwatch({ exerciseIndex: idx, initial: loadStopwatchState(workoutId, idx) });
@@ -1725,10 +1734,8 @@ async function enterApp() {
     if (restored) {
       const template = templates.find(t => t.id === restored.template_id);
       if (template) {
-        els.resumeBanner.hidden = false;
-        els.resumeBanner.textContent = `Resumed draft for ${template.name}`;
+        showBanner(`Resumed draft for ${template.name}`);
         resumeSession(restored);
-        setTimeout(() => { els.resumeBanner.hidden = true; }, 4000);
       }
     }
   }
