@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  formatMSS, createStopwatch, restSecondsFor,
+  formatMSS, createStopwatch, restSecondsFor, cardioPhasesFor,
   loadStopwatchState, saveStopwatchState, clearStopwatchState, workChainFor,
   intervalPhasesFor,
 } from './stopwatch.js';
@@ -865,4 +865,65 @@ test('chain: an untimed set folds straight into its rest and records no time', (
   assert.equal(sw.chainPhase(), null);
   assert.equal(sw.chainCompleted(), true);
   assert.deepEqual(sw.takeCompletedWork(), []);
+});
+
+// ---- cardio lead-in (HANDOFF 2026-09-20): Zone 2 / Long Walk carry a
+// lead-in alone — no rest (cardio never pipes one), no interval program —
+// and their time targets are minutes. Press → get set → a countdown of the
+// target read as minutes (open count-up without one). Nothing is recorded:
+// the minutes cell stays a manual entry.
+
+const WALK = {
+  template: { id: 40, columns: [{ name: 'time' }, { name: 'hr' }] },
+  prescribed: {
+    exercises: [{ template_id: 40, lead_in_seconds: 3 }],
+    targets: [{ template_id: 40, row_index: 0, column_name: 'time', target_num: 45 }],
+  },
+};
+
+test('cardioPhasesFor: lead-in then a countdown of the time target in minutes', () => {
+  assert.deepEqual(cardioPhasesFor(WALK), [
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'cardio', seconds: 2700, label: 'go' },
+  ]);
+  // No numeric time target: open count-up, press to end.
+  const open = { ...WALK, prescribed: { ...WALK.prescribed, targets: [] } };
+  assert.deepEqual(cardioPhasesFor(open), [
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'cardio', seconds: null, label: 'go' },
+  ]);
+});
+
+test('cardioPhasesFor: null without a lead-in, a time column, or alongside rest / intervals', () => {
+  const withEntry = (entry) => ({ ...WALK, prescribed: { ...WALK.prescribed, exercises: [entry] } });
+  assert.equal(cardioPhasesFor(withEntry({ template_id: 40 })), null, 'no lead-in');
+  assert.equal(cardioPhasesFor(withEntry({ template_id: 40, lead_in_seconds: 0 })), null);
+  assert.equal(cardioPhasesFor(withEntry({ template_id: 40, lead_in_seconds: 3, rest_seconds: 90 })), null, 'rest → work chain');
+  assert.equal(cardioPhasesFor(withEntry({
+    template_id: 40, lead_in_seconds: 3, intervals: { work_seconds: 60, easy_seconds: 120, rounds: 5 },
+  })), null, 'intervals → interval program');
+  assert.equal(cardioPhasesFor({ ...WALK, template: { id: 40, columns: [{ name: 'hr' }] } }), null, 'no time column');
+  assert.equal(cardioPhasesFor({ template: WALK.template, prescribed: null }), null);
+});
+
+test('chain: a cardio program runs the lead-in into the countdown, records nothing, and a press ends it', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.startChain(cardioPhasesFor(WALK));
+  clock.advance(3_000);
+  assert.deepEqual(sw.chainPhase(), { kind: 'cardio', seconds: 2700, elapsed: 0, remaining: 2700, label: 'go' });
+  clock.advance(2_700_000);
+  assert.equal(sw.chainPhase(), null);
+  assert.equal(sw.chainCompleted(), true);
+  assert.deepEqual(sw.takeCompletedWork(), []);
+  assert.equal(sw.completedRows(), 0);
+
+  const open = createStopwatch({ now: clock.now });
+  open.startChain(cardioPhasesFor({ ...WALK, prescribed: { ...WALK.prescribed, targets: [] } }));
+  clock.advance(3_000 + 600_000);
+  assert.deepEqual(open.chainPhase(), { kind: 'cardio', seconds: null, elapsed: 600, remaining: null, label: 'go' });
+  open.advanceChain();
+  assert.equal(open.chainPhase(), null);
+  assert.equal(open.chainCompleted(), true);
+  assert.deepEqual(open.takeCompletedWork(), []);
 });

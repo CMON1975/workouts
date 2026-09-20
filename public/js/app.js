@@ -9,7 +9,7 @@ import {
 import { installHideFlush, installOutboxDrainers, drainOutbox, readShadow } from './persistence.js';
 import { createSessionState } from './session-state.js';
 import {
-  createStopwatch, formatMSS, restSecondsFor, workChainFor, intervalPhasesFor,
+  createStopwatch, formatMSS, restSecondsFor, workChainFor, intervalPhasesFor, cardioPhasesFor,
   loadStopwatchState, saveStopwatchState, clearStopwatchState,
 } from './stopwatch.js';
 import { createBeeper, beepOffsets, chainBeepPlan } from './beeper.js';
@@ -412,12 +412,15 @@ function currentRestSeconds() {
   return restSecondsFor(activeWorkout.prescribed, template?.id);
 }
 
-// Interval program (cardio interval days) for the exercise the runner is on;
-// null = not one. Takes precedence over chain and rest modes.
-function currentIntervalPhases() {
+// Self-running program for the exercise the runner is on: an interval
+// program (cardio interval days) or a cardio lead-in + countdown (the walks);
+// null = neither. Takes precedence over chain and rest modes.
+function currentProgramPhases() {
   if (!activeWorkout) return null;
   const template = activeWorkout.routine.templates[activeWorkout.currentIndex];
-  return intervalPhasesFor(activeWorkout.prescribed, template?.id);
+  if (!template) return null;
+  return intervalPhasesFor(activeWorkout.prescribed, template.id)
+    ?? cardioPhasesFor({ prescribed: activeWorkout.prescribed, template });
 }
 
 // Chain phases the next press should start for the current exercise; null =
@@ -482,26 +485,30 @@ function setStopwatchLabel(text) {
 
 function renderStopwatchDisplay() {
   const cls = els.stopwatchTime.classList;
-  const program = currentIntervalPhases();
+  const program = currentProgramPhases();
   if (program) {
     const phase = stopwatch?.chainPhase() ?? null;
     if (phase) {
-      els.stopwatchTime.textContent = formatMSS(phase.remaining);
-      cls.toggle('working', phase.kind === 'intense');
+      // Countdown when timed; the open cardio phase (no target) counts up.
+      els.stopwatchTime.textContent = formatMSS(phase.remaining ?? phase.elapsed);
+      cls.toggle('working', phase.kind === 'intense' || phase.kind === 'cardio');
       cls.toggle('resting', phase.kind === 'easy');
       setStopwatchLabel(phase.label);
-      setStopwatchBtn('skip-forward', 'Skip');
+      if (phase.kind === 'cardio') setStopwatchBtn('flag', 'Done');
+      else setStopwatchBtn('skip-forward', 'Skip');
     } else if (stopwatch?.chainCompleted()) {
       els.stopwatchTime.textContent = '0:00';
       cls.remove('working'); cls.remove('resting');
       setStopwatchLabel('done');
-      setStopwatchBtn('play', 'Restart intervals');
+      setStopwatchBtn('play', 'Restart');
     } else {
-      // Armed: preview the first section (usually the warmup).
-      els.stopwatchTime.textContent = formatMSS(program[0].seconds);
+      // Armed: preview the first section past the get-set (the warmup, or
+      // the walk's target).
+      const first = program.find(p => p.kind !== 'lead_in') ?? program[0];
+      els.stopwatchTime.textContent = formatMSS(first.seconds);
       cls.remove('working'); cls.remove('resting');
-      setStopwatchLabel(program[0].label);
-      setStopwatchBtn('play', 'Start intervals');
+      setStopwatchLabel(first.label);
+      setStopwatchBtn('play', 'Start');
     }
     return;
   }
@@ -569,10 +576,10 @@ function handleStopwatchBtn() {
   // Synchronously, on every press: the gesture is what unlocks audio on iOS,
   // and pressing Start warms the context before the first countdown needs it.
   beeper.ensureContext();
-  const program = currentIntervalPhases();
+  const program = currentProgramPhases();
   if (program) {
-    // One press runs the whole program (every phase is timed); a press
-    // mid-phase skips to the next section; a press after done restarts.
+    // One press runs the whole program; a press mid-phase skips to the next
+    // section (ends the open cardio phase); a press after done restarts.
     if (stopwatch.chainPhase() == null) stopwatch.startChain(program);
     else stopwatch.advanceChain();
     const snap = stopwatch.chainSnapshot();

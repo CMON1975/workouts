@@ -308,6 +308,31 @@ export function intervalPhasesFor(prescribed, templateId) {
   return phases;
 }
 
+// Cardio program (Zone 2 / Long Walk) for one template: the prescription
+// carries a lead-in alone — cardio never pipes a rest, and there is no
+// interval program — so the walk gets the same press-then-position start as
+// everything else: get set, then a countdown of row 0's time target, which
+// on cardio templates is minutes (45, 70), with the done tone at the target;
+// an open count-up when there is no numeric target. The phase is not work:
+// nothing is recorded, the minutes cell stays a manual entry. Null = not a
+// cardio program (rest → work chain, intervals → interval program).
+export function cardioPhasesFor({ prescribed, template }) {
+  if (!template?.columns?.some(c => isTimeColumn(c?.name))) return null;
+  const entry = prescribed?.exercises?.find(e => e.template_id === template.id);
+  const leadIn = leadInSecondsOf(entry);
+  if (!leadIn) return null;
+  if (Number.isInteger(entry.rest_seconds) && entry.rest_seconds > 0) return null;
+  if (entry.intervals != null && typeof entry.intervals === 'object') return null;
+  const target = prescribed.targets?.find(t => (
+    t.template_id === template.id && t.row_index === 0 && isTimeColumn(t.column_name)
+    && typeof t.target_num === 'number' && t.target_num > 0
+  ));
+  return [
+    leadInPhase(leadIn),
+    { kind: 'cardio', seconds: target ? Math.round(target.target_num * 60) : null, label: 'go' },
+  ];
+}
+
 // Prescribed rest for one template, from the cached /api/prescriptions/active
 // payload. Null-safe against a missing prescription, a stale cached shape
 // without `exercises`, and non-positive/non-integer values — null means
