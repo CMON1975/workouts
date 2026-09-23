@@ -398,3 +398,9 @@ Running log of work done with Claude Code.
 **What:** Workout PATCH takes optional `local_date`; the pin uses it, UTC date only as fallback (characterized first, `b6f953b`). Client sends `localISODate(startedAt)` (new `local-date.js`, tested) and fetches `/active?routine_id&on=` that same date (`440929a`). 385/385. Deployed to `440929a`; restart asked of the user.
 **Why:** Audit finding: runner showed the latest prescription, server pinned by UTC date. Worse than "Sunday evenings": any evening after 17:00 PDT is tomorrow in UTC, so a run on the evening of a publish pinned the coming week. Reproduced live in Chromium at 20:00 PDT on the old code.
 **Notes:** A routine's first prescription can't be run with targets before its starts_on (null by date); acceptable. Old pins not rewritten. HANDOFF FYI added.
+
+---
+## 2026-09-22 — Pin = what the runner shows (reversed the local-day rule)
+**What:** Read-only audit of a prod snapshot (`.backup` to /tmp, copied to scratchpad): 75 pinned workouts, one pinned to a week starting after its local day (Sun 08-09 Mon routine, pin 49). Its values match 49's targets 5/5 and the date-correct week 0/5: Monday's routine run early on Sunday as next week's session. A second Sunday Mon-routine run (08-16) was pinned by date while the screen showed the next week. The user chose "latest published": reverted the client local-day fetch (`2ae2dd8`) and made the server pin use the `/active` default query, latest for the routine (`6b67921`; red test on a Saturday-midday run). 383/383. Deployed; restart asked.
+**Why:** The actual defect was screen ≠ pin; the local-day rule fixed it the wrong way for early runs.
+**Notes:** No prod rows rewritten (both Sunday runs are consistent with what was shown). `local_date` field dropped from the workout schema; `b6f953b`'s date pin was live ~20 min with no workouts started. HANDOFF FYI rewritten.
