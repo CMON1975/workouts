@@ -346,6 +346,11 @@ async function reconcileWithServer(draft) {
 }
 
 function startSession(template) {
+  if (activeWorkout) {
+    // Would rebind currentSession away from the runner's exercise.
+    alert('Finish or End early on the current workout first.');
+    return;
+  }
   bindSession(emptyDraft(template), template);
 }
 
@@ -1113,7 +1118,10 @@ async function handleDeleteChildSession(s, wrap) {
 }
 
 function goHome() {
-  currentSession = null;
+  // Home is reachable mid-run (a Log history edit uses its form); the bound
+  // session is then the runner's, and dropping it would orphan Next/Finish
+  // and the hide-flush.
+  if (!activeWorkout) currentSession = null;
   showView('home');
 }
 
