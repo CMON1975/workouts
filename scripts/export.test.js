@@ -73,6 +73,32 @@ test('single standalone standard session renders a table with column header and 
   assert.match(md, /\*\*Totals:\*\* 1 sessions · 4 finalized sets/);
 });
 
+// Migration 009 flipped every column to 'text' without copying value_num
+// into value_text, so sets logged before it (prod: May 4 – Jun 19) carry
+// their number in value_num only. They must not export as blanks.
+test('a text column falls back to value_num for sets stored before migration 009', () => {
+  const md = renderMarkdown({
+    ...baseExport,
+    standalone: [{
+      id: 's-009',
+      template_name: 'DB row A',
+      template_kind: 'standard',
+      template_description: null,
+      template_archived: false,
+      started_at: T_2026_05_08_1842 - 60_000,
+      finalized_at: T_2026_05_08_1842,
+      notes: null,
+      columns: [{ ...bicepColumn(), value_type: 'text' }],
+      values: [
+        { row_index: 0, column_id: 1, value_num: 12, value_text: null },
+        { row_index: 1, column_id: 1, value_num: null, value_text: '10' },
+      ],
+    }],
+  });
+  assert.match(md, /\| 1 \| 12 \|/);
+  assert.match(md, /\| 2 \| 10 \|/);
+});
+
 test('checkbox session renders description and status', () => {
   const md = renderMarkdown({
     ...baseExport,

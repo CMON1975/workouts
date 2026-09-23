@@ -252,7 +252,7 @@ function summarizeValues(session, template) {
   const cells = session.values
     .filter(v => v.column_id === firstCol.id)
     .sort((a, b) => a.row_index - b.row_index)
-    .map(v => (firstCol.value_type === 'text' ? (v.value_text ?? '') : (v.value_num ?? '')));
+    .map(v => cellText(v, firstCol));
   if (!cells.length) return '';
   const joined = cells.join(', ');
   return firstCol.unit ? `${joined} ${firstCol.unit}` : joined;
@@ -467,17 +467,25 @@ function renderSessionTable(root, { session, template }) {
     for (const col of template.columns) {
       const td = document.createElement('td');
       const v = session.values.find(x => x.row_index === r && x.column_id === col.id);
-      if (v) {
-        td.textContent = col.value_type === 'text'
-          ? (v.value_text ?? '')
-          : (v.value_num != null ? String(v.value_num) : '');
-      }
+      if (v) td.textContent = cellText(v, col);
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
   root.appendChild(table);
+}
+
+// A stored value as display text: the column type's side first, then the
+// other. Migration 009 flipped every column to 'text' without copying the
+// numbers logged before it (prod: May 4 – Jun 19), so those live only in
+// value_num.
+export function cellText(v, col) {
+  if (!v) return '';
+  const raw = col?.value_type === 'text'
+    ? (v.value_text ?? v.value_num)
+    : (v.value_num ?? v.value_text);
+  return raw == null ? '' : String(raw);
 }
 
 export function renderSessionDetail(root, { session, template }) {

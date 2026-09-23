@@ -34,7 +34,9 @@ function colHeader(col) {
 function cellValue(values, rowIndex, col) {
   const v = values.find(x => x.row_index === rowIndex && x.column_id === col.id);
   if (!v) return '';
-  if (col.value_type === 'text') return v.value_text ?? '';
+  // Text columns fall back to value_num: migration 009 flipped every column
+  // to text without copying the numbers logged before it.
+  if (col.value_type === 'text') return v.value_text ?? (v.value_num != null ? String(v.value_num) : '');
   return v.value_num != null ? String(v.value_num) : '';
 }
 

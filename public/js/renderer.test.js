@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   lastRecordHint, describeAge, describeLogEntry, logDeletePrompt, targetHintText, targetValueText,
+  cellText,
 } from './renderer.js';
 
 // Timestamps built via the local-time Date constructor so the expected
@@ -118,4 +119,16 @@ test('targetValueText prefixes ≤ on bounds for the routine preview', () => {
   assert.equal(targetValueText('8', 'exact'), '8');
   assert.equal(targetValueText('12', 'cap'), '≤ 12');
   assert.equal(targetValueText('140', 'ceiling'), '≤ 140');
+});
+
+// Sets logged before migration 009 (prod: May 4 – Jun 19) carry their number
+// in value_num on columns that are 'text' now; they must not show as blanks.
+test('cellText reads the column-type side first, falling back to the other', () => {
+  const text = { value_type: 'text' };
+  const num = { value_type: 'number' };
+  assert.equal(cellText({ value_num: 12, value_text: null }, text), '12');
+  assert.equal(cellText({ value_num: null, value_text: '8/side' }, text), '8/side');
+  assert.equal(cellText({ value_num: 25, value_text: null }, num), '25');
+  assert.equal(cellText({ value_num: null, value_text: null }, text), '');
+  assert.equal(cellText(undefined, text), '');
 });
