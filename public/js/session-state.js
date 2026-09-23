@@ -35,7 +35,18 @@ export function createSessionState({ draft, onChange }) {
   async function pushToServer() {
     setState(STATES.SAVING);
     try {
-      await api.patchDraft(draft.id, draft);
+      try {
+        await api.patchDraft(draft.id, draft);
+      } catch (err) {
+        // 409: the server holds a newer version (a beacon or another tab got
+        // there first). The draft on screen is what the user sees, so it
+        // wins: jump past the server's version and push once more.
+        const serverVersion = err.status === 409 ? err.body?.server_version : null;
+        if (!Number.isInteger(serverVersion) || serverVersion < draft.client_version) throw err;
+        draft.client_version = serverVersion + 1;
+        await persistLocal();
+        await api.patchDraft(draft.id, draft);
+      }
       setState(STATES.SAVED);
     } catch (err) {
       // The outbox is best-effort: if IDB is unavailable the shadow write

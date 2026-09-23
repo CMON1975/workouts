@@ -114,3 +114,33 @@ test('a failed PATCH with no outbox available still reaches the finalize call', 
     fake.failOpens = false;
   }
 });
+
+// --- 409 on a draft PATCH (code audit 2026-09-22) ---
+// The server holds a higher client_version (a beacon or another tab got
+// there first). The draft on screen is what the user sees, so it wins: jump
+// past the server's version and push again, instead of 409ing on every Next
+// until enough edits outpace it.
+
+test('a 409 on the draft PATCH re-pushes past the server version and ends SAVED', async () => {
+  calls.length = 0;
+  let patches = 0;
+  respond = (c) => {
+    if (c.url.endsWith('/finalize')) return { status: 200, body: { finalized_at: 999 } };
+    patches += 1;
+    return patches === 1
+      ? { status: 409, body: { server_version: 9, updated_at: null, stale: true } }
+      : { status: 200, body: { server_version: c.body.client_version } };
+  };
+  const draft = makeDraft({ id: 'sess-409', client_version: 3 });
+  const s = createSessionState({ draft });
+
+  await s.flushNow();
+  assert.deepEqual(calls.map(c => c.body?.client_version), [3, 10]);
+  assert.equal(draft.client_version, 10);
+  assert.equal(JSON.parse(localStorage.getItem('draft:sess-409')).client_version, 10);
+  assert.equal(s.getState(), STATES.SAVED);
+
+  await s.finalize();
+  assert.deepEqual(calls.at(-1).body, { client_version: 10 });
+  assert.equal(s.getState(), STATES.FINALIZED);
+});
