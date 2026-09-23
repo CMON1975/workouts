@@ -1,4 +1,4 @@
-import { putDraft, enqueueOutbox, listOutbox, deleteOutbox, updateOutbox } from './idb.js';
+import { putDraft, getDraft, enqueueOutbox, listOutbox, deleteOutbox, updateOutbox } from './idb.js';
 
 const OUTBOX_MAX_ATTEMPTS = 20;
 const OUTBOX_MAX_BACKOFF_MS = 60_000;
@@ -33,6 +33,18 @@ export function readShadow(id) {
     const raw = localStorage.getItem('draft:' + id);
     return raw ? JSON.parse(raw) : null;
   } catch (_) { return null; }
+}
+
+// Newest local copy of a draft for a restore: the IDB record or the shadow,
+// whichever has the higher client_version (the shadow is written first on
+// hide because the IDB put may not commit before a freeze). An IDB failure
+// falls back to the shadow alone.
+export async function loadLocalDraft(id) {
+  let stored = null;
+  try { stored = (await getDraft(id)) ?? null; } catch (_) {}
+  const shadow = readShadow(id);
+  if (!stored || !shadow) return stored ?? shadow;
+  return (shadow.client_version ?? -1) > (stored.client_version ?? -1) ? shadow : stored;
 }
 
 export function clearShadow(id) {

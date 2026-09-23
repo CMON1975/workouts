@@ -1,12 +1,12 @@
 import { api } from './api.js';
 import { uuidv7 } from './uuidv7.js';
 import {
-  getDraft, getLastActiveSessionId,
+  getLastActiveSessionId,
   putWorkout, getWorkout, deleteWorkout,
   deleteDraft, deleteOutboxByDraftId,
   getActiveWorkoutId, clearActiveWorkoutId,
 } from './idb.js';
-import { installHideFlush, installOutboxDrainers, drainOutbox, readShadow } from './persistence.js';
+import { installHideFlush, installOutboxDrainers, drainOutbox, loadLocalDraft } from './persistence.js';
 import { createSessionState } from './session-state.js';
 import {
   createStopwatch, formatMSS, restSecondsFor, workChainFor, intervalPhasesFor, cardioPhasesFor,
@@ -268,7 +268,7 @@ async function mountResumedWorkout(banner) {
 async function tryAutoRestore() {
   const lastId = await getLastActiveSessionId();
   if (!lastId) return false;
-  const local = (await getDraft(lastId)) || readShadow(lastId);
+  const local = await loadLocalDraft(lastId);
   if (!local) return false;
   if (local.finalized_at) return false;
   return local;
@@ -717,7 +717,7 @@ async function bindCurrentExercise() {
   let draft = null;
   if (sid) {
     // Resume path: this index already has a sid; try to recover its in-progress draft.
-    const local = (await getDraft(sid)) || readShadow(sid);
+    const local = await loadLocalDraft(sid);
     if (local && !local.finalized_at) {
       draft = local;
     } else if (!local) {
