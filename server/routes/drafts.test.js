@@ -310,3 +310,27 @@ test('malformed uuid is rejected by schema', async () => {
   });
   assert.equal(res.statusCode, 400);
 });
+
+// navigator.sendBeacon can only POST: the teardown flush (persistence.js
+// layer 3) lands on the same upsert, LWW rules included.
+test('POST (sendBeacon) upserts a draft exactly like PATCH, stale versions included', async () => {
+  const id = uuidv7Fixture(90);
+  const first = await app.inject({
+    method: 'POST',
+    url: `/api/drafts/${id}`,
+    headers: { 'content-type': 'application/json' },
+    payload: JSON.stringify(draftBody(id, 3, [{ row_index: 0, column_id: bicepColumnId, value_num: 11 }])),
+  });
+  assert.equal(first.statusCode, 200);
+  assert.equal(first.json().server_version, 3);
+  const row = app.db.prepare('SELECT value_num FROM session_values WHERE session_id = ?').get(id);
+  assert.equal(row.value_num, 11);
+
+  const stale = await app.inject({
+    method: 'POST',
+    url: `/api/drafts/${id}`,
+    payload: draftBody(id, 2, [{ row_index: 0, column_id: bicepColumnId, value_num: 99 }]),
+  });
+  assert.equal(stale.statusCode, 409);
+  assert.equal(app.db.prepare('SELECT value_num FROM session_values WHERE session_id = ?').get(id).value_num, 11);
+});
