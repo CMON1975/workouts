@@ -7,7 +7,6 @@ import {
   getActiveWorkoutId, clearActiveWorkoutId,
 } from './idb.js';
 import { installHideFlush, installOutboxDrainers, drainOutbox, loadLocalDraft } from './persistence.js';
-import { localISODate } from './local-date.js';
 import { createSessionState } from './session-state.js';
 import {
   createStopwatch, formatMSS, restSecondsFor, workChainFor, intervalPhasesFor, cardioPhasesFor,
@@ -676,7 +675,6 @@ async function handleRoutinePick(routine) {
       started_at: startedAt,
       updated_at: startedAt,
       client_version: 1,
-      local_date: localISODate(startedAt),
     });
   } catch (err) {
     console.error('start workout failed', err);
@@ -721,12 +719,7 @@ async function bindCurrentExercise() {
   // has already drawn N rows from template.default_rows.
   if (activeWorkout.prescribed === undefined) {
     try {
-      // The prescription active on the run's local day — the one the server
-      // pinned at start — not the latest published (a Sunday-evening run
-      // after the weekly publish would otherwise show Monday's week).
-      activeWorkout.prescribed = await api.activePrescription(
-        routine.id, localISODate(activeWorkout.startedAt ?? Date.now()),
-      );
+      activeWorkout.prescribed = await api.activePrescription(routine.id);
     } catch (err) {
       console.warn('prescription fetch failed', err);
       activeWorkout.prescribed = null;
