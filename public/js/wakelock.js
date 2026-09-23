@@ -15,6 +15,7 @@ export function createWakeLock({
 } = {}) {
   let sentinel = null;
   let wanted = false;
+  let pending = null; // in-flight request, shared so overlapping calls hold one lock
 
   function supported() {
     return !!navigator?.wakeLock?.request;
@@ -24,8 +25,24 @@ export function createWakeLock({
     wanted = true;
     if (sentinel) return true;
     if (!supported()) return false;
+    if (!pending) {
+      const p = request();
+      pending = p;
+      // Cleared here, not in request(): a synchronous throw settles it
+      // before this assignment runs.
+      p.then(() => { if (pending === p) pending = null; });
+    }
+    return pending;
+  }
+
+  async function request() {
     try {
       const s = await navigator.wakeLock.request('screen');
+      if (!wanted) {
+        // Released while the request was in flight (Finish, End early).
+        try { await s.release(); } catch (_) {}
+        return false;
+      }
       s.addEventListener('release', () => {
         if (sentinel !== s) return;
         sentinel = null;

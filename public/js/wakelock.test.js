@@ -123,3 +123,37 @@ test('a refused re-request reports the lock as lost, once per loss', async () =>
   await wl.reacquireIfWanted();
   assert.equal(lost.length, 2);
 });
+
+// pageshow + visibilitychange both wake the runner on a bfcache restore, and
+// a press can land while a request is still in flight.
+test('overlapping acquires share one request and one lock', async () => {
+  const nav = fakeNavigator();
+  const wl = createWakeLock({ navigator: nav });
+  assert.deepEqual(await Promise.all([wl.acquire(), wl.reacquireIfWanted()]), [true, true]);
+  assert.deepEqual(nav.requests, ['screen']);
+  await wl.release();
+  assert.ok(nav.sentinels.every(s => s.released), 'no lock left behind');
+});
+
+test('a release while the request is in flight drops the lock when it arrives', async () => {
+  const nav = fakeNavigator();
+  const lost = [];
+  const wl = createWakeLock({ navigator: nav, onLost: () => lost.push(1) });
+  const pending = wl.acquire();
+  await wl.release();
+  assert.equal(await pending, false);
+  assert.equal(wl.isHeld(), false);
+  assert.equal(nav.sentinels[0].released, true);
+  assert.deepEqual(lost, [], 'not wanted, so not lost');
+});
+
+test('a request that throws synchronously does not wedge later acquires', async () => {
+  const nav = fakeNavigator();
+  const real = nav.wakeLock.request;
+  nav.wakeLock.request = () => { throw new Error('NotAllowedError'); };
+  const wl = createWakeLock({ navigator: nav });
+  assert.equal(await wl.acquire(), false);
+  nav.wakeLock.request = real;
+  assert.equal(await wl.acquire(), true);
+  assert.equal(wl.isHeld(), true);
+});
