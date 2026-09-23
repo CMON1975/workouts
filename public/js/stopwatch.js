@@ -284,6 +284,9 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
     const end = Math.min(r + rpr, rowCount);
     for (; r < end; r++) {
       const work = workPhase(r);
+      // Only the press's own first set is zero-length (the press is "set
+      // done"); a later untimed set in this chain waits for its press.
+      if (work.untimed && phases.some(p => p.kind === 'work')) work.seconds = null;
       const afterRest = phases.at(-1)?.kind === 'rest';
       if (leadIn && !work.untimed && !afterRest) phases.push(leadInPhase(leadIn));
       phases.push(work);

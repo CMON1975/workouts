@@ -867,6 +867,42 @@ test('chain: an untimed set folds straight into its rest and records no time', (
   assert.deepEqual(sw.takeCompletedWork(), []);
 });
 
+// Only the press's own first set can be zero-length (the press is "set done").
+// A later untimed set in the same chain (continuous lead-in chain, or
+// rows_per_rest grouping) waits for a press, or it would fold the instant
+// its predecessor ended and mark a set done with no time to do it.
+test('chain: a later untimed set in one chain waits for its press, recording nothing', () => {
+  const withLead = { ...DIP, prescribed: { ...DIP.prescribed,
+    exercises: [{ template_id: 31, rest_seconds: 120, lead_in_seconds: 3 }] } };
+  const phases = workChainFor({ ...withLead, completedRows: 1 });
+  assert.deepEqual(phases, [
+    { kind: 'work', seconds: 0, row: 1, untimed: true },
+    { kind: 'rest', seconds: 120 },
+    { kind: 'work', seconds: null, row: 2, untimed: true },
+    { kind: 'rest', seconds: 120 },
+    { kind: 'work', seconds: null, row: 3, untimed: true },
+  ]);
+  let t = 1_000_000;
+  const sw = createStopwatch({ now: () => t });
+  sw.startChain(phases);
+  assert.equal(sw.chainPhase().kind, 'rest');
+  t += 120_000 + 600_000;
+  assert.deepEqual(sw.chainPhase(), { kind: 'work', seconds: null, elapsed: 600, remaining: null, row: 2 });
+  assert.equal(sw.completedRows(), 1);
+  sw.advanceChain();
+  assert.equal(sw.chainPhase().kind, 'rest');
+  assert.equal(sw.completedRows(), 2);
+  assert.deepEqual(sw.takeCompletedWork(), []);
+
+  const grouped = { ...DIP, prescribed: { ...DIP.prescribed,
+    exercises: [{ template_id: 31, rest_seconds: 120, rows_per_rest: 2 }] } };
+  assert.deepEqual(workChainFor({ ...grouped, completedRows: 0 }), [
+    { kind: 'work', seconds: 10, row: 0 },
+    { kind: 'work', seconds: null, row: 1, untimed: true },
+    { kind: 'rest', seconds: 120 },
+  ]);
+});
+
 // ---- cardio lead-in (HANDOFF 2026-09-20): Zone 2 / Long Walk carry a
 // lead-in alone — no rest (cardio never pipes one), no interval program —
 // and their time targets are minutes. Press → get set → a countdown of the
