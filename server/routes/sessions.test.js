@@ -248,3 +248,19 @@ test('POST /api/sessions/:id/finalize refuses a client_version the server never 
   const ok = await finalizeSession(id, 2);
   assert.equal(ok.statusCode, 200, ok.body);
 });
+
+// The import's finalize_pending sweep stamps every swept session with one
+// `now`, so the sort key ties; a strict `before` cursor would skip the rest
+// of a tie that a page cut through. A page never splits a tie.
+test('GET /api/sessions pages keep a sort-key tie whole', async () => {
+  const ids = [960, 961, 962, 963].map(suuid);
+  for (const id of ids) {
+    await createDraft(id);
+    await finalizeSession(id);
+    app.db.prepare('UPDATE sessions SET finalized_at = 500 WHERE id = ?').run(id);
+  }
+  const page = await app.inject({ method: 'GET', url: '/api/sessions?finalized=true&before=600&limit=2' });
+  assert.deepEqual(page.json().map(s => s.id).sort(), [...ids].sort());
+  const next = await app.inject({ method: 'GET', url: '/api/sessions?finalized=true&before=500&limit=2' });
+  assert.deepEqual(next.json(), []);
+});

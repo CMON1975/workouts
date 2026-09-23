@@ -38,13 +38,22 @@ export default async function sessionsRoutes(app) {
     }
     const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-    const sessions = db.prepare(`
+    const selectSql = `
       SELECT id, template_id, started_at, updated_at, finalized_at, client_version, notes, duration_seconds
-        FROM sessions
-        ${whereSql}
-        ORDER BY COALESCE(finalized_at, started_at) DESC, started_at DESC
-        LIMIT ?
-    `).all(...params, limit);
+        FROM sessions`;
+    const orderSql = 'ORDER BY COALESCE(finalized_at, started_at) DESC, started_at DESC';
+    const sessions = db.prepare(`${selectSql} ${whereSql} ${orderSql} LIMIT ?`).all(...params, limit);
+    // A full page never splits a sort-key tie (the import's finalize_pending
+    // sweep stamps one `now` on many rows): the strict `before` cursor would
+    // skip the rest of it. The page runs over `limit` instead.
+    if (sessions.length === limit) {
+      const last = sessions[sessions.length - 1];
+      const seen = new Set(sessions.map(x => x.id));
+      const tieWhere = [...where, 'COALESCE(finalized_at, started_at) = ?'].join(' AND ');
+      const tie = db.prepare(`${selectSql} WHERE ${tieWhere} ${orderSql}`)
+        .all(...params, last.finalized_at ?? last.started_at);
+      for (const x of tie) if (!seen.has(x.id)) sessions.push(x);
+    }
 
     const valsStmt = db.prepare(`
       SELECT row_index, column_id, value_num, value_text

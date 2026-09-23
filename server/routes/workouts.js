@@ -70,15 +70,24 @@ export default async function workoutsRoutes(app) {
     }
     const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-    const rows = db.prepare(`
+    const selectSql = `
       SELECT w.id, w.routine_id, r.name AS routine_name,
              w.started_at, w.updated_at, w.finalized_at, w.client_version, w.duration_seconds
         FROM workouts w
-        JOIN routines r ON r.id = w.routine_id
-        ${whereSql}
-        ORDER BY COALESCE(w.finalized_at, w.started_at) DESC, w.started_at DESC
-        LIMIT ?
-    `).all(...params, limit);
+        JOIN routines r ON r.id = w.routine_id`;
+    const orderSql = 'ORDER BY COALESCE(w.finalized_at, w.started_at) DESC, w.started_at DESC';
+    const rows = db.prepare(`${selectSql} ${whereSql} ${orderSql} LIMIT ?`).all(...params, limit);
+    // A full page never splits a sort-key tie (the import's finalize_pending
+    // sweep stamps one `now` on every swept workout): the strict `before`
+    // cursor would skip the rest of it. The page runs over `limit` instead.
+    if (rows.length === limit) {
+      const last = rows[rows.length - 1];
+      const seen = new Set(rows.map(x => x.id));
+      const tieWhere = [...where, 'COALESCE(w.finalized_at, w.started_at) = ?'].join(' AND ');
+      const tie = db.prepare(`${selectSql} WHERE ${tieWhere} ${orderSql}`)
+        .all(...params, last.finalized_at ?? last.started_at);
+      for (const x of tie) if (!seen.has(x.id)) rows.push(x);
+    }
 
     const childStmt = db.prepare(`
       SELECT s.id, s.template_id, s.started_at, s.updated_at,

@@ -686,3 +686,17 @@ test('GET /api/workouts?before pages on the list sort key (finalized_at, else st
   const bad = await app.inject({ method: 'GET', url: '/api/workouts?before=-1' });
   assert.equal(bad.statusCode, 400);
 });
+
+test('GET /api/workouts pages keep a sort-key tie whole (finalize_pending sweep)', async () => {
+  const ids = [960, 961, 962].map(wuuid);
+  for (const id of ids) {
+    await app.inject({
+      method: 'PATCH', url: `/api/workouts/${id}`,
+      payload: { id, routine_id: armsRoutineId, started_at: 400, updated_at: 400, client_version: 1 },
+    });
+    await app.inject({ method: 'POST', url: `/api/workouts/${id}/finalize`, payload: { client_version: 1 } });
+    app.db.prepare('UPDATE workouts SET finalized_at = 500 WHERE id = ?').run(id);
+  }
+  const page = await app.inject({ method: 'GET', url: '/api/workouts?finalized=true&before=600&limit=2' });
+  assert.deepEqual(page.json().map(w => w.id).sort(), [...ids].sort());
+});
