@@ -9,6 +9,9 @@ const upsertBodySchema = {
     started_at: { type: 'integer', minimum: 0, maximum: 8640000000000000 }, // Date range
     updated_at: { type: 'integer' },
     client_version: { type: 'integer', minimum: 0 },
+    // The phone's calendar date at started_at: pins the prescription active
+    // on the user's day, not the UTC one (Sunday evening PDT is Monday UTC).
+    local_date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
   },
 };
 
@@ -152,7 +155,7 @@ export default async function workoutsRoutes(app) {
         // Stamp the active prescription (if any) onto this workout at creation
         // time. The pin is by id, not by date — re-importing the same week
         // later won't retroactively change what this workout was "run against".
-        const onDate = new Date(body.started_at).toISOString().slice(0, 10);
+        const onDate = body.local_date ?? new Date(body.started_at).toISOString().slice(0, 10);
         const presRow = db.prepare(`
           SELECT id FROM prescriptions
            WHERE routine_id = ? AND starts_on <= ?
