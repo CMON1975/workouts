@@ -295,10 +295,9 @@ test('POST /api/prescriptions/import — invalid rest_seconds rejected with 400'
   }
 });
 
-test('POST /api/prescriptions/import — duplicate template in one day is rejected (characterization)', async () => {
+test('POST /api/prescriptions/import — duplicate template in one day is a 400 naming it', async () => {
   // routine_templates has UNIQUE (routine_id, template_id), so a day can never
-  // hold the same exercise twice — the import fails before rest handling runs.
-  // Pinned here so the health-repo contract can say "no duplicate templates".
+  // hold the same exercise twice; the import says so instead of a bare 500.
   const routineName = nextId('DupRestRoutine');
   const templateName = nextId('DupRestTpl');
   const res = await app.inject({
@@ -317,10 +316,48 @@ test('POST /api/prescriptions/import — duplicate template in one day is reject
       ],
     },
   });
-  assert.equal(res.statusCode, 500, res.body);
+  assert.equal(res.statusCode, 400, res.body);
+  assert.match(res.json().error, new RegExp(`duplicate exercise "${templateName}"`));
   const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
   const pres = app.db.prepare('SELECT id FROM prescriptions WHERE routine_id = ?').all(r?.id ?? -1);
   assert.equal(pres.length, 0, 'failed import must not leave a prescription behind');
+});
+
+test('POST /api/prescriptions/import — two targets on one row and column are a 400', async () => {
+  const templateName = nextId('DupTargetTpl');
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-17',
+      week_ends_on: '2026-08-23',
+      days: [{
+        routine_name: nextId('DupTargetRoutine'),
+        exercises: [sampleStandardExercise(templateName, [
+          { row_index: 0, column: 'reps', target_num: 6 },
+          { row_index: 0, column: 'Reps', target_num: 8 },
+        ])],
+      }],
+    },
+  });
+  assert.equal(res.statusCode, 400, res.body);
+  assert.match(res.json().error, /duplicate target: row 0 column "Reps"/);
+});
+
+test('POST /api/prescriptions/import — a new template with duplicate column names is a 400', async () => {
+  const templateName = nextId('DupColumnTpl');
+  const ex = sampleStandardExercise(templateName, []);
+  ex.columns = [{ name: 'reps' }, { name: 'Reps ' }];
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-08-17',
+      week_ends_on: '2026-08-23',
+      days: [{ routine_name: nextId('DupColumnRoutine'), exercises: [ex] }],
+    },
+  });
+  assert.equal(res.statusCode, 400, res.body);
+  assert.match(res.json().error, /duplicate column "Reps " on template/);
+  assert.equal(app.db.prepare('SELECT id FROM templates WHERE name = ?').get(templateName), undefined);
 });
 
 test('GET /api/prescriptions/active — single mode carries exercises with rest_seconds', async () => {

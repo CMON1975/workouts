@@ -187,6 +187,16 @@ function findOrCreateTemplate(db, exercise, now, opts, counters) {
       throw err;
     }
     columns = exercise.columns;
+    const seen = new Set();
+    for (const c of columns) {
+      const key = c.name.trim().toLowerCase();
+      if (seen.has(key)) {
+        const err = new Error('DUPLICATE_COLUMN');
+        err.detail = { template: template_name, column: c.name };
+        throw err;
+      }
+      seen.add(key);
+    }
     defaultRows = exercise.default_rows ?? 1;
     rowsFixed = exercise.rows_fixed ?? 0;
     description = exercise.description ? String(exercise.description).trim() : null;
@@ -261,6 +271,7 @@ function insertTargets(db, prescriptionId, templateId, targets, colMap, template
       (prescription_id, template_id, row_index, column_id, target_num, target_text, cue)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
+  const seen = new Set();
   for (const t of targets) {
     const colName = String(t.column).trim().toLowerCase();
     const columnId = colMap.get(colName);
@@ -269,6 +280,12 @@ function insertTargets(db, prescriptionId, templateId, targets, colMap, template
       err.detail = { template: templateName, column: t.column };
       throw err;
     }
+    if (seen.has(`${t.row_index}:${columnId}`)) {
+      const err = new Error('DUPLICATE_TARGET');
+      err.detail = { template: templateName, row: t.row_index, column: t.column };
+      throw err;
+    }
+    seen.add(`${t.row_index}:${columnId}`);
     ins.run(
       prescriptionId,
       templateId,
@@ -327,6 +344,11 @@ export default async function prescriptionsRoutes(app) {
           const perTemplateRest = new Map();
           for (const ex of day.exercises) {
             const { id: templateId } = findOrCreateTemplate(db, ex, now, opts, counters);
+            if (templateIds.includes(templateId)) {
+              const err = new Error('DUPLICATE_EXERCISE');
+              err.detail = { routine: day.routine_name, template: ex.template_name };
+              throw err;
+            }
             templateIds.push(templateId);
             if (!perTemplateTargets.has(templateId)) perTemplateTargets.set(templateId, []);
             perTemplateTargets.get(templateId).push({ targets: ex.targets, template_name: ex.template_name });
@@ -422,6 +444,21 @@ export default async function prescriptionsRoutes(app) {
       if (err.message === 'STANDARD_NEEDS_COLUMNS') {
         return reply.code(400).send({
           error: `standard template "${err.detail}" requires at least one column on creation`,
+        });
+      }
+      if (err.message === 'DUPLICATE_EXERCISE') {
+        return reply.code(400).send({
+          error: `duplicate exercise "${err.detail.template}" in routine "${err.detail.routine}"`,
+        });
+      }
+      if (err.message === 'DUPLICATE_TARGET') {
+        return reply.code(400).send({
+          error: `duplicate target: row ${err.detail.row} column "${err.detail.column}" on template "${err.detail.template}"`,
+        });
+      }
+      if (err.message === 'DUPLICATE_COLUMN') {
+        return reply.code(400).send({
+          error: `duplicate column "${err.detail.column}" on template "${err.detail.template}"`,
         });
       }
       req.log.error({ err }, 'prescription import failed');
