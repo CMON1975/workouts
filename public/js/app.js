@@ -727,8 +727,10 @@ async function bindCurrentExercise() {
     try {
       activeWorkout.prescribed = await api.activePrescription(routine.id);
     } catch (err) {
+      // Left undefined, not null: a failed fetch (gym dead zone) must not
+      // strip rests, chains and targets from the rest of the run — the next
+      // exercise's bind tries again.
       console.warn('prescription fetch failed', err);
-      activeWorkout.prescribed = null;
     }
   }
 
