@@ -131,6 +131,11 @@ export default async function sessionsRoutes(app) {
       if (row.client_version > client_version) {
         return { status: 409, body: { error: 'stale', server_version: row.client_version } };
       }
+      if (row.client_version < client_version) {
+        // The PATCH carrying this version never landed: sealing now would
+        // finalize older values. The client re-flushes and retries.
+        return { status: 409, body: { error: 'unsynced', server_version: row.client_version } };
+      }
       const now = Date.now();
       db.prepare(
         'UPDATE sessions SET finalized_at = ?, client_version = ?, updated_at = ?, duration_seconds = ? WHERE id = ?'

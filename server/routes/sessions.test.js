@@ -230,3 +230,21 @@ test('GET /api/sessions?before pages on the list sort key (finalized_at, else st
   const bad = await app.inject({ method: 'GET', url: '/api/sessions?before=yesterday' });
   assert.equal(bad.statusCode, 400);
 });
+
+// Finalize seals what the server holds, so it must hold exactly the version
+// being sealed: a client_version ahead of the stored draft means the PATCH
+// carrying those values never landed (network blip, 429), and sealing now
+// would finalize the older values and turn the queued PATCH into a no-op.
+test('POST /api/sessions/:id/finalize refuses a client_version the server never received', async () => {
+  const id = suuid(950);
+  await createDraft(id, { value: 10, clientVersion: 1 });
+  const res = await finalizeSession(id, 2);
+  assert.equal(res.statusCode, 409, res.body);
+  assert.equal(res.json().server_version, 1);
+  const row = app.db.prepare('SELECT finalized_at FROM sessions WHERE id = ?').get(id);
+  assert.equal(row.finalized_at, null, 'still a draft, so the late PATCH can land');
+
+  await createDraft(id, { value: 20, clientVersion: 2 });
+  const ok = await finalizeSession(id, 2);
+  assert.equal(ok.statusCode, 200, ok.body);
+});
