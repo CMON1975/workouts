@@ -97,7 +97,9 @@ export async function drainOutbox() {
           body: entry.body,
           credentials: 'same-origin',
         });
-        if (res.ok) {
+        // 409 = the server holds a newer version; the same body can never
+        // land. The live session / next restore re-pushes past it.
+        if (res.ok || res.status === 409) {
           await deleteOutbox(entry.id);
         } else {
           entry.attempts += 1;

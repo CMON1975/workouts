@@ -11,7 +11,10 @@ globalThis.localStorage = {
   removeItem: (k) => { store.delete(k); },
 };
 
-const { loadLocalDraft } = await import('./persistence.js');
+let respondStatus = 200;
+globalThis.fetch = async () => new Response('{}', { status: respondStatus });
+
+const { loadLocalDraft, enqueueFailedPatch, drainOutbox } = await import('./persistence.js');
 const idb = await import('./idb.js');
 
 const draft = (id, client_version) => ({ id, template_id: 3, client_version, values: [] });
@@ -44,4 +47,33 @@ test('loadLocalDraft falls back to the shadow when IndexedDB throws', async () =
   } finally {
     fake.failOpens = false;
   }
+});
+
+// ---- outbox drain ----
+
+async function clearOutbox() {
+  for (const e of await idb.listOutbox()) await idb.deleteOutbox(e.id);
+}
+
+test('drainOutbox keeps a failed entry for a later retry and counts the attempt (characterization)', async () => {
+  await clearOutbox();
+  await enqueueFailedPatch(draft('o1', 4));
+  respondStatus = 503;
+  await drainOutbox();
+  const left = await idb.listOutbox();
+  assert.equal(left.length, 1);
+  assert.equal(left[0].attempts, 1);
+  assert.ok(left[0].nextAttemptAt > Date.now());
+});
+
+// A 409 means the server holds a newer version: resending the same body can
+// never succeed. The local draft is still in IDB / the shadow, and the live
+// session (or the next restore) re-pushes it past the server's version.
+test('drainOutbox drops an entry the server rejects as stale (409)', async () => {
+  await clearOutbox();
+  await enqueueFailedPatch(draft('o2', 4));
+  respondStatus = 409;
+  await drainOutbox();
+  assert.deepEqual(await idb.listOutbox(), []);
+  respondStatus = 200;
 });
