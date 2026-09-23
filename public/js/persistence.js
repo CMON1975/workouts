@@ -47,6 +47,17 @@ export async function loadLocalDraft(id) {
   return (shadow.client_version ?? -1) > (stored.client_version ?? -1) ? shadow : stored;
 }
 
+// Background reconcile after a resume: the server copy replaces the resumed
+// draft only when it is newer, still a draft, and nothing was typed since
+// the form was drawn (client_version unchanged). The on-screen draft wins
+// otherwise, as on a 409. Null = keep local.
+export function serverDraftToAdopt({ local, server, versionAtBind }) {
+  if (!server || server.finalized_at) return null;
+  if (local.client_version !== versionAtBind) return null;
+  if (!(server.client_version > local.client_version)) return null;
+  return { ...server, workout_id: local.workout_id ?? server.workout_id ?? null };
+}
+
 export function clearShadow(id) {
   try { localStorage.removeItem('draft:' + id); } catch (_) {}
 }

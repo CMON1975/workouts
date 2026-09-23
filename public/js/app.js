@@ -6,7 +6,9 @@ import {
   deleteDraft, deleteOutboxByDraftId,
   getActiveWorkoutId, clearActiveWorkoutId,
 } from './idb.js';
-import { installHideFlush, installOutboxDrainers, drainOutbox, loadLocalDraft } from './persistence.js';
+import {
+  installHideFlush, installOutboxDrainers, drainOutbox, loadLocalDraft, serverDraftToAdopt,
+} from './persistence.js';
 import { createSessionState } from './session-state.js';
 import {
   createStopwatch, formatMSS, restSecondsFor, workChainFor, intervalPhasesFor, cardioPhasesFor,
@@ -334,12 +336,16 @@ async function loadPreviousHints(template, draftId, formRoot, prescribed) {
   }
 }
 
-async function reconcileWithServer(draft) {
+// Runs right after a bind, so the draft's version now is its version at
+// bind. A newer server copy is adopted only if nothing was typed meanwhile
+// and the session is still the bound one; rebind redraws the form with it.
+async function reconcileWithServer(draft, rebind) {
+  const versionAtBind = draft.client_version;
   try {
     const server = await api.getSession(draft.id);
-    if (server && server.client_version > draft.client_version) {
-      Object.assign(draft, server);
-    }
+    if (currentSession?.getDraft() !== draft) return;
+    const adopt = serverDraftToAdopt({ local: draft, server, versionAtBind });
+    if (adopt) rebind(adopt);
   } catch (err) {
     if (err.status !== 404) console.warn('reconcile failed', err);
   }
@@ -361,7 +367,7 @@ function resumeSession(draft) {
     return;
   }
   bindSession(draft, template);
-  reconcileWithServer(draft);
+  reconcileWithServer(draft, (d) => bindSession(d, template));
 }
 
 function activeTemplates() {
@@ -772,7 +778,11 @@ async function bindCurrentExercise() {
   showView('runner');
 
   // Reconcile in background if we restored a non-trivial local draft.
-  if (draft.client_version > 0) reconcileWithServer(draft);
+  if (draft.client_version > 0) {
+    reconcileWithServer(draft, (d) => bindSessionTo({
+      draft: d, template, formRoot: els.runnerRoot, statusEl: els.runnerStatus,
+    }));
+  }
 }
 
 function updateRunnerHeader() {

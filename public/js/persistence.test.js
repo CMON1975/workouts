@@ -14,7 +14,7 @@ globalThis.localStorage = {
 let respondStatus = 200;
 globalThis.fetch = async () => new Response('{}', { status: respondStatus });
 
-const { loadLocalDraft, enqueueFailedPatch, drainOutbox } = await import('./persistence.js');
+const { loadLocalDraft, enqueueFailedPatch, drainOutbox, serverDraftToAdopt } = await import('./persistence.js');
 const idb = await import('./idb.js');
 
 const draft = (id, client_version) => ({ id, template_id: 3, client_version, values: [] });
@@ -76,4 +76,23 @@ test('drainOutbox drops an entry the server rejects as stale (409)', async () =>
   await drainOutbox();
   assert.deepEqual(await idb.listOutbox(), []);
   respondStatus = 200;
+});
+
+// ---- background reconcile on resume (code audit 2026-09-22) ----
+// The server copy replaces the resumed draft only when it is newer, still a
+// draft, and the user has not typed since the form was drawn; otherwise the
+// screen (and the edit just made) would silently diverge from the draft.
+
+test('serverDraftToAdopt takes a newer server draft when nothing was typed since bind', () => {
+  const local = { ...draft('r1', 5), workout_id: 'w-1' };
+  const server = { ...draft('r1', 7), values: [{ row_index: 0, column_id: 1, value_num: 9 }] };
+  assert.deepEqual(serverDraftToAdopt({ local, server, versionAtBind: 5 }), { ...server, workout_id: 'w-1' });
+});
+
+test('serverDraftToAdopt keeps the local draft otherwise', () => {
+  const local = draft('r2', 5);
+  assert.equal(serverDraftToAdopt({ local, server: draft('r2', 7), versionAtBind: 4 }), null, 'typed since bind');
+  assert.equal(serverDraftToAdopt({ local, server: draft('r2', 5), versionAtBind: 5 }), null, 'not newer');
+  assert.equal(serverDraftToAdopt({ local, server: { ...draft('r2', 7), finalized_at: 1 }, versionAtBind: 5 }), null, 'finalized');
+  assert.equal(serverDraftToAdopt({ local, server: null, versionAtBind: 5 }), null);
 });
