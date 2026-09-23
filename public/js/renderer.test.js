@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lastRecordHint, describeAge, describeLogEntry, logDeletePrompt } from './renderer.js';
+import {
+  lastRecordHint, describeAge, describeLogEntry, logDeletePrompt, targetHintText, targetValueText,
+} from './renderer.js';
 
 // Timestamps built via the local-time Date constructor so the expected
 // calendar-day gaps hold in any TZ the tests run in.
@@ -99,4 +101,21 @@ test('logDeletePrompt names the entry the swipe is about to remove', () => {
     logDeletePrompt({ metric: 'body_weight', value: '182', date: '2026-08-31' }),
     'Delete the weight entry "182" on Mon, Aug 31? This cannot be undone.',
   );
+});
+
+// target_kind (HANDOFF 2026-09-22): a cap or ceiling is an upper bound, not a
+// goal, so the hint says so instead of reading like a number to hit.
+test('targetHintText words exact targets as before and bounds as ≤ with their kind', () => {
+  assert.equal(targetHintText(8, {}), 'target: 8');
+  assert.equal(targetHintText(8, { target_kind: 'exact', cue: 'RPE 7' }), 'target: 8 (RPE 7)');
+  assert.equal(targetHintText(12, { target_kind: 'cap' }), 'cap: ≤ 12');
+  assert.equal(targetHintText(12, { target_kind: 'cap', cue: 'CAP' }), 'cap: ≤ 12 (CAP)');
+  assert.equal(targetHintText(140, { target_kind: 'ceiling' }), 'ceiling: ≤ 140');
+});
+
+test('targetValueText prefixes ≤ on bounds for the routine preview', () => {
+  assert.equal(targetValueText('8', undefined), '8');
+  assert.equal(targetValueText('8', 'exact'), '8');
+  assert.equal(targetValueText('12', 'cap'), '≤ 12');
+  assert.equal(targetValueText('140', 'ceiling'), '≤ 140');
 });

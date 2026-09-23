@@ -23,6 +23,7 @@ const targetSchema = {
     target_num: { type: ['number', 'null'] },
     target_text: { type: ['string', 'null'], maxLength: 200 },
     cue: { type: ['string', 'null'], maxLength: 500 },
+    target_kind: { type: 'string', enum: ['exact', 'cap', 'ceiling'] },
   },
 };
 
@@ -109,7 +110,7 @@ function loadPrescription(db, id) {
   p.targets = db.prepare(`
     SELECT pt.template_id, t.name AS template_name, t.kind AS template_kind,
            pt.row_index, pt.column_id, tc.name AS column_name,
-           pt.target_num, pt.target_text, pt.cue
+           pt.target_num, pt.target_text, pt.cue, pt.target_kind
       FROM prescription_targets pt
       JOIN templates t ON t.id = pt.template_id
       JOIN template_columns tc ON tc.id = pt.column_id
@@ -268,8 +269,8 @@ function sweepUnfinalizedWorkouts(db, routineId, now) {
 function insertTargets(db, prescriptionId, templateId, targets, colMap, templateName) {
   const ins = db.prepare(`
     INSERT INTO prescription_targets
-      (prescription_id, template_id, row_index, column_id, target_num, target_text, cue)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+      (prescription_id, template_id, row_index, column_id, target_num, target_text, cue, target_kind)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const seen = new Set();
   for (const t of targets) {
@@ -294,6 +295,7 @@ function insertTargets(db, prescriptionId, templateId, targets, colMap, template
       t.target_num ?? null,
       t.target_text ?? null,
       t.cue ?? null,
+      t.target_kind ?? 'exact',
     );
   }
 }

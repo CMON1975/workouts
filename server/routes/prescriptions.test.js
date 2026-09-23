@@ -42,7 +42,7 @@ test('migration 006: prescription_targets table exists with expected columns', (
     names.sort(),
     [
       'column_id', 'cue', 'prescription_id', 'row_index',
-      'target_num', 'target_text', 'template_id',
+      'target_kind', 'target_num', 'target_text', 'template_id',
     ].sort()
   );
   const pk = cols.filter(c => c.pk > 0).map(c => c.name).sort();
@@ -358,6 +358,54 @@ test('POST /api/prescriptions/import — a new template with duplicate column na
   assert.equal(res.statusCode, 400, res.body);
   assert.match(res.json().error, /duplicate column "Reps " on template/);
   assert.equal(app.db.prepare('SELECT id FROM templates WHERE name = ?').get(templateName), undefined);
+});
+
+// ---- target_kind (HANDOFF 2026-09-22, item 2): caps and ceilings are
+// upper bounds, not goals. Optional per target; absent = 'exact' (old
+// payloads unchanged).
+
+test('POST /api/prescriptions/import — target_kind is stored, defaults to exact, and comes back on /active', async () => {
+  const routineName = nextId('KindRoutine');
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-09-21',
+      week_ends_on: '2026-09-27',
+      days: [{
+        routine_name: routineName,
+        exercises: [sampleStandardExercise(nextId('KindTpl'), [
+          { row_index: 0, column: 'reps', target_num: 12, target_kind: 'cap', cue: 'CAP' },
+          { row_index: 0, column: 'weight', target_num: 50 },
+          { row_index: 1, column: 'reps', target_num: 140, target_kind: 'ceiling' },
+          { row_index: 1, column: 'weight', target_num: 50, target_kind: 'exact' },
+        ])],
+      }],
+    },
+  });
+  assert.equal(res.statusCode, 201, res.body);
+  const routineId = res.json().prescriptions[0].routine_id;
+  const active = await app.inject({ method: 'GET', url: `/api/prescriptions/active?routine_id=${routineId}` });
+  assert.deepEqual(
+    active.json().targets.map(t => [t.row_index, t.column_name, t.target_num, t.target_kind]),
+    [[0, 'reps', 12, 'cap'], [0, 'weight', 50, 'exact'], [1, 'reps', 140, 'ceiling'], [1, 'weight', 50, 'exact']],
+  );
+});
+
+test('POST /api/prescriptions/import — an unknown target_kind is a 400', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-09-21',
+      week_ends_on: '2026-09-27',
+      days: [{
+        routine_name: nextId('KindRoutine'),
+        exercises: [sampleStandardExercise(nextId('KindTpl'), [
+          { row_index: 0, column: 'reps', target_num: 8, target_kind: 'range' },
+        ])],
+      }],
+    },
+  });
+  assert.equal(res.statusCode, 400, res.body);
 });
 
 test('GET /api/prescriptions/active — single mode carries exercises with rest_seconds', async () => {

@@ -641,6 +641,21 @@ export function applyPreviousHints(root, { template, prev, prescribed = null }) 
   }
 }
 
+// A cap or ceiling (target_kind, HANDOFF 2026-09-22) is an upper bound, not
+// a goal: its hint reads "cap: ≤ 12" rather than "target: 12".
+const BOUND_KINDS = new Set(['cap', 'ceiling']);
+
+export function targetValueText(value, kind) {
+  return BOUND_KINDS.has(kind) ? `≤ ${value}` : String(value);
+}
+
+export function targetHintText(value, { target_kind, cue } = {}) {
+  const head = BOUND_KINDS.has(target_kind)
+    ? `${target_kind}: ${targetValueText(value, target_kind)}`
+    : `target: ${value}`;
+  return cue ? `${head} (${cue})` : head;
+}
+
 // Render prescription targets as .target-hint overlays next to the inputs.
 // Does NOT auto-fill the input — the user types actuals and the prescription
 // stays visible for comparison. (Exception: weight columns are prefilled by
@@ -681,7 +696,7 @@ function applyPrescribedTargets(root, { template, prescribed }) {
     if (raw === '' || raw === null || raw === undefined) continue;
     const hint = document.createElement('span');
     hint.className = 'target-hint';
-    hint.textContent = t.cue ? `target: ${raw} (${t.cue})` : `target: ${raw}`;
+    hint.textContent = targetHintText(raw, t);
     field.appendChild(hint);
   }
 }
@@ -874,7 +889,7 @@ function groupTargetsByTemplate(targets) {
     const e = byTpl.get(t.template_id);
     if (!e.rows.has(t.row_index)) e.rows.set(t.row_index, []);
     const v = t.target_num != null ? String(t.target_num) : (t.target_text ?? '');
-    e.rows.get(t.row_index).push({ col: t.column_name, val: v });
+    e.rows.get(t.row_index).push({ col: t.column_name, val: targetValueText(v, t.target_kind) });
     if (t.cue) e.cues.add(t.cue);
   }
   const out = [];
