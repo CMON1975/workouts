@@ -334,3 +334,21 @@ test('POST (sendBeacon) upserts a draft exactly like PATCH, stale versions inclu
   assert.equal(stale.statusCode, 409);
   assert.equal(app.db.prepare('SELECT value_num FROM session_values WHERE session_id = ?').get(id).value_num, 11);
 });
+
+// session_values is keyed by column for later per-column SQL (charts, PRs):
+// a value on another template's column would be silently wrong data.
+test('PATCH rejects a value whose column belongs to another template', async () => {
+  const other = await app.inject({
+    method: 'POST', url: '/api/templates',
+    payload: { name: 'Other cols', default_rows: 1, rows_fixed: 0, columns: [{ name: 'x' }] },
+  });
+  const foreignCol = other.json().columns[0].id;
+  const id = uuidv7Fixture(91);
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/drafts/${id}`,
+    payload: draftBody(id, 1, [{ row_index: 0, column_id: foreignCol, value_text: '5' }]),
+  });
+  assert.equal(res.statusCode, 400, res.body);
+  assert.match(res.json().error, /column .* does not belong to template/);
+  assert.equal(app.db.prepare('SELECT id FROM sessions WHERE id = ?').get(id), undefined);
+});

@@ -54,6 +54,16 @@ export default async function draftsRoutes(app) {
 
       const now = Date.now();
 
+      const ownCols = new Set(db.prepare(
+        'SELECT id FROM template_columns WHERE template_id = ?'
+      ).all(body.template_id).map(c => c.id));
+      const foreign = body.values.find(v => !ownCols.has(v.column_id));
+      if (foreign) {
+        return reply.code(400).send({
+          error: `column ${foreign.column_id} does not belong to template ${body.template_id}`,
+        });
+      }
+
       const upsert = db.transaction(() => {
         const existing = db.prepare(
           'SELECT client_version, finalized_at FROM sessions WHERE id = ?'
