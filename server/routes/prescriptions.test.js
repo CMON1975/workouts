@@ -1491,10 +1491,12 @@ test('POST /api/prescriptions/import — invalid lead_in_seconds rejected with 4
 });
 
 // ---- workout → prescription pin (code audit 2026-09-22) ----
-// Sunday 18:00 PDT is Monday 01:00 UTC: pinning by the UTC date put a Sunday
-// evening run on the week published that day for Monday.
+// The runner shows the latest published prescription for the routine (so
+// Monday's routine run early on Sunday shows the coming week), and the pin
+// must be the one on screen. Pinning by date (UTC, at that) disagreed with
+// the screen whenever a run came after a publish but before its starts_on.
 
-const SUN_EVENING_PDT = Date.UTC(2026, 8, 21, 1, 0); // 2026-09-20 18:00 PDT
+const SAT_MIDDAY_PDT = Date.UTC(2026, 8, 19, 19, 0); // 2026-09-19 12:00 PDT
 let pinSeq = 0;
 function pinWorkoutId() {
   pinSeq += 1;
@@ -1513,37 +1515,20 @@ async function importWeek(routineName, startsOn, endsOn) {
   return res.json().prescriptions[0];
 }
 
-async function startWorkout(routineId, extra = {}) {
+test('workout pin is the latest published prescription, the one the runner shows', async () => {
+  const name = nextId('PinLatest');
+  const wkN = await importWeek(name, '2026-09-14', '2026-09-20');
+  const wkN1 = await importWeek(name, '2026-09-21', '2026-09-27');
   const id = pinWorkoutId();
   const res = await app.inject({
     method: 'PATCH', url: `/api/workouts/${id}`,
     payload: {
-      id, routine_id: routineId, started_at: SUN_EVENING_PDT, updated_at: SUN_EVENING_PDT,
-      client_version: 1, ...extra,
+      id, routine_id: wkN.routine_id, started_at: SAT_MIDDAY_PDT, updated_at: SAT_MIDDAY_PDT, client_version: 1,
     },
   });
-  return { id, res };
-}
-
-test('workout pin without local_date uses the UTC date of started_at (characterization)', async () => {
-  const name = nextId('PinUtc');
-  const wkN = await importWeek(name, '2026-09-14', '2026-09-20');
-  const wkN1 = await importWeek(name, '2026-09-21', '2026-09-27');
-  const { id, res } = await startWorkout(wkN.routine_id);
   assert.equal(res.statusCode, 200, res.body);
   const pin = app.db.prepare('SELECT prescription_id FROM workouts WHERE id = ?').get(id).prescription_id;
-  assert.equal(pin, wkN1.id);
-});
-
-test('workout pin uses the client local_date when sent', async () => {
-  const name = nextId('PinLocal');
-  const wkN = await importWeek(name, '2026-09-14', '2026-09-20');
-  await importWeek(name, '2026-09-21', '2026-09-27');
-  const { id, res } = await startWorkout(wkN.routine_id, { local_date: '2026-09-20' });
-  assert.equal(res.statusCode, 200, res.body);
-  const pin = app.db.prepare('SELECT prescription_id FROM workouts WHERE id = ?').get(id).prescription_id;
-  assert.equal(pin, wkN.id);
-
-  const bad = await startWorkout(wkN.routine_id, { local_date: '20/09/2026' });
-  assert.equal(bad.res.statusCode, 400);
+  const shown = await app.inject({ method: 'GET', url: `/api/prescriptions/active?routine_id=${wkN.routine_id}` });
+  assert.equal(shown.json().id, wkN1.id);
+  assert.equal(pin, wkN1.id, 'pinned to what the runner shows');
 });
