@@ -139,6 +139,20 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
     }
   }
 
+  // Next / End early mid-chain: a running work phase is recorded like a
+  // Done press, and the chain ends there — no rest to run into, and nothing
+  // left to fold while the exercise's finalize is in flight.
+  function stopChain() {
+    sync();
+    if (!chain) return;
+    const p = chain.phases[0];
+    if (p.kind === 'work') {
+      if (!p.untimed) completedWork.push({ row: p.row, seconds: elapsedFrom(chain.epoch) });
+      completedRowsCount += 1;
+    }
+    chain = null;
+  }
+
   function chainCompleted_() { sync(); return chainCompleted; }
 
   // Current phases + elapsed, for (re)scheduling the beep plan on wake.
@@ -183,7 +197,7 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
   return {
     start, lap, startRest, isRunning, exerciseSeconds, displaySeconds,
     restRemaining, restRemainingMs, commitExercise, setExerciseIndex, toJSON,
-    startChain, chainPhase, advanceChain, chainSnapshot, completedRows, takeCompletedWork,
+    startChain, chainPhase, advanceChain, stopChain, chainSnapshot, completedRows, takeCompletedWork,
     chainCompleted: chainCompleted_,
   };
 }

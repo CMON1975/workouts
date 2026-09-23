@@ -903,6 +903,40 @@ test('chain: a later untimed set in one chain waits for its press, recording not
   ]);
 });
 
+// Next / End early mid-chain: the running hold is what the user just did, so
+// it is recorded like a Done press, and the chain ends there (no rest to run
+// into, nothing left to fold while the finalize is in flight).
+test('stopChain records the running hold and ends the chain; rest / lead-in just end', () => {
+  let t = 1_000_000;
+  const sw = createStopwatch({ now: () => t });
+  sw.startChain(workChainFor({ ...PLANK, completedRows: 0 }));
+  t += 30_000;
+  sw.stopChain();
+  assert.equal(sw.chainPhase(), null);
+  assert.deepEqual(sw.takeCompletedWork(), [{ row: 0, seconds: 30 }]);
+  assert.equal(sw.completedRows(), 1);
+  t += 600_000;
+  assert.deepEqual(sw.takeCompletedWork(), [], 'nothing folds after the stop');
+
+  const resting = createStopwatch({ now: () => t });
+  resting.startChain(workChainFor({ ...PLANK, completedRows: 0 }));
+  t += 50_000; // hold done at 45, 5 s into the rest
+  resting.stopChain();
+  assert.deepEqual(resting.takeCompletedWork(), [{ row: 0, seconds: 45 }]);
+  assert.equal(resting.completedRows(), 1);
+  assert.equal(resting.chainPhase(), null);
+
+  const untimed = createStopwatch({ now: () => t });
+  untimed.startChain([{ kind: 'work', seconds: null, row: 2, untimed: true }]);
+  untimed.stopChain();
+  assert.deepEqual(untimed.takeCompletedWork(), [], 'a rep set records no time');
+  assert.equal(untimed.completedRows(), 1);
+
+  const idle = createStopwatch({ now: () => t });
+  idle.stopChain(); // no chain: no-op
+  assert.equal(idle.completedRows(), 0);
+});
+
 // ---- cardio lead-in (HANDOFF 2026-09-20): Zone 2 / Long Walk carry a
 // lead-in alone — no rest (cardio never pipes one), no interval program —
 // and their time targets are minutes. Press → get set → a countdown of the

@@ -468,6 +468,14 @@ function drainRecordedTimes() {
   saveStopwatchState(activeWorkout.workoutId, stopwatch);
 }
 
+function endChainAndRecord() {
+  if (!stopwatch || !activeWorkout) return;
+  stopwatch.stopChain();
+  drainRecordedTimes();
+  beeper.cancel();
+  saveStopwatchState(activeWorkout.workoutId, stopwatch);
+}
+
 // The interval is cosmetic only — every render recomputes from Date.now()
 // against stored epochs, so a throttled/frozen tab never loses time.
 // Ticks at 4Hz — skip the innerHTML swap unless the state actually changed.
@@ -783,7 +791,10 @@ async function handleRunnerNext() {
   if (!activeWorkout || !currentSession) return;
   wakeLock.reacquireIfWanted();
   els.runnerNext.disabled = true;
-  drainRecordedTimes(); // a Done-then-Next race must not drop the last hold time
+  // A hold still running is what the user just did: record it like Done,
+  // and end the chain so nothing folds against the next exercise's form
+  // while finalize is in flight.
+  endChainAndRecord();
 
   const savedIndex = activeWorkout.currentIndex;
   const nextIndex = savedIndex + 1;
@@ -857,6 +868,7 @@ async function handleRunnerEnd() {
   if (!activeWorkout) return;
   if (!(await confirmEndEarly())) return;
   if (currentSession) {
+    endChainAndRecord();
     const draft = currentSession.getDraft();
     const hasValues = draft.values.some(
       v => v.value_num != null || (v.value_text != null && v.value_text !== ''),
