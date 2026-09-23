@@ -722,3 +722,34 @@ test('POST with bad kind is rejected by schema', async () => {
   });
   assert.equal(res.statusCode, 400);
 });
+
+// Column renames are applied row by row against UNIQUE (template_id, name):
+// a swap must not trip it mid-update, and reusing the name of a column left
+// out of the payload (kept by design) is a conflict, not a 500.
+test('PATCH columns can swap two names', async () => {
+  const created = await app.inject({
+    method: 'POST', url: '/api/templates',
+    payload: { name: 'SwapCols', default_rows: 1, rows_fixed: 0, columns: [{ name: 'a' }, { name: 'b' }] },
+  });
+  const [a, b] = created.json().columns;
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${created.json().id}`,
+    payload: { columns: [{ id: a.id, name: 'b' }, { id: b.id, name: 'a' }] },
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  assert.deepEqual(res.json().columns.map(c => [c.id, c.name]), [[a.id, 'b'], [b.id, 'a']]);
+});
+
+test('PATCH columns reusing the name of an omitted (kept) column is a 409', async () => {
+  const created = await app.inject({
+    method: 'POST', url: '/api/templates',
+    payload: { name: 'ReuseCols', default_rows: 1, rows_fixed: 0, columns: [{ name: 'a' }, { name: 'b' }] },
+  });
+  const [a] = created.json().columns;
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${created.json().id}`,
+    payload: { columns: [{ id: a.id, name: 'a' }, { name: 'b' }] },
+  });
+  assert.equal(res.statusCode, 409, res.body);
+  assert.match(res.json().error, /column name "b" is already used/);
+});

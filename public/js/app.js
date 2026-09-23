@@ -1494,7 +1494,9 @@ async function handleTemplateEditSubmit(evt) {
       const msg = err.body?.error || '';
       els.teErr.textContent = msg.includes('workout')
         ? 'Finish or end the active workout before editing columns.'
-        : 'An exercise with that name already exists.';
+        : msg.startsWith('column name')
+          ? `That column name is taken by a column that was removed from this list (its data is kept).`
+          : 'An exercise with that name already exists.';
     } else if (err.status === 400) {
       els.teErr.textContent = err.body?.error || 'Some fields are invalid.';
     } else {

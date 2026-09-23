@@ -278,7 +278,7 @@ export default async function templatesRoutes(app) {
           if (active) throw new Error('ACTIVE_WORKOUT');
 
           const existingCols = db.prepare(
-            'SELECT id FROM template_columns WHERE template_id = ?'
+            'SELECT id, name FROM template_columns WHERE template_id = ?'
           ).all(id);
           const existingIds = new Set(existingCols.map(c => c.id));
 
@@ -293,11 +293,30 @@ export default async function templatesRoutes(app) {
             }
           }
 
+          // Columns left out of the payload are kept (their values stay), so
+          // their names stay taken.
+          const omittedNames = new Set(
+            existingCols.filter(c => !sentIds.has(c.id)).map(c => c.name),
+          );
+          for (const c of body.columns) {
+            if (omittedNames.has(c.name.trim())) {
+              const err = new Error('COLUMN_NAME_TAKEN');
+              err.detail = c.name.trim();
+              throw err;
+            }
+          }
+
           // Shift kept columns to a non-colliding range first so the unique
-          // (template_id, position) index doesn't fire mid-update.
+          // (template_id, position) index doesn't fire mid-update — and park
+          // the sent ones on placeholder names so a swap of names doesn't
+          // trip (template_id, name) either.
           db.prepare(
             'UPDATE template_columns SET position = position + 10000 WHERE template_id = ?'
           ).run(id);
+          const park = db.prepare(
+            "UPDATE template_columns SET name = char(0) || id WHERE id = ? AND template_id = ?"
+          );
+          for (const colId of sentIds) park.run(colId, id);
 
           const updateExisting = db.prepare(`
             UPDATE template_columns
@@ -340,6 +359,11 @@ export default async function templatesRoutes(app) {
       }
       if (err.message === 'FOREIGN_COLUMN_ID') {
         return reply.code(400).send({ error: 'column id does not belong to this template' });
+      }
+      if (err.message === 'COLUMN_NAME_TAKEN') {
+        return reply.code(409).send({
+          error: `column name "${err.detail}" is already used by a column not in this edit`,
+        });
       }
       if (err.message === 'ACTIVE_WORKOUT') {
         return reply.code(409).send({ error: 'finish or end the active workout before editing columns' });
