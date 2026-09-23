@@ -190,6 +190,27 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
 
 const isTimeColumn = (name) => typeof name === 'string' && name.trim().toLowerCase() === 'time';
 
+// Seconds per unit of a time column, read from its unit string (HANDOFF
+// 2026-09-22): seconds-like x1 ("sec", "sec/side", "seconds per side"),
+// minutes-like x60. Null = no recognisable unit, and the caller falls back
+// to its mode rule (chain = seconds, cardio = minutes).
+const SECONDS_UNIT = /^(s|secs?|seconds?)\b/;
+const MINUTES_UNIT = /^(mins?|minutes?)\b/;
+export function timeUnitScale(column) {
+  const unit = typeof column?.unit === 'string' ? column.unit.trim().toLowerCase() : '';
+  if (SECONDS_UNIT.test(unit)) return 1;
+  if (MINUTES_UNIT.test(unit)) return 60;
+  return null;
+}
+const timeColumnOf = (template) => template?.columns?.find(c => isTimeColumn(c?.name)) ?? null;
+
+// Recorded seconds -> the time cell's own unit: tenths of a minute on a
+// minutes column, whole seconds otherwise.
+export function recordedTimeValue(seconds, column) {
+  if (timeUnitScale(column) === 60) return String(Math.round(seconds / 6) / 10);
+  return String(seconds);
+}
+
 // Lead-in: a short "get set" countdown before a timed work phase (and before
 // an interval program), so the press or a side switch leaves time to get into
 // position. It runs itself into the work like any timed phase, beeps like any
@@ -206,14 +227,17 @@ const leadInPhase = (seconds) => ({ kind: 'lead_in', seconds, label: 'get set' }
 // Chain mode is active only when the template records time (a column named
 // "time", matched like the weight autofill) AND a rest is prescribed —
 // rep lifts have rest but no time column and keep the plain press-for-rest
-// behavior. Work durations come from numeric time-column targets, read as
-// seconds; a row without one counts up until pressed. rows_per_rest chains
+// behavior. Work durations come from numeric time-column targets, scaled by
+// the column's unit (seconds when it has none); a row without one counts up
+// until pressed. rows_per_rest chains
 // that many rows before the rest (suitcase carry L/R = 2; default 1). The
 // rest only follows when a prescribed row is left to chain into — after the
 // final row the exercise just ends (no dead rest time); beyond the
 // prescription nothing is known to be final, so open-ended sets keep it.
 export function workChainFor({ prescribed, template, completedRows = 0 }) {
-  if (!template?.columns?.some(c => isTimeColumn(c?.name))) return null;
+  const timeCol = timeColumnOf(template);
+  if (!timeCol) return null;
+  const scale = timeUnitScale(timeCol) ?? 1;
   const entry = prescribed?.exercises?.find(e => e.template_id === template.id);
   const rest = entry?.rest_seconds;
   if (!Number.isInteger(rest) || rest <= 0) return null;
@@ -232,7 +256,7 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
     if (t.template_id !== template.id) continue;
     if (t.row_index > maxRow) maxRow = t.row_index;
     if (typeof t.target_num !== 'number' || t.target_num <= 0) continue;
-    if (isTimeColumn(t.column_name)) rowSeconds.set(t.row_index, Math.round(t.target_num));
+    if (isTimeColumn(t.column_name)) rowSeconds.set(t.row_index, Math.round(t.target_num * scale));
     else repRows.add(t.row_index);
   }
   const workPhase = (r) => {
@@ -311,13 +335,15 @@ export function intervalPhasesFor(prescribed, templateId) {
 // Cardio program (Zone 2 / Long Walk) for one template: the prescription
 // carries a lead-in alone — cardio never pipes a rest, and there is no
 // interval program — so the walk gets the same press-then-position start as
-// everything else: get set, then a countdown of row 0's time target, which
-// on cardio templates is minutes (45, 70), with the done tone at the target;
+// everything else: get set, then a countdown of row 0's time target, scaled
+// by the column's unit (minutes when it has none — the walks' 45, 70), with
+// the done tone at the target;
 // an open count-up when there is no numeric target. The phase is not work:
 // nothing is recorded, the minutes cell stays a manual entry. Null = not a
 // cardio program (rest → work chain, intervals → interval program).
 export function cardioPhasesFor({ prescribed, template }) {
-  if (!template?.columns?.some(c => isTimeColumn(c?.name))) return null;
+  const timeCol = timeColumnOf(template);
+  if (!timeCol) return null;
   const entry = prescribed?.exercises?.find(e => e.template_id === template.id);
   const leadIn = leadInSecondsOf(entry);
   if (!leadIn) return null;
@@ -329,7 +355,7 @@ export function cardioPhasesFor({ prescribed, template }) {
   ));
   return [
     leadInPhase(leadIn),
-    { kind: 'cardio', seconds: target ? Math.round(target.target_num * 60) : null, label: 'go' },
+    { kind: 'cardio', seconds: target ? Math.round(target.target_num * (timeUnitScale(timeCol) ?? 60)) : null, label: 'go' },
   ];
 }
 

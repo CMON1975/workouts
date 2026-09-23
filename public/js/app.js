@@ -10,7 +10,7 @@ import { installHideFlush, installOutboxDrainers, drainOutbox, readShadow } from
 import { createSessionState } from './session-state.js';
 import {
   createStopwatch, formatMSS, restSecondsFor, workChainFor, intervalPhasesFor, cardioPhasesFor,
-  loadStopwatchState, saveStopwatchState, clearStopwatchState,
+  loadStopwatchState, saveStopwatchState, clearStopwatchState, recordedTimeValue,
 } from './stopwatch.js';
 import { createBeeper, beepOffsets, chainBeepPlan } from './beeper.js';
 import { createWakeLock } from './wakelock.js';
@@ -443,7 +443,7 @@ function timeColumnOf(template) {
 }
 
 // Completed work phases → the set's time input ("marking the total time I was
-// able to hold"). Goes through the input's own 'input' event so it persists
+// able to hold"), in the column's unit (tenths of a minute on minutes). Goes through the input's own 'input' event so it persists
 // exactly like typed input; a cell the user already filled is never touched.
 function drainRecordedTimes() {
   if (!activeWorkout || !stopwatch) return;
@@ -457,7 +457,7 @@ function drainRecordedTimes() {
       `input[data-row-index="${row}"][data-column-id="${col.id}"]`,
     );
     if (!input || input.value !== '') continue;
-    input.value = String(seconds);
+    input.value = recordedTimeValue(seconds, col);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   }
   saveStopwatchState(activeWorkout.workoutId, stopwatch);

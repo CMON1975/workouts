@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   formatMSS, createStopwatch, restSecondsFor, cardioPhasesFor,
   loadStopwatchState, saveStopwatchState, clearStopwatchState, workChainFor,
-  intervalPhasesFor,
+  intervalPhasesFor, timeUnitScale, recordedTimeValue,
 } from './stopwatch.js';
 
 const T0 = 1_755_850_000_000;
@@ -926,4 +926,62 @@ test('chain: a cardio program runs the lead-in into the countdown, records nothi
   assert.equal(open.chainPhase(), null);
   assert.equal(open.chainCompleted(), true);
   assert.deepEqual(open.takeCompletedWork(), []);
+});
+
+// ---- time units from the column (HANDOFF 2026-09-22, item 1): a numeric
+// time target is scaled by its column's unit — seconds-like x1, minutes-like
+// x60 — and the mode rule (chain = seconds, cardio = minutes) is only the
+// fallback for a column with no recognisable unit.
+
+test('timeUnitScale reads seconds-like and minutes-like units, null otherwise', () => {
+  for (const unit of ['s', 'sec', 'secs', 'second', 'seconds', 'Seconds ', 'sec/side', 'seconds per side']) {
+    assert.equal(timeUnitScale({ name: 'time', unit }), 1, unit);
+  }
+  for (const unit of ['min', 'mins', 'minute', 'minutes', ' Minutes', 'min/side']) {
+    assert.equal(timeUnitScale({ name: 'time', unit }), 60, unit);
+  }
+  for (const unit of ['', null, undefined, 'bpm', 'secondary', 'm', 'minimum']) {
+    assert.equal(timeUnitScale({ name: 'time', unit }), null, String(unit));
+  }
+  assert.equal(timeUnitScale(null), null);
+});
+
+test('workChainFor: a minutes time column reads its targets as minutes', () => {
+  const template = { id: 40, columns: [{ name: 'time', unit: 'minutes' }] };
+  const prescribed = {
+    exercises: [{ template_id: 40, rest_seconds: 120 }],
+    targets: [
+      { template_id: 40, row_index: 0, column_name: 'time', target_num: 2 },
+      { template_id: 40, row_index: 1, column_name: 'time', target_num: 1.5 },
+    ],
+  };
+  assert.deepEqual(workChainFor({ template, prescribed, completedRows: 0 }), [
+    { kind: 'work', seconds: 120, row: 0 },
+    { kind: 'rest', seconds: 120 },
+  ]);
+  assert.deepEqual(workChainFor({ template, prescribed, completedRows: 1 }), [
+    { kind: 'work', seconds: 90, row: 1 },
+  ]);
+  // Seconds-like and empty units keep today's seconds reading.
+  for (const unit of ['sec', 'seconds per side', '']) {
+    const t = { id: 40, columns: [{ name: 'time', unit }] };
+    assert.equal(workChainFor({ template: t, prescribed, completedRows: 0 })[0].seconds, 2, unit);
+  }
+});
+
+test('cardioPhasesFor: a seconds time column counts down seconds; empty unit stays minutes', () => {
+  const secs = { ...WALK, template: { id: 40, columns: [{ name: 'time', unit: 'seconds' }] } };
+  assert.equal(cardioPhasesFor(secs)[1].seconds, 45);
+  const mins = { ...WALK, template: { id: 40, columns: [{ name: 'time', unit: 'minutes' }] } };
+  assert.equal(cardioPhasesFor(mins)[1].seconds, 2700);
+  const bare = { ...WALK, template: { id: 40, columns: [{ name: 'time', unit: '' }] } };
+  assert.equal(cardioPhasesFor(bare)[1].seconds, 2700);
+});
+
+test('recordedTimeValue writes seconds on seconds/unknown columns, tenths of a minute on minutes', () => {
+  assert.equal(recordedTimeValue(47, { name: 'time', unit: 'seconds' }), '47');
+  assert.equal(recordedTimeValue(47, { name: 'time', unit: '' }), '47');
+  assert.equal(recordedTimeValue(47, null), '47');
+  assert.equal(recordedTimeValue(120, { name: 'time', unit: 'minutes' }), '2');
+  assert.equal(recordedTimeValue(1234, { name: 'time', unit: 'min' }), '20.6');
 });
