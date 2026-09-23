@@ -1723,6 +1723,10 @@ async function handleArchiveToggle(tpl) {
 async function enterApp() {
   show(els.app);
   show(els.openHistory);
+  // Before anything that can throw (a flaky fetch, IDB): a failed boot must
+  // still flush on hide and drain the outbox later.
+  installHideFlush(() => currentSession?.getDraft());
+  installOutboxDrainers();
 
   templates = await api.templates({ includeArchived: true });
   renderTemplateList();
@@ -1747,8 +1751,6 @@ async function enterApp() {
     }
   }
 
-  installHideFlush(() => currentSession?.getDraft());
-  installOutboxDrainers();
   drainOutbox();
 }
 
