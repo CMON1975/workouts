@@ -80,6 +80,8 @@ export default async function bodyMetricsRoutes(app) {
     const existing = app.db.prepare('SELECT id FROM body_metrics WHERE id = ?').get(id);
     if (!existing) return reply.code(404).send({ error: 'not found' });
     const patch = { ...req.body };
+    // Unknown keys are stripped after minProperties has already passed.
+    if (Object.keys(patch).length === 0) return reply.code(400).send({ error: 'nothing to update' });
     if (patch.value !== undefined) {
       patch.value = patch.value.trim();
       if (!patch.value) return reply.code(400).send({ error: 'value cannot be blank' });

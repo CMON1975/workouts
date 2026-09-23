@@ -6,7 +6,7 @@ const upsertBodySchema = {
   properties: {
     id: { type: 'string', pattern: UUIDV7_RE.source },
     routine_id: { type: 'integer' },
-    started_at: { type: 'integer' },
+    started_at: { type: 'integer', minimum: 0, maximum: 8640000000000000 }, // Date range
     updated_at: { type: 'integer' },
     client_version: { type: 'integer', minimum: 0 },
   },

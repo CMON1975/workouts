@@ -700,3 +700,12 @@ test('GET /api/workouts pages keep a sort-key tie whole (finalize_pending sweep)
   const page = await app.inject({ method: 'GET', url: '/api/workouts?finalized=true&before=600&limit=2' });
   assert.deepEqual(page.json().map(w => w.id).sort(), [...ids].sort());
 });
+
+test('PATCH /api/workouts/:id rejects a started_at outside the Date range with a 400', async () => {
+  const id = wuuid(970);
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/workouts/${id}`,
+    payload: { id, routine_id: armsRoutineId, started_at: 9e15, updated_at: 1, client_version: 1 },
+  });
+  assert.equal(res.statusCode, 400, res.body);
+});

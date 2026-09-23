@@ -240,6 +240,7 @@ test('PATCH rejects an unknown id, an empty body, a blank value, and an unknown 
   const cases = [
     [`/api/body-metrics/999999`, { value: '1' }, 404],
     [`/api/body-metrics/${row.id}`, {}, 400],
+    [`/api/body-metrics/${row.id}`, { bogus: 'x' }, 400],
     [`/api/body-metrics/${row.id}`, { value: '   ' }, 400],
     [`/api/body-metrics/${row.id}`, { metric: 'shoe_size' }, 400],
     [`/api/body-metrics/not-a-number`, { value: '1' }, 400],
