@@ -419,3 +419,9 @@ Running log of work done with Claude Code.
 Deployed: prod at `7194132`, restarted by the user; `time` (col 54) on Dip progression retired via PATCH. First on-device check Fri 10-02.
 Dip progression `default_rows` 4 → 3 on prod (PATCH), matching the three prescribed rows.
 Stray standalone Plank `01a07d00…` deleted on prod by the user via `delete-stray-plank.sh` (204, now 404); HANDOFF updated.
+
+---
+## 2026-09-27 — Import: authoritative template_id
+**What:** HANDOFF 09-22 proposal item 3. Optional `template_id` on an import exercise; unknown id or a name that disagrees with it → 400, no twin (`2a58236`). 398/398.
+**Why:** A rename in the app silently orphaned the next week's JSON, or twinned the template when max_new_templates allowed.
+**Notes:** Name match is exact (the name lookup is exact too). Not deployed yet; server change needs the user's restart.
