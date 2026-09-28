@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   lastRecordHint, describeAge, describeLogEntry, logDeletePrompt, targetHintText, targetValueText,
-  cellText,
+  cellText, formColumns, detailColumns,
 } from './renderer.js';
 
 // Timestamps built via the local-time Date constructor so the expected
@@ -131,4 +131,17 @@ test('cellText reads the column-type side first, falling back to the other', () 
   assert.equal(cellText({ value_num: 25, value_text: null }, num), '25');
   assert.equal(cellText({ value_num: null, value_text: null }, text), '');
   assert.equal(cellText(undefined, text), '');
+});
+
+// HANDOFF 2026-09-27: a retired column is off the runner's form, and on a
+// history detail only when that session holds a value in it.
+test('formColumns drops retired columns; detailColumns keeps them where a value exists', () => {
+  const reps = { id: 55, name: 'reps', retired_at: null };
+  const time = { id: 54, name: 'time', retired_at: 1790000000000 };
+  const template = { columns: [reps, time] };
+  assert.deepEqual(formColumns(template), [reps]);
+  assert.deepEqual(detailColumns(template, [{ row_index: 0, column_id: 55, value_text: '6' }]), [reps]);
+  assert.deepEqual(detailColumns(template, [{ row_index: 0, column_id: 54, value_text: '10' }]), [reps, time]);
+  assert.deepEqual(formColumns({ columns: [{ id: 1, name: 'x' }] }), [{ id: 1, name: 'x' }],
+    'a payload without retired_at (cached pre-017 shape) counts as active');
 });

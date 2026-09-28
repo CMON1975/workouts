@@ -42,7 +42,11 @@ function cellValue(values, rowIndex, col) {
 
 function renderTable(session) {
   if (!session.values.length) return '_(no values recorded)_';
-  const cols = [...session.columns].sort((a, b) => a.position - b.position);
+  // A retired column only where this session holds a value in it.
+  const used = new Set(session.values.map(v => v.column_id));
+  const cols = session.columns
+    .filter(c => c.retired_at == null || used.has(c.id))
+    .sort((a, b) => a.position - b.position);
   const maxRow = session.values.reduce((m, v) => Math.max(m, v.row_index), -1);
   const rows = maxRow + 1;
   const headers = ['Set', ...cols.map(colHeader)];
@@ -138,7 +142,7 @@ export function loadExportData(dbPath, { since = null } = {}) {
   try {
     const colsByTpl = new Map();
     const allCols = db.prepare(`
-      SELECT id, template_id, name, unit, position, value_type
+      SELECT id, template_id, name, unit, position, value_type, retired_at
         FROM template_columns
        ORDER BY template_id, position
     `).all();
@@ -146,7 +150,7 @@ export function loadExportData(dbPath, { since = null } = {}) {
       if (!colsByTpl.has(c.template_id)) colsByTpl.set(c.template_id, []);
       colsByTpl.get(c.template_id).push({
         id: c.id, name: c.name, unit: c.unit,
-        position: c.position, value_type: c.value_type,
+        position: c.position, value_type: c.value_type, retired_at: c.retired_at,
       });
     }
 

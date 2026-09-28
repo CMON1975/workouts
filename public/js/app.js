@@ -22,7 +22,7 @@ import { iconSvg, setButtonIcon } from './icons.js';
 import {
   renderSessionForm, renderStatus,
   renderHistoryList, renderLogList, logDeletePrompt, renderSessionDetail, renderWorkoutDetail,
-  renderManageList, applyPreviousHints,
+  renderManageList, applyPreviousHints, formColumns,
   renderRoutineList, renderRoutineBuilder, renderRoutineManageList,
 } from './renderer.js';
 import { saveBodyMetric, editingHint, previousReading, jumpWarning, needsJumpCheck } from './body-metrics.js';
@@ -449,7 +449,7 @@ function currentChainPhases({ pressEndedRest = false } = {}) {
 }
 
 function timeColumnOf(template) {
-  return template?.columns?.find(
+  return formColumns(template).find(
     c => typeof c?.name === 'string' && c.name.trim().toLowerCase() === 'time',
   ) ?? null;
 }
@@ -1335,7 +1335,7 @@ function openTemplateEdit(tpl) {
   if (!isCheckbox) {
     els.teDefaultRows.value = String(tpl.default_rows ?? 1);
     els.teRowsFixed.checked = !!tpl.rows_fixed;
-    tplEditColumns = (tpl.columns || []).map(c => ({
+    tplEditColumns = formColumns(tpl).map(c => ({
       id: c.id,
       name: c.name,
       unit: c.unit || '',
@@ -1522,7 +1522,7 @@ function buildEditColumnsPatch(tpl) {
     return { error: 'Column names must be unique.' };
   }
 
-  const origIds = (tpl.columns || []).map(c => c.id);
+  const origIds = formColumns(tpl).map(c => c.id);
   const sameOrder = cleaned.length === origIds.length
     && cleaned.every((c, i) => c.id === origIds[i] && !c.isNew);
   const renamed = cleaned.some(c => !c.isNew && c.name !== c.origName);

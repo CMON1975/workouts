@@ -99,6 +99,33 @@ test('a text column falls back to value_num for sets stored before migration 009
   assert.match(md, /\| 2 \| 10 \|/);
 });
 
+// HANDOFF 2026-09-27: a retired column (Dip "time" after the hold row was
+// dropped) exports only for sessions that hold a value in it — old hold
+// times stay readable, new sessions don't grow a blank column.
+test('a retired column exports only where the session has values in it', () => {
+  const session = (id, values) => ({
+    id, template_name: 'Dip progression (scaled)', template_kind: 'standard',
+    template_description: null, template_archived: false,
+    started_at: T_2026_05_08_1842 - 60_000, finalized_at: T_2026_05_08_1842, notes: null,
+    columns: [
+      { id: 55, name: 'reps', unit: 'reps', position: 0, value_type: 'text', retired_at: null },
+      { id: 54, name: 'time', unit: 'sec', position: 10000, value_type: 'text', retired_at: 1 },
+    ],
+    values,
+  });
+  const fresh = renderMarkdown({ ...baseExport, standalone: [session('s-new', [
+    { row_index: 0, column_id: 55, value_num: null, value_text: '6' },
+  ])] });
+  assert.match(fresh, /\| Set \| reps \(reps\) \|\n/);
+  assert.doesNotMatch(fresh, /time \(sec\)/);
+  const old = renderMarkdown({ ...baseExport, standalone: [session('s-old', [
+    { row_index: 0, column_id: 54, value_num: null, value_text: '10' },
+    { row_index: 1, column_id: 55, value_num: null, value_text: '3' },
+  ])] });
+  assert.match(old, /\| Set \| reps \(reps\) \| time \(sec\) \|/);
+  assert.match(old, /\| 1 \|  \| 10 \|/);
+});
+
 test('checkbox session renders description and status', () => {
   const md = renderMarkdown({
     ...baseExport,

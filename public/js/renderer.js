@@ -78,7 +78,7 @@ export function renderSessionForm(root, { template, draft, onInput, prescribed =
       rowEl.appendChild(label);
     }
 
-    for (const col of template.columns) {
+    for (const col of formColumns(template)) {
       const existing = draft.values.find(v => v.row_index === r && v.column_id === col.id);
 
       const field = document.createElement('div');
@@ -242,7 +242,7 @@ function formatDate(ms) {
 
 function summarizeValues(session, template) {
   if (!template) return '';
-  const firstCol = template.columns[0];
+  const firstCol = formColumns(template)[0];
   if (!firstCol) return '';
   if (template.kind === 'checkbox') {
     const col = template.columns.find(c => c.name === 'completed');
@@ -444,10 +444,11 @@ function renderSessionTable(root, { session, template }) {
   table.className = 'detail-table';
 
   const showRowLabels = rows > 1;
+  const cols = detailColumns(template, session.values);
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
   if (showRowLabels) headRow.appendChild(document.createElement('th'));
-  for (const col of template.columns) {
+  for (const col of cols) {
     const th = document.createElement('th');
     th.textContent = col.name + (col.unit ? ` (${col.unit})` : '');
     headRow.appendChild(th);
@@ -464,7 +465,7 @@ function renderSessionTable(root, { session, template }) {
       label.textContent = `Set ${r + 1}`;
       tr.appendChild(label);
     }
-    for (const col of template.columns) {
+    for (const col of cols) {
       const td = document.createElement('td');
       const v = session.values.find(x => x.row_index === r && x.column_id === col.id);
       if (v) td.textContent = cellText(v, col);
@@ -486,6 +487,18 @@ export function cellText(v, col) {
     ? (v.value_text ?? v.value_num)
     : (v.value_num ?? v.value_text);
   return raw == null ? '' : String(raw);
+}
+
+// A retired column (left out of a template edit) is off the runner's form;
+// a history view still shows it where the session holds a value in it.
+// No retired_at at all (a cached pre-017 payload) counts as active.
+export function formColumns(template) {
+  return (template?.columns ?? []).filter(c => c.retired_at == null);
+}
+
+export function detailColumns(template, values) {
+  const used = new Set((values ?? []).map(v => v.column_id));
+  return (template?.columns ?? []).filter(c => c.retired_at == null || used.has(c.id));
 }
 
 export function renderSessionDetail(root, { session, template }) {
@@ -1024,9 +1037,10 @@ export function renderManageList(root, { templates, onEdit, onArchiveToggle }) {
     if (t.kind === 'checkbox') {
       shape = 'Checkbox · done / not done';
     } else if (t.rows_fixed) {
-      shape = `${t.default_rows} set${t.default_rows === 1 ? '' : 's'} · ${t.columns.map(c => c.name).join(', ')}`;
+      shape = `${t.default_rows} set${t.default_rows === 1 ? '' : 's'} · ${formColumns(t).map(c => c.name).join(', ')}`;
     } else {
-      shape = `${t.columns.length} column${t.columns.length === 1 ? '' : 's'}: ${t.columns.map(c => c.name).join(', ')}`;
+      const cols = formColumns(t);
+      shape = `${cols.length} column${cols.length === 1 ? '' : 's'}: ${cols.map(c => c.name).join(', ')}`;
     }
     meta.textContent = shape;
     card.appendChild(meta);

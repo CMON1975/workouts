@@ -216,7 +216,11 @@ export function timeUnitScale(column) {
   if (MINUTES_UNIT.test(unit)) return 60;
   return null;
 }
-const timeColumnOf = (template) => template?.columns?.find(c => isTimeColumn(c?.name)) ?? null;
+// A retired column (left out of a template edit) is not on the form, so it
+// doesn't make the template timed.
+const timeColumnOf = (template) => template?.columns?.find(
+  c => isTimeColumn(c?.name) && c.retired_at == null,
+) ?? null;
 
 // Recorded seconds -> the time cell's own unit: tenths of a minute on a
 // minutes column, whole seconds otherwise.

@@ -935,6 +935,15 @@ test('workChainFor pressEndedRest: an untimed first set waits for its press', ()
   assert.deepEqual(sw.takeCompletedWork(), []);
 });
 
+// A retired time column (HANDOFF 2026-09-27) no longer makes a timed
+// template: Dips fall back to the plain rep-lift rest (press = rest).
+test('workChainFor: a retired time column is not a time column', () => {
+  const retired = { ...DIP, template: { id: 31, columns: [
+    { name: 'time', retired_at: 1790000000000 }, { name: 'reps', retired_at: null },
+  ] } };
+  assert.equal(workChainFor({ ...retired, completedRows: 0 }), null);
+});
+
 // Next / End early mid-chain: the running hold is what the user just did, so
 // it is recorded like a Done press, and the chain ends there (no rest to run
 // into, nothing left to fold while the finalize is in flight).
