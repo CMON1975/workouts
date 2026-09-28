@@ -903,6 +903,38 @@ test('chain: a later untimed set in one chain waits for its press, recording not
   ]);
 });
 
+// HANDOFF 2026-09-27 (dips, Fri 09-25): a press that cuts a rest short means
+// "go", not "set done". The next untimed set waits for its own press; before,
+// it folded at once into a fresh 2:00 rest that ran while the set was being
+// done, and the press after that set ended the chain with no rest at all.
+test('workChainFor pressEndedRest: an untimed first set waits for its press', () => {
+  const reps = { ...DIP, prescribed: { ...DIP.prescribed,
+    targets: [0, 1, 2].map(r => ({ template_id: 31, row_index: r, column_name: 'reps', target_num: 5 })) } };
+  assert.deepEqual(workChainFor({ ...reps, completedRows: 1, pressEndedRest: true }), [
+    { kind: 'work', seconds: null, row: 1, untimed: true },
+    { kind: 'rest', seconds: 120 },
+  ]);
+  assert.deepEqual(workChainFor({ ...DIP, completedRows: 0, pressEndedRest: true })[0],
+    { kind: 'work', seconds: 10, row: 0 }, 'a timed hold is unchanged');
+
+  // Set 1 done -> rest; Start set mid-rest -> set 2 in progress; Done -> rest.
+  let t = 1_000_000;
+  const sw = createStopwatch({ now: () => t });
+  sw.start();
+  sw.startChain(workChainFor({ ...reps, completedRows: 0 }));
+  assert.equal(sw.chainPhase().kind, 'rest');
+  t += 110_000;
+  sw.advanceChain();
+  assert.equal(sw.chainPhase(), null);
+  sw.startChain(workChainFor({ ...reps, completedRows: sw.completedRows(), pressEndedRest: true }));
+  t += 20_000;
+  assert.deepEqual(sw.chainPhase(), { kind: 'work', seconds: null, elapsed: 20, remaining: null, row: 1 });
+  sw.advanceChain();
+  assert.deepEqual(sw.chainPhase(), { kind: 'rest', seconds: 120, elapsed: 0, remaining: 120 });
+  assert.equal(sw.completedRows(), 2);
+  assert.deepEqual(sw.takeCompletedWork(), []);
+});
+
 // Next / End early mid-chain: the running hold is what the user just did, so
 // it is recorded like a Done press, and the chain ends there (no rest to run
 // into, nothing left to fold while the finalize is in flight).

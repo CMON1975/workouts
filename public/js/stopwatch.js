@@ -248,7 +248,9 @@ const leadInPhase = (seconds) => ({ kind: 'lead_in', seconds, label: 'get set' }
 // rest only follows when a prescribed row is left to chain into — after the
 // final row the exercise just ends (no dead rest time); beyond the
 // prescription nothing is known to be final, so open-ended sets keep it.
-export function workChainFor({ prescribed, template, completedRows = 0 }) {
+// pressEndedRest: the press starting this chain cut a rest short, so it means
+// "go", not "set done" — an untimed first set waits for its own press.
+export function workChainFor({ prescribed, template, completedRows = 0, pressEndedRest = false }) {
   const timeCol = timeColumnOf(template);
   if (!timeCol) return null;
   const scale = timeUnitScale(timeCol) ?? 1;
@@ -300,7 +302,7 @@ export function workChainFor({ prescribed, template, completedRows = 0 }) {
       const work = workPhase(r);
       // Only the press's own first set is zero-length (the press is "set
       // done"); a later untimed set in this chain waits for its press.
-      if (work.untimed && phases.some(p => p.kind === 'work')) work.seconds = null;
+      if (work.untimed && (pressEndedRest || phases.some(p => p.kind === 'work'))) work.seconds = null;
       const afterRest = phases.at(-1)?.kind === 'rest';
       if (leadIn && !work.untimed && !afterRest) phases.push(leadInPhase(leadIn));
       phases.push(work);

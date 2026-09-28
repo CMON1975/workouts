@@ -436,7 +436,7 @@ function currentProgramPhases() {
 
 // Chain phases the next press should start for the current exercise; null =
 // not a timed exercise (no time column / no rest) → legacy behavior.
-function currentChainPhases() {
+function currentChainPhases({ pressEndedRest = false } = {}) {
   if (!activeWorkout) return null;
   const template = activeWorkout.routine.templates[activeWorkout.currentIndex];
   if (!template) return null;
@@ -444,6 +444,7 @@ function currentChainPhases() {
     prescribed: activeWorkout.prescribed,
     template,
     completedRows: stopwatch?.completedRows() ?? 0,
+    pressEndedRest,
   });
 }
 
@@ -619,7 +620,7 @@ function handleStopwatchBtn() {
       const wasRest = stopwatch.chainPhase().kind === 'rest';
       stopwatch.advanceChain();
       if (wasRest && stopwatch.chainPhase() == null) {
-        const next = currentChainPhases(); // completedRows moved on
+        const next = currentChainPhases({ pressEndedRest: true }); // completedRows moved on
         if (next) stopwatch.startChain(next);
       }
     }
