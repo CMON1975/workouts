@@ -426,3 +426,9 @@ Stray standalone Plank `01a07d00…` deleted on prod by the user via `delete-str
 **Why:** A rename in the app silently orphaned the next week's JSON, or twinned the template when max_new_templates allowed.
 **Notes:** Name match is exact (the name lookup is exact too). Not deployed yet; server change needs the user's restart.
 Deployed 2026-09-28: prod at `0e8ddc2`, restarted by the user; a rejected import with an unknown template_id returned 400 on prod and wrote nothing (active prescriptions still wk22 107–113).
+
+---
+## 2026-09-28 — Runner e2e harness
+**What:** `scripts/runner-e2e.mjs` / `npm run e2e` (`fa41129`): per scenario a fresh DB, in-process `buildApp` on a random port, imported prescription, fresh Chromium profile, real presses and waits. Scenarios: dips Start-set mid-rest, Plank hold records its time, retired time column. Run against `df17ffd`: dips and retired-column fail with the original symptoms; all pass on HEAD.
+**Why:** The audit's mid-run e2e was never committed; the dips regression went to prod unseen.
+**Notes:** Out of `npm test` (needs chromium, ~15 s). Waits for chromium to exit before removing its profile (cdp-smoke's ENOTEMPTY on cleanup).
