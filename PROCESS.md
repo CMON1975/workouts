@@ -418,3 +418,4 @@ Running log of work done with Claude Code.
 **Notes:** "Remove column" in the edit dialog never removed anything; it moved the column to position+10000 and the runner still showed it. Prod had no parked columns, so the 017 backfill is a no-op there. Retiring col 54 on prod waits for deploy + restart. Dip `default_rows` is 4 vs 3 prescribed rows; left alone.
 Deployed: prod at `7194132`, restarted by the user; `time` (col 54) on Dip progression retired via PATCH. First on-device check Fri 10-02.
 Dip progression `default_rows` 4 → 3 on prod (PATCH), matching the three prescribed rows.
+Stray standalone Plank `01a07d00…` deleted on prod by the user via `delete-stray-plank.sh` (204, now 404); HANDOFF updated.
