@@ -1568,3 +1568,55 @@ test('POST /api/prescriptions/import — a target on a retired column is a shape
   });
   assert.equal(ok.statusCode, 201, ok.body);
 });
+
+// HANDOFF 2026-09-22 proposal item 3: an optional template_id on an exercise
+// is authoritative. A name that disagrees with it (the template was renamed
+// in the app) is a 400 instead of silently orphaning the week or, with
+// max_new_templates > 0, creating a twin under the old name.
+test('POST /api/prescriptions/import — template_id resolves the template; a disagreeing name is a 400', async () => {
+  const routineName = nextId('TplIdRoutine');
+  const templateName = nextId('TplIdTpl');
+  const payload = (ex) => ({
+    week_starts_on: '2026-09-28',
+    week_ends_on: '2026-10-04',
+    days: [{ routine_name: routineName, exercises: [ex] }],
+  });
+  const first = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import', payload: payload(sampleStandardExercise(templateName)),
+  });
+  assert.equal(first.statusCode, 201, first.body);
+  const tpl = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(templateName);
+  const count = () => app.db.prepare('SELECT COUNT(*) AS n FROM templates').get().n;
+  const before = count();
+
+  const ok = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: payload({ ...sampleStandardExercise(templateName), template_id: tpl.id }),
+  });
+  assert.equal(ok.statusCode, 201, ok.body);
+  const presId = ok.json().prescriptions[0].id;
+  assert.deepEqual(
+    [...new Set(app.db.prepare('SELECT template_id FROM prescription_targets WHERE prescription_id = ?')
+      .all(presId).map(r => r.template_id))],
+    [tpl.id],
+  );
+
+  // Renamed in the app; the JSON still carries the old name with the id.
+  const renamed = `${templateName} (renamed)`;
+  await app.inject({ method: 'PATCH', url: `/api/templates/${tpl.id}`, payload: { name: renamed } });
+  const stale = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: payload({ ...sampleStandardExercise(templateName), template_id: tpl.id }),
+  });
+  assert.equal(stale.statusCode, 400, stale.body);
+  assert.match(stale.json().error, new RegExp(`template_id ${tpl.id} is "${renamed.replace(/[()]/g, '\\$&')}", not "${templateName}"`));
+  assert.equal(count(), before, 'no twin created under the old name');
+
+  const missing = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: payload({ ...sampleStandardExercise(renamed), template_id: 999999 }),
+  });
+  assert.equal(missing.statusCode, 400, missing.body);
+  assert.match(missing.json().error, /template_id 999999 does not exist/);
+  assert.equal(count(), before);
+});

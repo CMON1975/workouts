@@ -48,6 +48,8 @@ const exerciseSchema = {
   required: ['template_name', 'targets'],
   properties: {
     template_name: { type: 'string', minLength: 1, maxLength: 100 },
+    // Optional and authoritative when sent: the name must still match it.
+    template_id: { type: 'integer', minimum: 1 },
     kind: { type: 'string', enum: KINDS, default: 'standard' },
     description: { type: ['string', 'null'], maxLength: 1000 },
     columns: { type: 'array', maxItems: 16, items: columnDefSchema },
@@ -144,6 +146,21 @@ function findOrCreateRoutine(db, name, now, counters) {
 
 function findOrCreateTemplate(db, exercise, now, opts, counters) {
   const { template_name, kind = 'standard' } = exercise;
+  if (exercise.template_id !== undefined) {
+    // By id: a renamed template is a loud 400, never an orphaned week or a
+    // twin created under the old name.
+    const byId = db.prepare('SELECT name FROM templates WHERE id = ?').get(exercise.template_id);
+    if (!byId) {
+      const err = new Error('TEMPLATE_ID_NOT_FOUND');
+      err.detail = exercise.template_id;
+      throw err;
+    }
+    if (byId.name !== template_name) {
+      const err = new Error('TEMPLATE_ID_NAME_MISMATCH');
+      err.detail = { id: exercise.template_id, name: byId.name, sent: template_name };
+      throw err;
+    }
+  }
   const existing = db.prepare('SELECT id, kind, description FROM templates WHERE name = ?').get(template_name);
   if (existing) {
     // Optionally refresh the description on an existing template. Only when
@@ -421,6 +438,14 @@ export default async function prescriptionsRoutes(app) {
       if (err.message === 'TEMPLATE_NOT_FOUND') {
         return reply.code(400).send({
           error: `template "${err.detail}" does not exist and create_if_missing is false`,
+        });
+      }
+      if (err.message === 'TEMPLATE_ID_NOT_FOUND') {
+        return reply.code(400).send({ error: `template_id ${err.detail} does not exist` });
+      }
+      if (err.message === 'TEMPLATE_ID_NAME_MISMATCH') {
+        return reply.code(400).send({
+          error: `template_id ${err.detail.id} is "${err.detail.name}", not "${err.detail.sent}"`,
         });
       }
       if (err.message === 'TEMPLATE_SHAPE_MISMATCH') {
