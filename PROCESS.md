@@ -425,3 +425,4 @@ Stray standalone Plank `01a07d00…` deleted on prod by the user via `delete-str
 **What:** HANDOFF 09-22 proposal item 3. Optional `template_id` on an import exercise; unknown id or a name that disagrees with it → 400, no twin (`2a58236`). 398/398.
 **Why:** A rename in the app silently orphaned the next week's JSON, or twinned the template when max_new_templates allowed.
 **Notes:** Name match is exact (the name lookup is exact too). Not deployed yet; server change needs the user's restart.
+Deployed 2026-09-28: prod at `0e8ddc2`, restarted by the user; a rejected import with an unknown template_id returned 400 on prod and wrote nothing (active prescriptions still wk22 107–113).
