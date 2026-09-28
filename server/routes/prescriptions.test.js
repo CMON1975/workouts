@@ -1532,3 +1532,39 @@ test('workout pin is the latest published prescription, the one the runner shows
   assert.equal(shown.json().id, wkN1.id);
   assert.equal(pin, wkN1.id, 'pinned to what the runner shows');
 });
+
+// A target on a retired column would be stored but never shown (the runner
+// leaves retired columns off the form), so it is a shape mismatch like an
+// unknown column (HANDOFF 2026-09-27).
+test('POST /api/prescriptions/import — a target on a retired column is a shape mismatch (409)', async () => {
+  const routineName = nextId('RetiredColRoutine');
+  const templateName = nextId('RetiredColTpl');
+  const payload = (targets) => ({
+    week_starts_on: '2026-09-28',
+    week_ends_on: '2026-10-04',
+    days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateName, targets)] }],
+  });
+  const first = await app.inject({ method: 'POST', url: '/api/prescriptions/import', payload: payload() });
+  assert.equal(first.statusCode, 201, first.body);
+  const tpl = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(templateName);
+  const reps = app.db.prepare(
+    "SELECT id FROM template_columns WHERE template_id = ? AND name = 'reps'"
+  ).get(tpl.id);
+  const retire = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`,
+    payload: { columns: [{ id: reps.id, name: 'reps' }] },
+  });
+  assert.equal(retire.statusCode, 200, retire.body);
+
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: payload([{ row_index: 0, column: 'weight', target_num: 25 }]),
+  });
+  assert.equal(res.statusCode, 409, res.body);
+  assert.match(res.json().error, /column "weight" not found/);
+  const ok = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: payload([{ row_index: 0, column: 'reps', target_num: 5 }]),
+  });
+  assert.equal(ok.statusCode, 201, ok.body);
+});

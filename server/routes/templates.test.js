@@ -753,3 +753,38 @@ test('PATCH columns reusing the name of an omitted (kept) column is a 409', asyn
   assert.equal(res.statusCode, 409, res.body);
   assert.match(res.json().error, /column name "b" is already used/);
 });
+
+// HANDOFF 2026-09-27: "Remove column" in the edit dialog must actually take
+// the column off the form. A column left out of the payload is retired, not
+// deleted: its values stay (history / export), and GET marks it so the
+// client can leave it off the runner. Sending its id again brings it back.
+test('PATCH columns retires an omitted column; re-sending its id revives it', async () => {
+  const created = await app.inject({
+    method: 'POST', url: '/api/templates',
+    payload: { name: 'RetireCols', default_rows: 3, rows_fixed: 0, columns: [{ name: 'time', unit: 'sec' }, { name: 'reps' }] },
+  });
+  const tpl = created.json();
+  const [time, reps] = tpl.columns;
+  assert.deepEqual(tpl.columns.map(c => c.retired_at), [null, null]);
+
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`,
+    payload: { columns: [{ id: reps.id, name: 'reps' }] },
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  const cols = res.json().columns;
+  assert.deepEqual(cols.map(c => c.id), [reps.id, time.id], 'retired column kept, after the active ones');
+  assert.equal(cols[0].retired_at, null);
+  assert.equal(typeof cols[1].retired_at, 'number');
+
+  const list = await app.inject({ method: 'GET', url: '/api/templates' });
+  const listed = list.json().find(t => t.id === tpl.id);
+  assert.equal(typeof listed.columns.find(c => c.id === time.id).retired_at, 'number');
+
+  const back = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`,
+    payload: { columns: [{ id: time.id, name: 'time' }, { id: reps.id, name: 'reps' }] },
+  });
+  assert.equal(back.statusCode, 200, back.body);
+  assert.deepEqual(back.json().columns.map(c => [c.id, c.retired_at]), [[time.id, null], [reps.id, null]]);
+});

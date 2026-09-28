@@ -231,7 +231,7 @@ function findOrCreateTemplate(db, exercise, now, opts, counters) {
 
 function loadTemplateColumnMap(db, templateId) {
   const rows = db.prepare(
-    'SELECT id, name FROM template_columns WHERE template_id = ?'
+    'SELECT id, name FROM template_columns WHERE template_id = ? AND retired_at IS NULL'
   ).all(templateId);
   const map = new Map();
   for (const r of rows) map.set(r.name.toLowerCase(), r.id);

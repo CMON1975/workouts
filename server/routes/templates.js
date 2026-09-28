@@ -61,7 +61,7 @@ function loadTemplate(db, id) {
   `).get(id);
   if (!t) return null;
   t.columns = db.prepare(`
-    SELECT id, name, unit, position, value_type
+    SELECT id, name, unit, position, value_type, retired_at
       FROM template_columns
      WHERE template_id = ?
      ORDER BY position
@@ -105,7 +105,7 @@ export default async function templatesRoutes(app) {
        ORDER BY t.name
     `).all();
     const colsStmt = db.prepare(`
-      SELECT id, name, unit, position, value_type
+      SELECT id, name, unit, position, value_type, retired_at
         FROM template_columns
        WHERE template_id = ?
        ORDER BY position
@@ -320,9 +320,18 @@ export default async function templatesRoutes(app) {
 
           const updateExisting = db.prepare(`
             UPDATE template_columns
-               SET name = ?, unit = ?, position = ?
+               SET name = ?, unit = ?, position = ?, retired_at = NULL
              WHERE id = ? AND template_id = ?
           `);
+          // Left out = retired: off the runner's form, values kept.
+          const retire = db.prepare(`
+            UPDATE template_columns SET retired_at = COALESCE(retired_at, ?)
+             WHERE id = ? AND template_id = ?
+          `);
+          const now = Date.now();
+          for (const c of existingCols) {
+            if (!sentIds.has(c.id)) retire.run(now, c.id, id);
+          }
           const insertNew = db.prepare(`
             INSERT INTO template_columns (template_id, name, unit, position, value_type)
             VALUES (?, ?, ?, ?, ?)

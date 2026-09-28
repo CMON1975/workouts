@@ -82,6 +82,28 @@ test('embedded templates carry kind + description (the runner renders from these
   assert.equal(t.description, 'Hip 90/90, 1 min each side.');
 });
 
+// A column retired from the template stays in the embedded shape, marked,
+// so the runner can leave it off the form (HANDOFF 2026-09-27).
+test('embedded template columns carry retired_at', async () => {
+  const tpl = await app.inject({
+    method: 'POST', url: '/api/templates',
+    payload: { name: 'Retired embed', default_rows: 1, rows_fixed: 0, columns: [{ name: 'time' }, { name: 'reps' }] },
+  });
+  const [time, reps] = tpl.json().columns;
+  await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.json().id}`,
+    payload: { columns: [{ id: reps.id, name: 'reps' }] },
+  });
+  const created = await app.inject({
+    method: 'POST', url: '/api/routines',
+    payload: { name: 'Retired embed routine', template_ids: [tpl.json().id] },
+  });
+  const res = await app.inject({ method: 'GET', url: `/api/routines/${created.json().id}` });
+  const cols = res.json().templates[0].columns;
+  assert.equal(cols.find(c => c.id === reps.id).retired_at, null);
+  assert.equal(typeof cols.find(c => c.id === time.id).retired_at, 'number');
+});
+
 test('POST with duplicate name returns 409', async () => {
   const dup = await app.inject({
     method: 'POST', url: '/api/routines',

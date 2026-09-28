@@ -58,7 +58,7 @@ function loadRoutine(db, id) {
      ORDER BY rt.position
   `).all(id);
   const colsStmt = db.prepare(`
-    SELECT id, name, unit, position, value_type
+    SELECT id, name, unit, position, value_type, retired_at
       FROM template_columns
      WHERE template_id = ?
      ORDER BY position
