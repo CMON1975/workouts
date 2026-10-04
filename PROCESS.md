@@ -432,3 +432,9 @@ Deployed 2026-09-28: prod at `0e8ddc2`, restarted by the user; a rejected import
 **What:** `scripts/runner-e2e.mjs` / `npm run e2e` (`fa41129`): per scenario a fresh DB, in-process `buildApp` on a random port, imported prescription, fresh Chromium profile, real presses and waits. Scenarios: dips Start-set mid-rest, Plank hold records its time, retired time column. Run against `df17ffd`: dips and retired-column fail with the original symptoms; all pass on HEAD.
 **Why:** The audit's mid-run e2e was never committed; the dips regression went to prod unseen.
 **Notes:** Out of `npm test` (needs chromium, ~15 s). Waits for chromium to exit before removing its profile (cdp-smoke's ENOTEMPTY on cleanup).
+
+---
+## 2026-10-04 — HANDOFF: beeps stop after Siri mid-set
+**What:** The beeper retries `resume()` every 1 s while its plan still owes a beep, so a context Siri interrupted comes back without a press (`92887ee`). Two tests: Siri-shaped interruption resumes once resume() is allowed again; an interruption after the last beep is left alone. 400/400, e2e 3/3.
+**Why:** Fri 10-02 farmer carry: asking Siri something mid-set silenced the rest of the exercise; the next exercise's first press brought beeps back.
+**Notes:** Siri keeps the page visible, so neither `visibilitychange` nor `pageshow` fires; a chain has one press per exercise. The retry never recreates: a context made outside a gesture stays locked until a press, which is also a doubt about the existing wake → recreate path if it fires mid-interruption. The "after the last beep" test is green on the old code; mutating out both `owed()` guards turns it red. No `?v=` bump: vhost sends JS `no-cache`, and imported modules aren't versioned anyway.
