@@ -51,6 +51,12 @@ const TONES = {
 // and the context is replaced (iOS can leave an 'interrupted' context stuck).
 export const RECREATE_AFTER_MS = 1500;
 
+// While beeps are still owed and the context is not running, the resume is
+// retried this often. Siri takes the audio session with the page still
+// visible, so no wake fires, and a chain gets no press until the next
+// exercise.
+export const RESUME_RETRY_MS = 1000;
+
 // Thin Web Audio shell around beepOffsets. Beeps are scheduled on the audio
 // clock at press time — the app's 250ms display tick is cosmetic and dies
 // when the tab freezes, so it can never be the trigger. Everything degrades
@@ -69,8 +75,29 @@ export function createBeeper({ now = Date.now, setTimeout = globalThis.setTimeou
   let plan = null;        // { at: wall ms, offsets } — the beeps still wanted
   let wasRunning = false; // last observed ctx state, for edge detection
   let recreateTimer = null;
+  let retryTimer = null;
 
   function AC() { return globalThis.AudioContext || globalThis.webkitAudioContext; }
+
+  // True while the plan still has a beep in the future.
+  function owed() {
+    if (!plan) return false;
+    const elapsed = now() - plan.at;
+    return plan.offsets.some(({ atMs }) => atMs > elapsed);
+  }
+
+  // Keep resuming a non-running context while beeps are owed. Never
+  // recreate from here: a context made outside a gesture stays locked until
+  // the next press, and the one held now was unlocked by an earlier press.
+  function retryResume() {
+    if (retryTimer != null) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      if (!ctx || ctx.state === 'running' || !owed()) return;
+      resume();
+      retryResume();
+    }, RESUME_RETRY_MS);
+  }
 
   function stopPending() {
     for (const osc of pending) {
@@ -107,10 +134,12 @@ export function createBeeper({ now = Date.now, setTimeout = globalThis.setTimeou
   }
 
   // Re-arm on the not-running → running edge: the clock was frozen in
-  // between, so everything scheduled before it is stale.
+  // between, so everything scheduled before it is stale. Off that edge,
+  // keep trying to get back to it while beeps are owed.
   function noteState() {
     const running = ctx?.state === 'running';
     if (running && !wasRunning) arm();
+    else if (!running && owed()) retryResume();
     wasRunning = running;
   }
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { beepOffsets, chainBeepPlan, createBeeper, RECREATE_AFTER_MS } from './beeper.js';
+import { beepOffsets, chainBeepPlan, createBeeper, RECREATE_AFTER_MS, RESUME_RETRY_MS } from './beeper.js';
 
 test('beepOffsets plans three shorts and a done tone', () => {
   assert.deepEqual(beepOffsets(90_000), [
@@ -100,6 +100,7 @@ function installFakeAudioContext(t, { resumeWorks = true } = {}) {
   class FakeAudioContext {
     constructor() {
       this.state = 'suspended'; // fresh contexts start suspended on iOS
+      this.resumeWorks = resumeWorks; // flip per instance: refused while Siri holds the session
       this.resumeCalls = 0;
       this.closed = false;
       this.currentTime = 0;
@@ -110,7 +111,7 @@ function installFakeAudioContext(t, { resumeWorks = true } = {}) {
     }
     resume() {
       this.resumeCalls += 1;
-      if (resumeWorks) this.state = 'running';
+      if (this.resumeWorks) this.state = 'running';
       return Promise.resolve();
     }
     close() { this.closed = true; return Promise.resolve(); }
@@ -278,4 +279,49 @@ test('chainBeepPlan runs through a zero-length untimed set to the rest boundary'
     { atMs: 117_000, kind: 'short' }, { atMs: 118_000, kind: 'short' },
     { atMs: 119_000, kind: 'short' }, { atMs: 120_000, kind: 'done' },
   ]);
+});
+
+// ---- Siri mid-set (HANDOFF 2026-10-04) ----
+// Siri takes the audio session while the page stays visible: no wake event,
+// and a chain has no press until the next exercise. The beeper has to bring
+// the context back itself, and must not swap in a fresh context, which
+// would stay locked until that next press.
+
+test('a context interrupted mid-plan with no press or wake is resumed once the interruption lets go', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const instances = installFakeAudioContext(t);
+  const c = clock();
+  const beeper = createBeeper({ now: c.now });
+  beeper.ensureContext();
+  t.mock.timers.tick(RECREATE_AFTER_MS); // the press's own grace timer is spent
+  const ctx = instances[0];
+  beeper.schedule([{ atMs: 30_000, kind: 'done' }]);
+  ctx.starts = [];
+  ctx.resumeWorks = false;       // Siri holds the audio session
+  ctx.setState('interrupted');
+  c.advance(5000);
+  t.mock.timers.tick(5000);
+  assert.equal(instances.length, 1, 'no fresh context: it would need a press to start');
+  ctx.resumeWorks = true;        // Siri is done; iOS sends no state change
+  c.advance(RESUME_RETRY_MS);
+  t.mock.timers.tick(RESUME_RETRY_MS);
+  await Promise.resolve();       // resume() settles, then the plan re-arms
+  assert.equal(ctx.state, 'running');
+  assert.deepEqual(ctx.starts, [24], 'the 30 s beep, 6 s of it gone');
+});
+
+test('an interruption after the last beep has passed is left for the next press', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const instances = installFakeAudioContext(t);
+  const c = clock();
+  const beeper = createBeeper({ now: c.now });
+  beeper.ensureContext();
+  t.mock.timers.tick(RECREATE_AFTER_MS);
+  const ctx = instances[0];
+  beeper.schedule([{ atMs: 3000, kind: 'done' }]);
+  c.advance(10_000);
+  const calls = ctx.resumeCalls;
+  ctx.setState('interrupted');
+  t.mock.timers.tick(RESUME_RETRY_MS * 5);
+  assert.equal(ctx.resumeCalls, calls);
 });
