@@ -439,3 +439,9 @@ Deployed 2026-09-28: prod at `0e8ddc2`, restarted by the user; a rejected import
 **Why:** Fri 10-02 farmer carry: asking Siri something mid-set silenced the rest of the exercise; the next exercise's first press brought beeps back.
 **Notes:** Siri keeps the page visible, so neither `visibilitychange` nor `pageshow` fires; a chain has one press per exercise. The retry never recreates: a context made outside a gesture stays locked until a press, which is also a doubt about the existing wake → recreate path if it fires mid-interruption. The "after the last beep" test is green on the old code; mutating out both `owed()` guards turns it red. No `?v=` bump: vhost sends JS `no-cache`, and imported modules aren't versioned anyway.
 Deployed 2026-10-04: prod at `513df7f` (static only, no restart); prod serves the new `beeper.js` with `no-cache`.
+
+---
+## 2026-10-04 — HANDOFF tidy; Intervals gets an incline column
+**What:** HANDOFF Open trimmed to wk 23: the 09-22 proposal (all three parts live), the 09-02 intervals action (published since wk 19) and seven read FYIs moved to Done. On prod, template 33 Intervals gained column 69 `incline` (%) after `speed`, via a guarded one-off PATCH script (`add-incline-column.sh`, untracked, run by the user).
+**Why:** The health side's wk 23 FYI flagged the 9% incline as unloggable; the description now progresses it week to week.
+**Notes:** The classifier blocks prod template PATCHes over curl, so the root-script pattern covers template edits too, not just deletes. The PATCH re-sends every existing column by id: an omitted column is retired. Dry-run on a scratch DB first (POST needs `default_rows`/`rows_fixed`). Wk 23's prose still calls incline unlogged; the health side may re-publish Tue.
