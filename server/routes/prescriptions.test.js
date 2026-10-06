@@ -994,12 +994,12 @@ test('POST /api/prescriptions/import — finalize_pending stamps one finalized_a
   });
   await week('2026-08-24', '2026-08-30');
   const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
-  const wid = '019ec999-aaaa-7000-8000-000000000003';
+  const wid = '019ec999-aaaa-7000-8000-000000000031';
   await app.inject({
     method: 'PATCH', url: `/api/workouts/${wid}`,
     payload: { id: wid, routine_id: r.id, started_at: 1000, updated_at: 1000, client_version: 1 },
   });
-  const sids = ['019ec999-bbbb-7000-8000-000000000003', '019ec999-bbbb-7000-8000-000000000004'];
+  const sids = ['019ec999-bbbb-7000-8000-000000000031', '019ec999-bbbb-7000-8000-000000000032'];
   for (const [i, name] of [templateA, templateB].entries()) {
     const tpl = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(name);
     const col = app.db.prepare(`SELECT id FROM template_columns WHERE template_id = ? AND name = 'reps'`).get(tpl.id);
