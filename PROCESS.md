@@ -463,3 +463,9 @@ Deployed 2026-10-04: prod at `513df7f` (static only, no restart); prod serves th
 - Found and fixed a boot race (`4046abd`): History/Stats tapped before boot finished loading Home got sent back to Home; it showed up as a flaky e2e under load.
 - The classifier blocks prod DB reads, so the stats design ran against local snapshots; a fresh `VACUUM INTO` snapshot is the next real-data check. A planning subagent did read the health repo's local API pulls of prod data.
 - Not deployed. Needs `git pull` plus a `systemctl restart workouts` (new route).
+
+---
+## 2026-10-06 — Stats: chart above the tiles; body weight and waist charts
+**What:** The weekly chart now sits directly under the range/metric chips (`aff0971`). New body weight and waist line charts under the tiles (`6e72c5b`..`9f66a9e`): weight draws daily weigh-ins muted under a 7-day average, waist draws each measurement; each card gives the latest level and the change since the range's first reading; tap or arrow keys pick a reading; a body table carries the numbers.
+**Why:** User feedback: on a phone, pressing Time/Energy/Weight changed a chart that was below six tiles, so nothing visibly happened; and they asked for body weight and waist charts.
+**Notes:** One reading per day, the day's last entry, so a same-day typo correction (182, then 102.0) neither spikes the chart nor feeds the energy estimate; the per-session body-weight lookup uses the same series now. The 7-day window counts calendar days from the logged dates (DST-safe) and runs over the whole series. The y-axis hugs the data (no zero baseline; a line's job is change). Units are as logged: kg and inches (cm converts). The June snapshot predates body metrics, so local checks used synthetic weigh-ins on a scratch copy.
