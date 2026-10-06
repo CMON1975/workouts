@@ -481,3 +481,7 @@ Deployed 2026-10-04: prod at `513df7f` (static only, no restart); prod serves th
 **What:** The "by exercise" bars now scale to the longest row rather than the first (`0848abe` moves the width math into `stats.js` so it has tests; `5355b77` is the fix).
 **Why:** Other sums the whole tail, so it can be longer than the top exercise. On the prod snapshot, all-time Other is 1.17× Zone 2 for Time, 1.07× for Reps and 1.02× for Energy, so its fill was drawn at 117% and went past the card.
 **Notes:** Other now fills the track and the leader shrinks by under 20%. Checked in headless Chromium against the snapshot: every fill ends inside the card. Kept Other in the same hue rather than restyling it; that wasn't asked for.
+
+---
+## 2026-10-06 — Deployed stats fixes to prod
+**What:** Droplet pulled from `95843cd` to `b4d92b4` (the Other bar fix and the interval costing fix), and the user restarted `workouts`. Prod's `/api/stats` now shows today's Intervals session at 271 kcal / 3.83 km, down from 592.
