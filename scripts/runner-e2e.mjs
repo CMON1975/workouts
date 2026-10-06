@@ -344,6 +344,33 @@ const scenarios = {
       return page.errors;
     } finally { await page.close(); }
   },
+
+  // Per-exercise bars follow the metric; the estimates panel and the table
+  // view say how every number was reached.
+  async 'stats: per-exercise bars, estimates and table view'(server) {
+    await seedStats(server);
+    const page = await openBrowser(server.base + '/');
+    const bars = () => page.evaluate(`[...document.querySelectorAll('#stats-exercises li')]
+      .map(li => [li.querySelector('.bar-name').textContent, li.querySelector('.bar-value').textContent])`);
+    try {
+      await openStatsView(page);
+      assert.deepEqual(await bars(), [['Zone 2', '45 m'], ['DB Split squat', '10 m']]);
+      await chip(page, 'metric', 'weight');
+      assert.deepEqual(await bars(), [['DB Split squat', '12.8K lb']], 'a walk moves no weight');
+
+      const estimates = await page.evaluate(`document.getElementById('stats-estimates').textContent`);
+      assert.match(estimates, /How these are estimated/);
+      assert.match(estimates, /2 by the stopwatch/);
+      assert.match(estimates, /DB Split squat.*2 dumbbells.*per side.*88% body weight/s);
+      assert.match(estimates, /Zone 2.*walking equation/s);
+      assert.match(estimates, /100 steps a minute/);
+
+      const table = await page.evaluate(`[...document.querySelectorAll('#stats-table tr')].map(tr => [...tr.children].map(c => c.textContent))`);
+      assert.deepEqual(table[0], ['Week', 'Lifted', 'Bodyweight (est.)', 'Carried (est.)', 'Total']);
+      assert.equal(table.length, 3, 'header + two weeks');
+      return page.errors;
+    } finally { await page.close(); }
+  },
 };
 
 // ---- runner --------------------------------------------------------------

@@ -2,7 +2,7 @@
 // lose on a tab eviction, so it skips the drafts/outbox machinery. Every
 // name from the server goes in through textContent, never markup.
 import {
-  METRICS, SERIES_LABELS, RANGES, inRange, weeklySeries, totals, formatDuration, formatCompact,
+  METRICS, SERIES_LABELS, RANGES, inRange, weeklySeries, totals, byTemplate, coverage, formatDuration, formatCompact,
 } from './stats.js';
 import { stackedColumnsSvg } from './charts.js';
 import { iconSvg } from './icons.js';
@@ -125,6 +125,117 @@ function chartFigure(weeks, metricName, selected, onSelect, focusWeek) {
   return { figure, draw };
 }
 
+function exerciseBars(sessions, templates, metricName) {
+  const metric = METRICS[metricName];
+  const rows = byTemplate(sessions, templates, metricName);
+  const card = el('section', { class: 'stats-card' });
+  card.append(el('h3', { class: 'stats-card-title' }, `${metric.label} by exercise`));
+  if (!rows.length) {
+    card.append(el('p', { class: 'muted' }, 'Nothing in this range.'));
+    return card;
+  }
+  const list = el('ol', { id: 'stats-exercises', class: 'bars' });
+  const top = rows[0].value;
+  for (const r of rows) {
+    const li = el('li');
+    const track = el('span', { class: 'bar-track', 'aria-hidden': 'true' });
+    const fill = el('span', { class: 'bar-fill' });
+    fill.style.width = `${Math.max(1, (r.value / top) * 100)}%`;
+    track.append(fill);
+    li.append(el('span', { class: 'bar-name' }, r.name), el('span', { class: 'bar-value' }, metric.format(r.value)), track);
+    list.append(li);
+  }
+  card.append(list);
+  return card;
+}
+
+// What a template counts as, in words, from the rule the server applied.
+function countsAs(t) {
+  const parts = [];
+  if (t.category === 'cardio') parts.push(t.met != null ? `cardio at MET ${t.met}` : 'cardio, walking equation');
+  else if (t.category === 'mobility') parts.push(`mobility at MET ${t.met}`);
+  else if (t.hold) parts.push('hold, time only');
+  else {
+    if (t.dbs > 0) parts.push(`${t.dbs} dumbbell${t.dbs > 1 ? 's' : ''}${t.value_is === 'total' ? ', weight logged for the pair' : ''}`);
+    if (t.carry) parts.push('carried');
+    if (t.per_side) parts.push('reps per side');
+    if (t.bw_fraction > 0) parts.push(`${Math.round(t.bw_fraction * 100)}% body weight`);
+    if (!parts.length) parts.push('reps only');
+  }
+  if (t.rule == null) parts.push('default for its columns');
+  return parts.join(', ');
+}
+
+function estimatesPanel(payload, sessions) {
+  const a = payload.assumptions;
+  const c = coverage(sessions);
+  const bw = { logged: 0, nearest: 0, default: 0 };
+  let corrected = 0;
+  let unparsed = 0;
+  let assumedWalks = 0;
+  for (const s of sessions) {
+    bw[s.bw_source] += 1;
+    corrected += s.corrected;
+    unparsed += s.unparsed;
+    if (s.kcal_basis === 'walk_assumed') assumedWalks += 1;
+  }
+  const details = el('details', { id: 'stats-estimates', class: 'home-disclosure stats-details' });
+  details.append(el('summary', { class: 'home-heading home-disclosure-summary' }, 'How these are estimated'));
+  const p = (text) => details.append(el('p', { class: 'stats-note' }, text));
+  p(`Time: ${c.stopwatch} by the stopwatch, ${c.span} from start to finish, ${c.logged} from logged work plus rest, `
+    + `${c.typical} at the exercise's usual pace, ${c.rule} by the set rule (${a.rep_set_seconds} s a set plus rests). `
+    + 'A measured time that is implausible for the sets logged (a forgotten timer, a late finish) is set aside.');
+  p(`Body weight: the last weigh-in on or before the day for ${bw.logged}, the nearest weigh-in for ${bw.nearest}, `
+    + `the ${a.default_body_kg} kg default for ${bw.default} sessions.`);
+  p(`Weight moved: logged weight × dumbbells × reps. Dumbbell logs before ${a.handle.before} lose `
+    + `${a.handle.lb_per_db} lb per dumbbell (${corrected} rows): the handle weighs about 0.5 lb, not 5. `
+    + `Carries count their weight at ${a.carry_steps_per_minute} steps a minute over the logged time. `
+    + 'Bodyweight movements add a share of body weight per rep.');
+  p(`Active energy (above resting): walks and intervals use the ACSM walking equation on the logged speed and incline; `
+    + `everything else uses a MET (strength ${a.met.strength}, mobility ${a.met.mobility}) over its time.`
+    + (assumedWalks ? ` ${assumedWalks} without a logged speed assume ${a.default_walk_kph} kph flat.` : ''));
+  if (unparsed) p(`${unparsed} logged values couldn't be read and count as nothing.`);
+
+  const table = el('table', { class: 'detail-table' });
+  const head = el('tr');
+  head.append(el('th', { scope: 'col' }, 'Exercise'), el('th', { scope: 'col' }, 'Counts as'));
+  const thead = el('thead');
+  thead.append(head);
+  const tbody = el('tbody');
+  const used = new Set(sessions.map((s) => s.template_id));
+  for (const t of payload.templates.filter((x) => used.has(x.id))) {
+    const tr = el('tr');
+    tr.append(el('td', {}, t.name), el('td', {}, countsAs(t)));
+    tbody.append(tr);
+  }
+  table.append(thead, tbody);
+  details.append(table);
+  return details;
+}
+
+// The chart's accessible twin: every number it draws, as rows.
+function tableView(weeks, metricName) {
+  const metric = METRICS[metricName];
+  const details = el('details', { class: 'home-disclosure stats-details' });
+  details.append(el('summary', { class: 'home-heading home-disclosure-summary' }, 'Table view'));
+  const table = el('table', { id: 'stats-table', class: 'detail-table' });
+  const head = el('tr');
+  for (const h of ['Week', ...metric.keys.map((k) => SERIES_LABELS[k]), 'Total']) head.append(el('th', { scope: 'col' }, h));
+  const thead = el('thead');
+  thead.append(head);
+  const tbody = el('tbody');
+  for (const w of [...weeks].reverse()) {
+    const tr = el('tr');
+    tr.append(el('th', { scope: 'row' }, w.label));
+    for (const k of metric.keys) tr.append(el('td', {}, metric.format(w.parts[k])));
+    tr.append(el('td', {}, metric.format(w.total)));
+    tbody.append(tr);
+  }
+  table.append(thead, tbody);
+  details.append(table);
+  return details;
+}
+
 // state: { range, metric, selected }; onState(patch) re-renders.
 export function renderStatsView(root, { payload, state, now = Date.now(), onState, focusWeek = null }) {
   root.classList.remove('stale');
@@ -143,6 +254,10 @@ export function renderStatsView(root, { payload, state, now = Date.now(), onStat
     chips('Metric', Object.entries(METRICS).map(([m, d]) => [m, d.label]), state.metric, (metric) => onState({ metric, selected: null })),
   );
   const { figure, draw } = chartFigure(weeks, state.metric, selected, (i, keyboard) => onState({ selected: i }, { focusWeek: keyboard ? i : null }), focusWeek);
-  root.replaceChildren(filters, kpiTiles(totals(sessions), state.range), figure);
+  root.replaceChildren(
+    filters, kpiTiles(totals(sessions), state.range), figure,
+    exerciseBars(sessions, payload.templates, state.metric),
+    estimatesPanel(payload, sessions), tableView(weeks, state.metric),
+  );
   draw();
 }
