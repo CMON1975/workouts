@@ -979,6 +979,49 @@ test('POST /api/prescriptions/import — finalize_pending=true finalizes a draft
   );
 });
 
+// Characterization: the stats duration estimator reads a finalized_at shared
+// by every child of a workout as "swept", not "finished then".
+test('POST /api/prescriptions/import — finalize_pending stamps one finalized_at on every child and the workout', async () => {
+  const routineName = nextId('SweepStampRoutine');
+  const templateA = nextId('SweepStampA');
+  const templateB = nextId('SweepStampB');
+  const week = (starts, ends, extra = {}) => app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: starts, week_ends_on: ends, ...extra,
+      days: [{ routine_name: routineName, exercises: [sampleStandardExercise(templateA), sampleStandardExercise(templateB)] }],
+    },
+  });
+  await week('2026-08-24', '2026-08-30');
+  const r = app.db.prepare('SELECT id FROM routines WHERE name = ?').get(routineName);
+  const wid = '019ec999-aaaa-7000-8000-000000000003';
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid}`,
+    payload: { id: wid, routine_id: r.id, started_at: 1000, updated_at: 1000, client_version: 1 },
+  });
+  const sids = ['019ec999-bbbb-7000-8000-000000000003', '019ec999-bbbb-7000-8000-000000000004'];
+  for (const [i, name] of [templateA, templateB].entries()) {
+    const tpl = app.db.prepare('SELECT id FROM templates WHERE name = ?').get(name);
+    const col = app.db.prepare(`SELECT id FROM template_columns WHERE template_id = ? AND name = 'reps'`).get(tpl.id);
+    await app.inject({
+      method: 'PATCH', url: `/api/drafts/${sids[i]}`,
+      payload: {
+        id: sids[i], template_id: tpl.id, workout_id: wid,
+        started_at: 1000 + i * 600_000, updated_at: 1000 + i * 600_000, client_version: 1,
+        values: [{ row_index: 0, column_id: col.id, value_num: 5 }],
+      },
+    });
+  }
+
+  const res = await week('2026-08-31', '2026-09-06', { finalize_pending: true });
+  assert.equal(res.statusCode, 201, res.body);
+
+  const w = app.db.prepare('SELECT finalized_at FROM workouts WHERE id = ?').get(wid);
+  const stamps = sids.map((id) => app.db.prepare('SELECT finalized_at FROM sessions WHERE id = ?').get(id).finalized_at);
+  assert.ok(w.finalized_at != null);
+  assert.deepEqual(stamps, [w.finalized_at, w.finalized_at]);
+});
+
 test('POST /api/prescriptions/import — finalize_pending omitted keeps the active-workout gate', async () => {
   const routineName = nextId('GateStillFiresRoutine');
   const templateName = nextId('GateStillFiresTpl');
