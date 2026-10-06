@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { niceScale, stackedColumnsSvg } from './charts.js';
+import { niceScale, niceDomain, stackedColumnsSvg, lineChartSvg } from './charts.js';
 
 test('niceScale rounds the top up to a clean step', () => {
   assert.deepEqual(niceScale(3300), { max: 4000, step: 1000, ticks: [0, 1000, 2000, 3000, 4000] });
@@ -60,4 +60,44 @@ test('an all-zero range draws a baseline and no NaN', () => {
   const out = stackedColumnsSvg({ weeks: [week('Oct 5', { a: 0 })], keys: ['a'], width: 300, height: 160, format: String });
   assert.doesNotMatch(out, /NaN|Infinity|undefined/);
   assert.equal(segments(out).length, 0);
+});
+
+test('niceDomain hugs the data instead of starting at zero', () => {
+  assert.deepEqual(niceDomain(99.4, 102), { lo: 99, hi: 102, step: 1, ticks: [99, 100, 101, 102] });
+  assert.deepEqual(niceDomain(43.1, 44), { lo: 43, hi: 44, step: 0.25, ticks: [43, 43.25, 43.5, 43.75, 44] });
+  // a flat series still gets a band around it
+  const flat = niceDomain(43.25, 43.25);
+  assert.ok(flat.lo < 43.25 && flat.hi > 43.25);
+});
+
+const DAY = 86_400_000;
+const line = (over = {}) => lineChartSvg({
+  lines: [
+    { cls: 'line-raw', points: [{ x: 0, y: 102 }, { x: DAY, y: 100 }, { x: 3 * DAY, y: 101 }] },
+    { cls: 'line-main', points: [{ x: 0, y: 102 }, { x: DAY, y: 101 }, { x: 3 * DAY, y: 101 }], endLabel: true },
+  ],
+  x0: 0, x1: 3 * DAY, width: 300, height: 160, format: (v) => v.toFixed(1), ...over,
+});
+
+test('lineChartSvg draws one path per line through every point', () => {
+  const out = line();
+  const paths = [...out.matchAll(/<path class="(line-[a-z]+)" d="([^"]+)"/g)];
+  assert.deepEqual(paths.map((m) => m[1]), ['line-raw', 'line-main']);
+  assert.equal(paths[0][2].match(/L/g).length, 2);
+  assert.doesNotMatch(out, /NaN|undefined|Infinity/);
+  // the axis is the data's, not zero-based
+  const ticks = [...out.matchAll(/<text class="tick"[^>]*>([^<]+)</g)].map((m) => Number(m[1]));
+  assert.ok(Math.min(...ticks) >= 99, `ticks ${ticks}`);
+  assert.match(out, /<text class="end-label"[^>]*>101\.0</, 'the latest value is labelled');
+});
+
+test('lineChartSvg: dots, a lone point, the selection crosshair and geometry for hit-testing', () => {
+  const dotted = lineChartSvg({ lines: [{ cls: 'line-main', points: [{ x: 0, y: 43.5 }, { x: 7 * DAY, y: 43.25 }], dots: true }], x0: 0, x1: 7 * DAY, width: 300, height: 160, format: String });
+  assert.equal(dotted.match(/<circle class="dot[ "]/g).length, 2);
+  const lone = lineChartSvg({ lines: [{ cls: 'line-main', points: [{ x: 5, y: 43.5 }], dots: true }], x0: 5, x1: 5, width: 300, height: 160, format: String });
+  assert.doesNotMatch(lone, /NaN|Infinity/);
+  assert.equal(lone.match(/<circle class="dot[ "]/g).length, 1);
+  assert.match(line({ selected: DAY }), /<line class="crosshair"/);
+  assert.doesNotMatch(line(), /crosshair/);
+  assert.match(line(), /data-x0="0" data-x1="259200000" data-left="\d+" data-plot-width="\d+(\.\d+)?"/);
 });
