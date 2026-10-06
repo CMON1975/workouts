@@ -227,6 +227,30 @@ const scenarios = {
       return page.errors;
     } finally { await page.close(); }
   },
+
+  // The stats view opens from its header button next to History; a fresh
+  // DB says so, and a failed fetch offers a retry that recovers.
+  async 'stats: header button opens it; empty, error and retry'(server) {
+    const page = await openBrowser(server.base + '/');
+    try {
+      await waitFor(page, `!document.getElementById('open-stats').hidden`, 'the stats button');
+      assert.equal(await page.evaluate(`document.getElementById('open-stats').previousElementSibling?.id ?? document.getElementById('open-stats').nextElementSibling?.id`), 'open-history');
+      assert.equal(await page.evaluate(`document.getElementById('open-stats').getAttribute('aria-label')`), 'Stats');
+      await page.evaluate(`document.getElementById('open-stats').click()`);
+      await waitFor(page, `!document.getElementById('stats').hidden && !!document.getElementById('stats-empty')`, 'the empty state');
+      assert.equal(await page.evaluate(`document.getElementById('stats-empty').textContent`), 'No finished workouts yet.');
+
+      await page.evaluate(`window.__fetch = window.fetch; window.fetch = (u, o) => String(u).startsWith('/api/stats') ? Promise.reject(new TypeError('offline')) : window.__fetch(u, o)`);
+      await page.evaluate(`document.getElementById('stats-back').click()`);
+      await waitFor(page, `document.getElementById('stats').hidden`, 'back out of stats');
+      await page.evaluate(`document.getElementById('open-stats').click()`);
+      await waitFor(page, `!!document.getElementById('stats-retry')`, 'the error state');
+      assert.match(await page.evaluate(`document.getElementById('stats-root').textContent`), /Couldn.t load stats/);
+      await page.evaluate(`window.fetch = window.__fetch; document.getElementById('stats-retry').click()`);
+      await waitFor(page, `!!document.getElementById('stats-empty')`, 'recovery after retry');
+      return page.errors;
+    } finally { await page.close(); }
+  },
 };
 
 // ---- runner --------------------------------------------------------------

@@ -27,6 +27,7 @@ import {
 } from './renderer.js';
 import { saveBodyMetric, editingHint, previousReading, jumpWarning, needsJumpCheck } from './body-metrics.js';
 import { mergeHistoryPage } from './history-paging.js';
+import { renderStatsView, renderStatsLoading, renderStatsError } from './stats-view.js';
 
 const els = {
   app: document.getElementById('app'),
@@ -36,6 +37,10 @@ const els = {
   manageBtn: document.getElementById('manage-templates'),
   homeTitle: document.getElementById('home-title'),
   openHistory: document.getElementById('open-history'),
+  openStats: document.getElementById('open-stats'),
+  stats: document.getElementById('stats'),
+  statsBack: document.getElementById('stats-back'),
+  statsRoot: document.getElementById('stats-root'),
   historyMenu: document.getElementById('history-menu'),
   historyMenuBack: document.getElementById('history-menu-back'),
   menuPastSessions: document.getElementById('menu-past-sessions'),
@@ -134,7 +139,7 @@ const els = {
   bmCancel: document.getElementById('bm-cancel'),
 };
 
-const VIEWS = ['home', 'session', 'historyMenu', 'history', 'logs', 'detail', 'newTpl', 'manage', 'newRt', 'manageRt', 'runner'];
+const VIEWS = ['home', 'session', 'historyMenu', 'history', 'logs', 'detail', 'stats', 'newTpl', 'manage', 'newRt', 'manageRt', 'runner'];
 
 let currentSession = null;
 let templates = [];
@@ -943,6 +948,21 @@ async function handleRunnerBack() {
 
 function openHistoryMenu() {
   showView('historyMenu');
+}
+
+// Stats: one fetch per open; a refetch dims the last render rather than
+// blanking it.
+let statsPayload = null;
+async function openStats() {
+  showView('stats');
+  renderStatsLoading(els.statsRoot);
+  try {
+    statsPayload = await api.stats();
+    renderStatsView(els.statsRoot, { payload: statsPayload });
+  } catch (err) {
+    console.warn('stats failed to load', err);
+    renderStatsError(els.statsRoot, openStats);
+  }
 }
 
 async function openLogs() {
@@ -1758,6 +1778,7 @@ async function handleArchiveToggle(tpl) {
 async function enterApp() {
   show(els.app);
   show(els.openHistory);
+  show(els.openStats);
   // Before anything that can throw (a flaky fetch, IDB): a failed boot must
   // still flush on hide and drain the outbox later.
   installHideFlush(() => currentSession?.getDraft());
@@ -1907,6 +1928,8 @@ async function boot() {
   els.submit.addEventListener('click', handleSubmit);
   els.homeTitle.addEventListener('click', goMain);
   els.openHistory.addEventListener('click', openHistoryMenu);
+  els.openStats.addEventListener('click', openStats);
+  els.statsBack.addEventListener('click', goMain);
   els.historyMenuBack.addEventListener('click', goMain);
   els.menuPastSessions.addEventListener('click', openHistory);
   els.menuLogHistory.addEventListener('click', openLogs);

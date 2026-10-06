@@ -112,4 +112,6 @@ export const api = {
     body: JSON.stringify(body),
   }),
   deleteBodyMetric: (id) => request('/api/body-metrics/' + encodeURIComponent(id), { method: 'DELETE' }),
+  // tz_offset: the server reads local days (body weight, handle cutoff) with it
+  stats: () => request('/api/stats?tz_offset=' + new Date().getTimezoneOffset()),
 };

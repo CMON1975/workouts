@@ -14,12 +14,15 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>Workouts</title>
 <!-- ?v= busts stale phone caches; bump when the asset changes (no build step to do it for us) -->
-<link rel="stylesheet" href="/css/app.css?v=16">
+<link rel="stylesheet" href="/css/app.css?v=17">
 </head>
 <body>
   <header>
     <h1><button id="home-title" type="button" class="title-btn">Workouts</button></h1>
     <div class="header-actions">
+      <button id="open-stats" type="button" class="icon-btn" hidden aria-label="Stats" title="Stats">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 13H7"/><path d="M19 9h-4"/><path d="M3 3v16a2 2 0 0 0 2 2h16"/><rect x="15" y="5" width="4" height="12" rx="1"/><rect x="7" y="8" width="4" height="9" rx="1"/></svg>
+      </button>
       <button id="open-history" type="button" class="icon-btn" hidden aria-label="History">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
       </button>
@@ -214,6 +217,12 @@
       <p id="log-empty" class="muted" hidden>Nothing logged yet.</p>
     </section>
 
+    <section id="stats" class="view" hidden>
+      <button id="stats-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <h2>Stats</h2>
+      <div id="stats-root"></div>
+    </section>
+
     <section id="detail" class="view" hidden>
       <button id="detail-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <div id="detail-root"></div>
@@ -267,6 +276,6 @@
     </dialog>
   </main>
 
-  <script type="module" src="/js/app.js?v=29"></script>
+  <script type="module" src="/js/app.js?v=30"></script>
 </body>
 </html>
