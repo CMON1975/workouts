@@ -91,3 +91,28 @@ test('counted: any value, a ticked checkbox; unreadable role cells are tallied',
   assert.equal(messy.counted, true);
   assert.equal(messy.unparsed, 2);
 });
+
+test('handle correction: logs before 2026-07-20 lose 4.5 lb per dumbbell', () => {
+  const before = { localDate: '2026-07-19' };
+  const press = session('DB floor press A', ['reps', 'weight'], [{ reps: '6', weight: '25.5' }, { reps: '6', weight: '25.5' }], before);
+  assert.equal(press.lifted_lb, (25.5 - 4.5) * 2 * 6 * 2);
+  assert.equal(press.corrected, 2);
+  // from the cutoff on, as logged
+  const after = session('DB floor press A', ['reps', 'weight'], [{ reps: '6', weight: '25.5' }], { localDate: '2026-07-20' });
+  assert.equal(after.lifted_lb, 25.5 * 2 * 6);
+  assert.equal(after.corrected, 0);
+  // explicit "x 2" is per dumbbell
+  const ohp = session('DB overhead press', ['reps', 'weight'], [{ reps: '6', weight: '7.5 lbs x 2' }], before);
+  assert.equal(ohp.lifted_lb, (7.5 - 4.5) * 2 * 6);
+  // a total sheds one handle per dumbbell in the pair
+  const rdlA = session('DB Romanian deadlift A', ['reps', 'weight'], [{ reps: '8', weight: '30' }], before);
+  assert.equal(rdlA.lifted_lb, (30 - 9) * 8);
+  const total = session('DB overhead press', ['reps', 'weight'], [{ reps: '6', weight: '34 lbs total' }], before);
+  assert.equal(total.lifted_lb, (34 - 9) * 6);
+  // never below zero
+  assert.equal(session('DB floor press A', ['reps', 'weight'], [{ reps: '6', weight: '3' }], before).lifted_lb, 0);
+  // movements without a dumbbell handle are untouched
+  const kb = session('Kettlebell swing', ['reps', 'weight'], [{ reps: '10', weight: '20' }], before);
+  assert.equal(kb.lifted_lb, 200);
+  assert.equal(kb.corrected, 0);
+});

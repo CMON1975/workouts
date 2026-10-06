@@ -3,6 +3,7 @@
 import {
   cellRaw, parseLoad, parseReps, parseSeconds, parseSpeedKph, parseGradePct, parseDistanceKm,
 } from './parse.js';
+import { HANDLE } from './constants.js';
 
 const role = (column) => {
   const n = String(column?.name ?? '').trim().toLowerCase();
@@ -13,7 +14,7 @@ const role = (column) => {
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const ticked = (raw) => raw != null && /^(1(\.0+)?|true|yes|done|✓)$/i.test(raw);
 
-export function sessionFacts({ template, columns, values, rule }) {
+export function sessionFacts({ template, columns, values, rule, localDate }) {
   const colById = new Map(columns.map((c) => [c.id, c]));
   const rows = new Map();
   for (const v of values) {
@@ -25,13 +26,14 @@ export function sessionFacts({ template, columns, values, rule }) {
   }
 
   const facts = {
-    counted: false, sets: 0, reps: 0, lifted_lb: 0,
+    counted: false, sets: 0, reps: 0, lifted_lb: 0, corrected: 0,
     work_seconds: 0, distance_km: 0, speed_kph: null, grade_pct: null, unparsed: 0,
   };
   const speeds = [];
   const grades = [];
   let loggedKm = null;
   const cardio = rule.category === 'cardio';
+  const handleOff = rule.handle && localDate < HANDLE.before ? HANDLE.lb_per_db : 0;
 
   for (const cells of rows.values()) {
     const cell = (r) => cells.find((c) => c.role === r);
@@ -56,9 +58,12 @@ export function sessionFacts({ template, columns, values, rule }) {
 
     const load = read(cell('weight'), (c) => parseLoad(c.raw, c.column.unit));
     if (load && repTotal > 0 && !rule.hold && !rule.carry) {
-      const implementsMoved = load.total ? 1
-        : load.implements ?? (rule.value_is === 'total' ? 1 : Math.max(rule.dbs, 1));
-      facts.lifted_lb += load.lb * implementsMoved * repTotal;
+      const total = load.total || (load.implements == null && rule.value_is === 'total');
+      // A total is one implement carrying every handle in the pair.
+      const implementsMoved = total ? 1 : load.implements ?? Math.max(rule.dbs, 1);
+      const shed = handleOff * (total ? Math.max(rule.dbs, 1) : 1);
+      if (shed > 0) facts.corrected += 1;
+      facts.lifted_lb += Math.max(0, load.lb - shed) * implementsMoved * repTotal;
     }
 
     const seconds = read(cell('time'), (c) => parseSeconds(c.raw, c.column, cardio ? 60 : 1));
