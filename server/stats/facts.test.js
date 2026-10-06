@@ -1,0 +1,93 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { sessionFacts } from './facts.js';
+import { ruleFor } from './rules.js';
+
+// A template with columns 1..n named as given; cells are [row][colName] text.
+function session(name, columnSpecs, rows, { kind = 'standard', localDate = '2026-09-28', bodyKg = 100 } = {}) {
+  const columns = columnSpecs.map((c, i) => (typeof c === 'string' ? { id: i + 1, name: c, unit: null } : { id: i + 1, ...c }));
+  const template = { id: 1, name, kind, columns };
+  const byName = new Map(columns.map((c) => [c.name, c.id]));
+  const values = [];
+  rows.forEach((row, row_index) => {
+    for (const [col, v] of Object.entries(row)) {
+      const isNum = typeof v === 'number';
+      values.push({ row_index, column_id: byName.get(col), value_num: isNum ? v : null, value_text: isNum ? null : v });
+    }
+  });
+  return sessionFacts({ template, columns, values, rule: ruleFor(template), localDate, bodyKg });
+}
+
+const round = (n) => Math.round(n * 100) / 100;
+
+test('sets and reps count rows with values; per-side reps count both sides', () => {
+  const press = session('DB floor press A', ['reps', 'weight'], [
+    { reps: '5', weight: '34.5' }, { reps: '5', weight: '34.5' }, { reps: '4', weight: '34.5' },
+  ]);
+  assert.equal(press.counted, true);
+  assert.equal(press.sets, 3);
+  assert.equal(press.reps, 14);
+
+  // rule says per side: a bare "8" is 8 each side
+  const row = session('DB row A', ['reps', 'weight'], [{ reps: '8', weight: '24.5' }, { reps: '6', weight: '24.5' }]);
+  assert.equal(row.reps, 28);
+  // explicit text wins: "/side" doubles, "left/right" is already the sum
+  const step = session('Step-up (DB-loaded)', ['reps', 'weight'], [{ reps: '10/side', weight: '9.5' }, { reps: '8 left 6 right', weight: '9.5' }]);
+  assert.equal(step.reps, 34);
+});
+
+test('lifted load: per-dumbbell weight x dumbbells x reps', () => {
+  // two-DB lift logged per DB
+  const press = session('DB floor press A', ['reps', 'weight'], [{ reps: '5', weight: '34.5' }, { reps: 5, weight: 34.5 }]);
+  assert.equal(press.lifted_lb, 34.5 * 2 * 5 * 2);
+  // one-DB row, reps per side
+  const row = session('DB row A', ['reps', 'weight'], [{ reps: '8', weight: '24.5' }]);
+  assert.equal(row.lifted_lb, 24.5 * 1 * 16);
+  // explicit "x 2" and "total" override the rule
+  const ohp = session('DB overhead press', ['reps', 'weight'], [{ reps: '6', weight: '7.5 lbs x 2' }, { reps: '6', weight: '34 lbs total' }]);
+  assert.equal(ohp.lifted_lb, 7.5 * 2 * 6 + 34 * 6);
+  // the early RDL logged the pair's total
+  const rdlA = session('DB Romanian deadlift A', ['reps', 'weight'], [{ reps: '8', weight: '30' }]);
+  assert.equal(rdlA.lifted_lb, 30 * 8);
+  // kg columns convert
+  const squat = session('Kettlebell squat', ['reps', { name: 'weight', unit: 'kg' }], [{ reps: '10', weight: '20' }]);
+  assert.equal(round(squat.lifted_lb), round(20 * 2.20462 * 10));
+});
+
+test('rows missing reps or weight lift nothing; holds lift nothing', () => {
+  const partial = session('DB floor press A', ['reps', 'weight'], [{ reps: '5' }, { weight: '34.5' }]);
+  assert.equal(partial.lifted_lb, 0);
+  assert.equal(partial.sets, 2);
+  const plank = session('Plank', [{ name: 'time', unit: 'sec' }, 'weight'], [{ time: '45', weight: '10' }]);
+  assert.equal(plank.lifted_lb, 0);
+  assert.equal(plank.work_seconds, 45);
+});
+
+test('work time, distance, speed and incline from cardio and hold rows', () => {
+  const walk = session('Zone 2', [{ name: 'time', unit: 'min' }, { name: 'speed', unit: 'kph' }, 'incline', 'hr'],
+    [{ time: '45', speed: '5', incline: '0', hr: '93' }]);
+  assert.equal(walk.work_seconds, 2700);
+  assert.equal(walk.speed_kph, 5);
+  assert.equal(walk.grade_pct, 0);
+  // no distance column: speed x time
+  assert.equal(walk.distance_km, 3.75);
+  // cardio with an unlabeled time column reads minutes, like the runner
+  const intervals = session('Intervals', ['rounds', 'speed', 'incline', 'hr', 'time'], [{ rounds: '10', speed: '6.5', incline: '9', time: '43' }]);
+  assert.equal(intervals.work_seconds, 2580);
+  const logged = session('Walk', ['time', { name: 'distance', unit: 'km' }], [{ time: '45:00', distance: '3.74' }]);
+  assert.equal(logged.distance_km, 3.74);
+  const holds = session('Side plank', [{ name: 'time', unit: 'sec/side' }], [{ time: '30' }, { time: '30' }, { time: '15s left 5s right' }]);
+  assert.equal(holds.work_seconds, 80);
+  assert.equal(holds.distance_km, 0);
+});
+
+test('counted: any value, a ticked checkbox; unreadable role cells are tallied', () => {
+  assert.equal(session('DB floor press A', ['reps', 'weight'], []).counted, false);
+  const ticked = session('Yoga', ['completed'], [{ completed: 1 }], { kind: 'checkbox' });
+  assert.equal(ticked.counted, true);
+  assert.equal(ticked.sets, 1);
+  assert.equal(session('Yoga', ['completed'], [{ completed: 0 }], { kind: 'checkbox' }).counted, false);
+  const messy = session('DB floor press A', ['reps', 'weight', 'notes'], [{ reps: 'lots', weight: 'heavy', notes: 'felt good' }]);
+  assert.equal(messy.counted, true);
+  assert.equal(messy.unparsed, 2);
+});
