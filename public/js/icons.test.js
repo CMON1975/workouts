@@ -38,3 +38,12 @@ test('skip-forward is registered for the interval skip', () => {
   assert.match(svg, /M21 4v16/, 'end bar');
   assert.match(svg, /9.997-5.998/, 'play triangle');
 });
+
+test('the stats view icons are registered', () => {
+  const chart = iconSvg('chart-column-stacked');
+  assert.match(chart, /<rect x="15" y="5" width="4" height="12" rx="1"\/>/);
+  assert.match(chart, /M3 3v16a2 2 0 0 0 2 2h16/, 'the axis corner');
+  for (const name of ['flame', 'dumbbell', 'repeat-2', 'footprints', 'calendar-check']) {
+    assert.ok(ICON_NAMES.includes(name), name);
+  }
+});
