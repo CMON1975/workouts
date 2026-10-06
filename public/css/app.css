@@ -1,40 +1,143 @@
 * { box-sizing: border-box; }
 
+/* ─── Design bible tokens ──────────────────────────────────────────────────
+   Translated from ~/claude_projects/design_bible/app/styles/tailwind.css
+   (@theme + the [data-theme="light"|"dark"] blocks) into plain custom
+   properties. The tokens are the contract: don't invent values here; add
+   them to the bible first. The OS setting picks light or dark; the bible's
+   neutral mid-grey theme is unused. scripts/style-contract.test.js checks
+   this file against the bible's rules. */
+
+/* Selawik: Microsoft's OFL-1.1 Segoe UI clone, self-hosted from the bible.
+   Copyright and licence ride in each file's name table. */
+@font-face {
+  font-family: 'Selawik';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/selawik-regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Selawik';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/selawik-semibold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Selawik';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/selawik-bold.woff2') format('woff2');
+}
+
 :root {
-  --bg: #fafafa;
-  --fg: #1a1a1a;
-  --muted: #666;
-  --accent: #2f6feb;
-  --accent-fg: #fff;
-  --border: #ddd;
-  --danger: #b4231e;
-  --saved: #1f8a3a;
+  /* App deviation: a 17px root (bible: 16px) keeps the runner readable
+     mid-set without glasses. Every rem token below scales with it. */
   font-size: 17px;
+
+  --font-sans:
+    'Selawik', ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+
+  --text-xs:   0.75rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.25rem;
+  --text-2xl:  1.5rem;
+  --text-3xl:  1.875rem;
+  --text-4xl:  2.25rem;
+
+  --color-neutral-50:  #f8fafc;
+  --color-neutral-100: #f1f5f9;
+  --color-neutral-200: #e2e8f0;
+  --color-neutral-300: #cbd5e1;
+  --color-neutral-400: #94a3b8;
+  --color-neutral-500: #64748b;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1e293b;
+  --color-neutral-900: #0f172a;
+  --color-neutral-950: #020617;
+
+  --spacing-0:  0;
+  --spacing-1:  0.25rem;
+  --spacing-2:  0.5rem;
+  --spacing-3:  0.75rem;
+  --spacing-4:  1rem;
+  --spacing-6:  1.5rem;
+  --spacing-8:  2rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+  --spacing-24: 6rem;
+  --spacing-32: 8rem;
+
+  --noise-bg: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0.2 0.2 0.2 0 0.15 0.2 0.2 0.2 0 0.15 0.2 0.2 0.2 0 0.15 0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/></svg>");
+
+  /* Light theme (OS light) */
+  --color-bg:             var(--color-neutral-100);
+  --color-fg:             var(--color-neutral-900);
+  --color-muted:          var(--color-neutral-500);
+  --color-accent:         var(--color-neutral-800);
+  --color-surface-inset:  color-mix(in srgb, var(--color-bg) 90%, white);
+  --color-surface-raised: color-mix(in srgb, var(--color-bg) 78%, white);
+  /* Status (draft): meaning only, always beside a label or icon */
+  --color-danger:    #b91c1c;
+  --color-danger-fg: #ffffff;
+  --color-work:      #15803d;
+  --color-rest:      #2563eb;
+  /* Chart series (draft): data marks only, never text */
+  --color-series-1:  #2a78d6;
+  --color-series-2:  #d4581f;
+  --color-series-3:  #14946a;
+
+  /* App-derived, not bible tokens: hairline rules and the modal scrim, mixed
+     from bible tokens the way the bible's ghost button mixes its border. */
+  --color-rule:  color-mix(in srgb, var(--color-fg) 12%, transparent);
+  --color-scrim: color-mix(in srgb, var(--color-neutral-950) 45%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
+  /* Dark theme (OS dark) */
   :root {
-    --bg: #121212;
-    --fg: #eee;
-    --muted: #888;
-    --accent: #4a8cff;
-    --border: #2a2a2a;
-    --danger: #e07070;
-    --saved: #60d07a;
+    --color-bg:             var(--color-neutral-900);
+    --color-fg:             var(--color-neutral-50);
+    --color-muted:          var(--color-neutral-400);
+    --color-accent:         var(--color-neutral-200);
+    --color-surface-inset:  color-mix(in srgb, var(--color-bg) 90%, white);
+    --color-surface-raised: color-mix(in srgb, var(--color-bg) 78%, white);
+    --color-danger:    #f87171;
+    --color-danger-fg: var(--color-neutral-900);
+    --color-work:      #4ade80;
+    --color-rest:      #60a5fa;
+    --color-series-1:  #3987e5;
+    --color-series-2:  #d95926;
+    --color-series-3:  #199e70;
   }
 }
 
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
   min-height: 100vh;
 }
 
+/* The bible's carved-stone grain over the page colour. */
 body {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background-image: var(--noise-bg);
+  background-size: 240px 240px;
+  background-repeat: repeat;
+  background-attachment: fixed;
+  background-blend-mode: soft-light;
 }
 
 header {
@@ -42,18 +145,18 @@ header {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--color-rule);
 }
 
 header h1 {
-  font-size: 1.2rem;
+  font-size: var(--text-xl);
   margin: 0;
 }
 
 /* The title is the way back to the main page; inherit the h1 look. */
 .title-btn {
   background: transparent;
-  color: var(--fg);
+  color: var(--color-fg);
   font: inherit;
   padding: 0;
   min-height: 40px;
@@ -61,7 +164,7 @@ header h1 {
 }
 
 .title-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--color-fg);
   outline-offset: 2px;
 }
 
@@ -71,8 +174,8 @@ header h1 {
   position: sticky;
   top: env(safe-area-inset-top, 0px);
   z-index: 40; /* under the .manage-row drag ghost (50) */
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-rule);
 }
 
 .stopwatch-inner {
@@ -88,7 +191,7 @@ header h1 {
 /* Readable without glasses: 3x the original 1.5rem, button icon 3x the
    20px default. Worst case "61:01" + button still fits a 375px viewport. */
 .stopwatch-time {
-  font-size: 4.5rem;
+  font-size: calc(2 * var(--text-4xl));
   line-height: 1;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -105,23 +208,23 @@ header h1 {
 
 /* Interval phase under the readout; the readout carries the phase color */
 .stopwatch-label {
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   font-weight: 600;
   line-height: 1.2;
   margin-top: 2px;
-  color: var(--muted);
+  color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
 /* An active rest countdown, as opposed to the idle full-rest display. */
 .stopwatch-time.resting {
-  color: var(--accent);
+  color: var(--color-rest);
 }
 
 /* Work-phase countdown/count-up (timed holds & carries) */
 .stopwatch-time.working {
-  color: var(--saved);
+  color: var(--color-work);
 }
 
 main, section {
@@ -130,21 +233,22 @@ main, section {
   margin: 0 auto;
 }
 
-h2 { margin-top: 0; font-size: 1.05rem; color: var(--muted); font-weight: 600; }
+/* View titles wear the bible's section-label idiom */
+h2 { margin-top: 0; font-size: var(--text-sm); color: var(--color-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 
 /* Inputs */
 
 input, button {
-  font-size: 1rem;
+  font-size: var(--text-base);
   font-family: inherit;
 }
 
 input[type='text'], input[type='number'] {
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-rule);
   border-radius: 8px;
-  background: var(--bg);
-  color: var(--fg);
+  background: var(--color-bg);
+  color: var(--color-fg);
   width: 100%;
   min-height: 44px;
 }
@@ -153,8 +257,8 @@ button {
   padding: 12px 16px;
   border: 0;
   border-radius: 8px;
-  background: var(--accent);
-  color: var(--accent-fg);
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-50);
   font-weight: 600;
   min-height: 44px;
   cursor: pointer;
@@ -189,14 +293,14 @@ button:disabled { opacity: 0.5; }
 .body-metrics-form input[type='date'],
 .body-metrics-form input[type='text'] {
   padding: 6px 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-rule);
   border-radius: 8px;
-  background: var(--bg);
-  color: var(--fg);
+  background: var(--color-bg);
+  color: var(--color-fg);
   min-height: 40px;
   min-width: 0;
   /* 16px floor: anything smaller makes iOS Safari zoom the page on focus */
-  font-size: 16px;
+  font-size: var(--text-base);
 }
 .body-metrics-form button {
   padding: 6px 14px;
@@ -204,11 +308,11 @@ button:disabled { opacity: 0.5; }
 }
 .bm-status {
   grid-area: status;
-  font-size: 0.85rem;
-  color: var(--muted, #888);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
   min-height: 1.2em;
 }
-.bm-status.err { color: var(--err, #c0392b); }
+.bm-status.err { color: var(--color-danger); }
 
 /* Template list */
 
@@ -220,8 +324,8 @@ button:disabled { opacity: 0.5; }
 
 .template-btn {
   background: transparent;
-  color: var(--fg);
-  border: 1px solid var(--border);
+  color: var(--color-fg);
+  border: 1px solid var(--color-rule);
   text-align: left;
   padding: 16px;
 }
@@ -243,8 +347,8 @@ button:disabled { opacity: 0.5; }
 
 .session-row label {
   flex: 0 0 64px;
-  color: var(--muted);
-  font-size: 0.9rem;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
 }
 
 .session-field {
@@ -262,30 +366,30 @@ button:disabled { opacity: 0.5; }
 }
 
 .prev-hint {
-  font-size: 0.75rem;
-  color: var(--muted);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
   padding-left: 4px;
 }
 
 .prev-header {
   margin: 0 0 12px 0;
-  font-size: 0.85rem;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
 }
 
 /* Prescribed targets (from /api/prescriptions/active). Distinct visually from
    .prev-hint so the user can tell "what was prescribed" apart from
    "what happened last time" at a glance. */
 .target-hint {
-  font-size: 0.75rem;
-  color: var(--accent, #2c6e49);
+  font-size: var(--text-xs);
+  color: var(--color-rest);
   padding-left: 4px;
   font-weight: 600;
 }
 .target-header {
   margin: 0 0 12px 0;
-  font-size: 0.85rem;
-  color: var(--accent, #2c6e49);
+  font-size: var(--text-sm);
+  color: var(--color-rest);
   font-weight: 600;
 }
 
@@ -294,8 +398,8 @@ button:disabled { opacity: 0.5; }
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 1.15rem;
-  color: var(--fg);
+  font-size: var(--text-lg);
+  color: var(--color-fg);
   cursor: pointer;
 }
 .checkbox-field input[type="checkbox"] {
@@ -309,8 +413,8 @@ button:disabled { opacity: 0.5; }
 .template-description {
   margin: 0 0 12px 0;
   white-space: pre-wrap;
-  color: var(--fg);
-  font-size: 0.95rem;
+  color: var(--color-fg);
+  font-size: var(--text-base);
 }
 .detail-description {
   margin: 0 0 4px 0;
@@ -318,7 +422,7 @@ button:disabled { opacity: 0.5; }
 }
 #nt-description { width: 100%; min-height: 60px; resize: vertical; }
 .detail-checkbox {
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
   margin: 0 0 8px 0;
 }
 .nt-kind { display: flex; flex-direction: column; gap: 4px; }
@@ -331,40 +435,40 @@ button:disabled { opacity: 0.5; }
   gap: 12px;
   margin-top: 24px;
   padding-top: 16px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--color-rule);
 }
 
 .status {
-  font-size: 0.85rem;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
 }
-.status[data-state='saved'] { color: var(--saved); }
-.status[data-state='saving'] { color: var(--accent); }
-.status[data-state='dirty'] { color: var(--muted); }
+.status[data-state='saved'] { color: var(--color-work); }
+.status[data-state='saving'] { color: var(--color-muted); }
+.status[data-state='dirty'] { color: var(--color-muted); }
 
 .banner {
-  background: var(--border);
+  background: var(--color-surface-inset);
   padding: 8px 12px;
   border-radius: 6px;
   margin-bottom: 12px;
-  font-size: 0.9rem;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
 }
 
 .done {
-  color: var(--saved);
+  color: var(--color-work);
   font-weight: 600;
 }
 
 .muted {
-  color: var(--muted);
-  font-size: 0.9rem;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
 }
 
 button.secondary {
   background: transparent;
-  color: var(--fg);
-  border: 1px solid var(--border);
+  color: var(--color-fg);
+  border: 1px solid var(--color-rule);
   font-weight: 500;
 }
 
@@ -372,7 +476,7 @@ button.secondary {
   margin-bottom: 12px;
   padding: 6px 14px;
   min-height: 36px;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .home-admin-row {
@@ -385,11 +489,11 @@ button.secondary {
   flex: 1;
   min-height: 36px;
   padding: 8px 12px;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   background: transparent;
-  color: var(--fg);
-  border: 1px solid var(--border);
+  color: var(--color-fg);
+  border: 1px solid var(--color-rule);
   border-radius: 8px;
 }
 
@@ -415,8 +519,8 @@ button.secondary {
   content: '';
   width: 8px;
   height: 8px;
-  border-right: 2px solid var(--muted);
-  border-bottom: 2px solid var(--muted);
+  border-right: 2px solid var(--color-muted);
+  border-bottom: 2px solid var(--color-muted);
   transform: rotate(-45deg);
   transition: transform 160ms ease;
   margin-right: 6px;
@@ -435,7 +539,7 @@ button.secondary {
 
 .icon-btn {
   background: transparent;
-  color: var(--fg);
+  color: var(--color-fg);
   border: 0;
   border-radius: 8px;
   width: 40px;
@@ -448,7 +552,7 @@ button.secondary {
 }
 
 .icon-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--color-fg);
   outline-offset: 2px;
 }
 
@@ -468,8 +572,8 @@ button.small svg.icon,
 #submit, #runner-next { min-width: 72px; }
 
 button.danger {
-  background: var(--danger);
-  color: #fff;
+  background: var(--color-danger);
+  color: var(--color-danger-fg);
 }
 
 /* Far-left of the footer, opposite Next; don't stretch like other .small buttons */
@@ -490,15 +594,15 @@ button.danger {
 }
 
 .field > span {
-  font-size: 0.85rem;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
 }
 
 .err {
-  color: var(--danger);
+  color: var(--color-danger);
   min-height: 1.2em;
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .form-actions button { width: 100%; }
@@ -508,18 +612,18 @@ button.danger {
   align-items: center;
   gap: 8px;
 }
-.field-inline > span { font-size: 1rem; color: inherit; }
+.field-inline > span { font-size: var(--text-base); color: inherit; }
 
 .modal-dialog {
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-rule);
   border-radius: 8px;
   padding: 0;
   max-width: min(420px, calc(100vw - 24px));
   width: 100%;
   color: inherit;
-  background: var(--bg, white);
+  background: var(--color-bg);
 }
-.modal-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.modal-dialog::backdrop { background: var(--color-scrim); }
 .modal-dialog > form {
   display: flex;
   flex-direction: column;
@@ -537,7 +641,7 @@ button.danger {
 }
 
 .manage-row {
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-rule);
   border-radius: 8px;
   padding: 12px 14px;
   display: flex;
@@ -563,8 +667,8 @@ button.danger {
   justify-content: center;
   width: 36px;
   margin: -12px 0 -12px -14px;
-  color: var(--muted);
-  font-size: 1.4rem;
+  color: var(--color-muted);
+  font-size: var(--text-2xl);
   line-height: 1;
   cursor: grab;
   touch-action: none;
@@ -576,7 +680,7 @@ button.danger {
   z-index: 50;
   cursor: grabbing;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-  background: var(--bg);
+  background: var(--color-bg);
   opacity: 0.95;
 }
 
@@ -594,8 +698,8 @@ button.danger {
 }
 
 .manage-meta {
-  color: var(--muted);
-  font-size: 0.85rem;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
 }
 
 .manage-actions {
@@ -607,18 +711,18 @@ button.danger {
 .routine-card-targets {
   margin-top: 8px;
   padding: 8px 10px;
-  background: var(--bg-soft, rgba(0, 0, 0, 0.03));
-  border-left: 3px solid var(--accent, #2c6e49);
-  font-size: 0.85rem;
+  background: var(--color-surface-inset);
+  border-left: 3px solid var(--color-rest);
+  font-size: var(--text-sm);
 }
 
 .routine-card-targets-header {
   font-weight: 600;
-  font-size: 0.78rem;
-  color: var(--muted);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
   margin-bottom: 4px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
 .routine-card-target-line {
@@ -631,18 +735,18 @@ button.danger {
 }
 
 .target-summary {
-  color: var(--text, inherit);
+  color: inherit;
 }
 
 .target-cue {
-  color: var(--muted);
+  color: var(--color-muted);
   font-style: italic;
 }
 
 button.small {
   padding: 6px 12px;
   min-height: 32px;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   flex: 1 1 auto;
 }
 
@@ -659,8 +763,8 @@ button.small {
 }
 
 .col-builder-header span {
-  font-size: 0.85rem;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
 }
 
 #nt-col-builder,
@@ -672,7 +776,7 @@ button.small {
 
 .col-type-label {
   flex: 0 0 auto;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   padding: 0 4px;
 }
 
@@ -682,7 +786,7 @@ button.small {
   gap: 6px;
   align-items: center;
   padding: 6px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-rule);
   border-radius: 8px;
 }
 
@@ -694,11 +798,11 @@ button.small {
 .col-row select {
   flex: 0 0 auto;
   padding: 8px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-rule);
   border-radius: 8px;
-  background: var(--bg);
-  color: var(--fg);
-  font-size: 0.95rem;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: var(--text-base);
   min-height: 44px;
 }
 
@@ -710,17 +814,17 @@ button.small {
   flex: 0 0 44px;
   padding: 0;
   min-width: 44px;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
 }
 
 /* Home section headings and routine cards */
 
 .home-heading {
   margin: 18px 0 8px 0;
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   font-weight: 600;
 }
 
@@ -738,7 +842,7 @@ button.small {
 }
 
 .routine-name { font-weight: 600; }
-.routine-count { color: var(--muted); font-size: 0.85rem; }
+.routine-count { color: var(--color-muted); font-size: var(--text-sm); }
 
 /* Routine builder (Selected + Available) */
 
@@ -746,10 +850,10 @@ button.small {
 
 .rt-heading {
   margin: 0 0 8px 0;
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   font-weight: 600;
 }
 
@@ -765,11 +869,11 @@ button.small {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-rule);
   border-radius: 8px;
 }
 
-.rt-pos { color: var(--muted); font-size: 0.85rem; min-width: 20px; }
+.rt-pos { color: var(--color-muted); font-size: var(--text-sm); min-width: 20px; }
 .rt-name { font-weight: 500; }
 
 .rt-controls {
@@ -782,7 +886,7 @@ button.small {
   min-width: 36px;
   padding: 0;
   min-height: 36px;
-  font-size: 1rem;
+  font-size: var(--text-base);
 }
 
 /* Runner */
@@ -803,15 +907,15 @@ button.small {
 }
 
 #runner-routine-name {
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   font-weight: 600;
 }
 
 #runner-step {
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-weight: 500;
 }
 
@@ -845,12 +949,12 @@ button.small {
 .load-more { width: 100%; margin-top: 12px; }
 
 /* Log rows: tap loads the entry into the home quick-log form; food text can be long */
-.log-value { color: var(--fg); overflow-wrap: anywhere; }
+.log-value { color: var(--color-fg); overflow-wrap: anywhere; }
 
 .history-row {
   background: transparent;
-  color: var(--fg);
-  border: 1px solid var(--border);
+  color: var(--color-fg);
+  border: 1px solid var(--color-rule);
   text-align: left;
   padding: 12px 14px;
   display: grid;
@@ -864,23 +968,23 @@ button.small {
 }
 
 .history-primary { grid-area: name; font-weight: 600; }
-.history-meta { grid-area: meta; color: var(--muted); font-size: 0.85rem; }
-.history-summary { grid-area: summary; color: var(--muted); font-size: 0.9rem; }
+.history-meta { grid-area: meta; color: var(--color-muted); font-size: var(--text-sm); }
+.history-summary { grid-area: summary; color: var(--color-muted); font-size: var(--text-sm); }
 
 .history-row.is-workout {
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--color-rest);
 }
 
 .history-row.is-workout .history-primary::before {
   content: '◈ ';
-  color: var(--accent);
+  color: var(--color-rest);
 }
 
 .workout-exercise-name {
   margin: 24px 0 4px 0;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-weight: 600;
-  color: var(--fg);
+  color: var(--color-fg);
 }
 
 .workout-exercise-name:first-of-type {
@@ -898,19 +1002,19 @@ button.small {
 .detail-table th, .detail-table td {
   padding: 8px 10px;
   text-align: left;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--color-rule);
   font-weight: normal;
 }
 
 .detail-table thead th {
-  color: var(--muted);
-  font-size: 0.85rem;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
 .detail-table tbody th {
-  color: var(--muted);
-  font-size: 0.9rem;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
   width: 64px;
 }
 
@@ -931,13 +1035,13 @@ button.small {
 }
 
 .history-row.row-foreground {
-  background: var(--bg);
+  background: var(--color-bg);
   width: 100%;
   display: grid;
 }
 
 .workout-child.row-foreground {
-  background: var(--bg);
+  background: var(--color-bg);
   padding-right: 4px;
 }
 
@@ -951,9 +1055,9 @@ button.small {
   padding: 0;
   border: 0;
   border-radius: 0;
-  background: var(--danger);
-  color: #fff;
-  font-size: 1.6rem;
+  background: var(--color-danger);
+  color: var(--color-danger-fg);
+  font-size: var(--text-2xl);
   line-height: 1;
   display: flex;
   align-items: center;
@@ -964,7 +1068,7 @@ button.small {
 }
 
 .row-action:focus-visible {
-  outline: 2px solid var(--fg);
+  outline: 2px solid var(--color-fg);
   outline-offset: -3px;
 }
 
@@ -982,28 +1086,28 @@ button.small {
   gap: 4px;
 }
 .notes-label > span {
-  font-size: 0.85rem;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
 }
 .session-notes {
   width: 100%;
   box-sizing: border-box;
   resize: vertical;
   font-family: inherit;
-  font-size: 1rem;
+  font-size: var(--text-base);
   padding: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-rule);
   border-radius: 6px;
-  background: var(--bg);
+  background: var(--color-bg);
   color: inherit;
 }
 .prev-note-hint {
-  font-size: 0.85rem;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
   margin: 0.25rem 0 0;
 }
 .detail-notes {
-  font-size: 0.9rem;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
   margin: 0 0 0.5rem;
 }
