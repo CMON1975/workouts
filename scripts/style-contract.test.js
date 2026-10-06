@@ -134,6 +134,12 @@ test('outside the token blocks, colour comes only from tokens', () => {
   }
 });
 
+test('radii are the bible 2px (or 0)', () => {
+  for (const d of ruleDecls.filter((x) => /^border(-\w+)*-radius$/.test(x.prop))) {
+    for (const p of parts(d.value)) assert.ok(p === '0' || p === '2px', `radius ${p} in ${where(d)}`);
+  }
+});
+
 test('type uses the bible faces and scale', () => {
   for (const d of ruleDecls.filter((x) => x.prop === 'font-family')) {
     assert.match(d.value, /^(var\(--font-(sans|mono)\)|inherit)$/, where(d));
@@ -157,6 +163,79 @@ test('Selawik is self-hosted in three weights', () => {
     weights.add(f.match(/font-weight:\s*(\d+)/)?.[1]);
   }
   assert.deepEqual([...weights].sort(), ['400', '600', '700']);
+});
+
+test('spacing comes from the bible scale', () => {
+  const SPACING = /^-?var\(--spacing-(0|1|2|3|4|6|8|12|16|24|32)\)$/;
+  for (const d of ruleDecls.filter((x) => /^(gap|row-gap|column-gap|padding|margin)(-(top|right|bottom|left))?$/.test(x.prop))) {
+    for (const p of parts(d.value)) {
+      const ok = p === '0' || p === 'auto' || SPACING.test(p) || /^env\(safe-area-inset-\w+(, ?0(px)?)?\)$/.test(p)
+        || (/^calc\(/.test(p) && !/\d(px|rem|em)\b/.test(p.replace(/env\([^)]*\)/g, '')));
+      assert.ok(ok, `off-scale spacing ${p} in ${where(d)}`);
+    }
+  }
+});
+
+test('shadows fall to the lower left (one light source)', () => {
+  for (const d of ruleDecls.filter((x) => x.prop === 'box-shadow' && x.value !== 'none')) {
+    // Split the shadow list on top-level commas.
+    const layers = [];
+    let cur = '';
+    let depth = 0;
+    for (const ch of d.value) {
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) { layers.push(cur.trim()); cur = ''; continue; }
+      cur += ch;
+    }
+    layers.push(cur.trim());
+    for (const layer of layers) {
+      const inset = /\binset\b/.test(layer);
+      const [x, y] = (layer.replace(/\binset\b/, '').match(/-?\d+(\.\d+)?px|\b0\b/g) ?? []).map(parseFloat);
+      if (inset) {
+        // Interior shadow pools bottom-left (offset right/up), or the faint
+        // top-right rim highlight: exactly mirrored offsets either way.
+        assert.ok(x === -y, `inset shadow not on the lower-left axis in ${where(d)}`);
+      } else {
+        assert.ok(x < 0 && y > 0, `drop shadow must fall down-left in ${where(d)}`);
+      }
+    }
+  }
+});
+
+test('controls are extruded slabs and panels are hairline cavities', () => {
+  // Top-level rules whose selector list names `sel`; later declarations win.
+  const rule = (sel) => new Map(DECLS
+    .filter((d) => d.context.length === 1 && d.context[0].split(',').map((x) => x.trim()).includes(sel))
+    .map((d) => [d.prop, d.value]));
+  const EXTRUDE = '-2px 2px 4px rgba(15, 23, 42, 0.28), inset 1px -1px 0 rgba(255, 255, 255, 0.10), inset -1px 1px 0 rgba(15, 23, 42, 0.10)';
+  const PRIMARY = '-2px 3px 5px rgba(15, 23, 42, 0.40), inset 1px -1px 0 rgba(255, 255, 255, 0.08), inset -1px 1px 0 rgba(0, 0, 0, 0.25)';
+  const CAVITY = 'inset 1px -1px 2px rgba(15, 23, 42, 0.18)';
+  const PRESS = 'inset 1px -1px 2px rgba(15, 23, 42, 0.28), inset -1px 1px 0 rgba(255, 255, 255, 0.04)';
+
+  const primary = rule('button');
+  assert.equal(primary.get('background'), 'var(--color-neutral-800)');
+  assert.equal(primary.get('color'), 'var(--color-neutral-50)');
+  assert.equal(primary.get('box-shadow'), PRIMARY);
+  assert.equal(rule('button.danger').get('background'), 'var(--color-danger)');
+
+  for (const sel of ['button.secondary', '.icon-btn', '.template-btn', '.history-row']) {
+    const r = rule(sel);
+    assert.equal(r.get('background'), 'var(--color-surface-raised)', `${sel} background`);
+    assert.equal(r.get('box-shadow'), EXTRUDE, `${sel} shadow`);
+  }
+  assert.equal(rule('button:active:not(:disabled)').get('box-shadow'),
+    'inset 1px -1px 2px rgba(0, 0, 0, 0.45), inset -1px 1px 0 rgba(255, 255, 255, 0.03)');
+  for (const sel of ['button.secondary:active:not(:disabled)', '.template-btn:active:not(:disabled)']) {
+    assert.equal(rule(sel).get('box-shadow'), PRESS, `${sel} press`);
+  }
+
+  for (const sel of ['.manage-row', '.banner', '.routine-card-targets', '.stopwatch-bar', '.col-row', '.rt-row.selected',
+    "input[type='text']", 'select', 'textarea']) {
+    const r = rule(sel);
+    assert.equal(r.get('background'), 'var(--color-surface-inset)', `${sel} background`);
+    assert.equal(r.get('box-shadow'), CAVITY, `${sel} shadow`);
+  }
 });
 
 test('inline icons use the bible stroke weight', () => {
