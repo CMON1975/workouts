@@ -20,7 +20,7 @@
     <h1><button id="home-title" type="button" class="title-btn">Workouts</button></h1>
     <div class="header-actions">
       <button id="open-history" type="button" class="icon-btn" hidden aria-label="History">
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
       </button>
     </div>
   </header>
@@ -33,7 +33,7 @@
         <!-- Interval phase (warmup / intense 3/8 / easy / cooldown 2/5 / done); hidden otherwise -->
         <span id="stopwatch-label" class="stopwatch-label" hidden></span>
       </div>
-      <button id="stopwatch-btn" type="button" aria-label="Start" title="Start"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg></button>
+      <button id="stopwatch-btn" type="button" aria-label="Start" title="Start"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg></button>
     </div>
   </div>
 
@@ -51,7 +51,7 @@
         </select>
         <input id="bm-date" type="date" aria-label="Date" required>
         <input id="bm-value" type="text" inputmode="decimal" aria-label="Value" placeholder="value" required>
-        <button id="bm-submit" type="submit" aria-label="Log metric" title="Log metric"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+        <button id="bm-submit" type="submit" aria-label="Log metric" title="Log metric"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
         <span id="bm-status" class="bm-status" aria-live="polite"></span>
         <button id="bm-cancel" type="button" class="secondary small" hidden>Cancel edit</button>
       </form>
@@ -62,22 +62,22 @@
       <div id="routine-list"></div>
       <p id="routine-empty" class="muted" hidden>No routines yet. Group exercises under a "day" to run them as one workout.</p>
       <div class="home-admin-row">
-        <button id="new-routine" type="button" class="admin-btn" aria-label="New routine" title="New routine"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
-        <button id="manage-routines" type="button" class="admin-btn" aria-label="Manage routines" title="Manage routines"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></button>
+        <button id="new-routine" type="button" class="admin-btn" aria-label="New routine" title="New routine"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+        <button id="manage-routines" type="button" class="admin-btn" aria-label="Manage routines" title="Manage routines"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></button>
       </div>
 
       <details id="exercises-disclosure" class="home-disclosure">
         <summary class="home-heading home-disclosure-summary">Individual exercises</summary>
         <div class="home-admin-row">
-          <button id="new-template" type="button" class="admin-btn" aria-label="New exercise" title="New exercise"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
-          <button id="manage-templates" type="button" class="admin-btn" aria-label="Manage exercises" title="Manage exercises"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></button>
+          <button id="new-template" type="button" class="admin-btn" aria-label="New exercise" title="New exercise"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+          <button id="manage-templates" type="button" class="admin-btn" aria-label="Manage exercises" title="Manage exercises"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></button>
         </div>
         <div id="template-list"></div>
       </details>
     </section>
 
     <section id="new-rt" class="view" hidden>
-      <button id="new-rt-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <button id="new-rt-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <h2 id="new-rt-heading">New routine</h2>
       <form id="new-rt-form">
         <p id="nr-edit-banner" class="banner" hidden>Past workouts keep the exercises they were run with. New workouts will use this updated list.</p>
@@ -100,14 +100,14 @@
 
         <p id="nr-err" class="err" role="alert"></p>
         <div class="form-actions">
-          <button id="nr-submit" type="submit" aria-label="Save routine" title="Save routine"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+          <button id="nr-submit" type="submit" aria-label="Save routine" title="Save routine"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
         </div>
       </form>
     </section>
 
     <section id="runner" class="view" hidden>
       <div class="runner-header">
-        <button id="runner-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+        <button id="runner-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
         <div class="runner-progress">
           <span id="runner-routine-name"></span>
           <span id="runner-step"></span>
@@ -115,23 +115,23 @@
       </div>
       <div id="runner-root"></div>
       <div class="session-footer">
-        <button id="runner-end" type="button" class="danger small" aria-label="End early" title="End early"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></button>
+        <button id="runner-end" type="button" class="danger small" aria-label="End early" title="End early"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></button>
         <span id="runner-status" class="status">Ready</span>
         <div class="runner-actions">
-          <button id="runner-next" type="button" aria-label="Next" title="Next"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+          <button id="runner-next" type="button" aria-label="Next" title="Next"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
         </div>
       </div>
     </section>
 
     <section id="manage-rt" class="view" hidden>
-      <button id="manage-rt-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <button id="manage-rt-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <h2>Manage routines</h2>
       <div id="manage-rt-list"></div>
       <p id="manage-rt-empty" class="muted" hidden>No routines yet.</p>
     </section>
 
     <section id="new-tpl" class="view" hidden>
-      <button id="new-tpl-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <button id="new-tpl-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <h2>New exercise</h2>
       <form id="new-tpl-form">
         <label class="field">
@@ -154,7 +154,7 @@
           <div class="rt-section">
             <div class="col-builder-header">
               <span>Columns</span>
-              <button id="nt-add-col" type="button" class="secondary small" aria-label="Add column" title="Add column"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+              <button id="nt-add-col" type="button" class="secondary small" aria-label="Add column" title="Add column"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
             </div>
             <div id="nt-col-builder"></div>
             <p class="muted">Text lets you enter anything (e.g. <code>20:00</code>). Number shows the numeric keypad. Unit is optional (e.g. <code>kg</code>, <code>min</code>).</p>
@@ -168,29 +168,29 @@
 
         <p id="nt-err" class="err" role="alert"></p>
         <div class="form-actions">
-          <button id="nt-submit" type="submit" aria-label="Save exercise" title="Save exercise"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+          <button id="nt-submit" type="submit" aria-label="Save exercise" title="Save exercise"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
         </div>
       </form>
     </section>
 
     <section id="manage" class="view" hidden>
-      <button id="manage-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <button id="manage-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <h2>Manage exercises</h2>
       <div id="manage-list"></div>
       <p id="manage-empty" class="muted" hidden>No exercises yet.</p>
     </section>
 
     <section id="session" class="view" hidden>
-      <button id="session-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <button id="session-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <div id="session-root"></div>
       <div class="session-footer">
         <span id="status" class="status">Ready</span>
-        <button id="submit" type="button" hidden aria-label="Submit session" title="Submit session"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+        <button id="submit" type="button" hidden aria-label="Submit session" title="Submit session"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
       </div>
     </section>
 
     <section id="history-menu" class="view" hidden>
-      <button id="history-menu-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <button id="history-menu-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <h2>History</h2>
       <div class="menu-list">
         <button id="menu-log-history" type="button" class="template-btn">Log history</button>
@@ -199,7 +199,7 @@
     </section>
 
     <section id="history" class="view" hidden>
-      <button id="history-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <button id="history-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <h2>Past sessions</h2>
       <div id="history-list"></div>
       <p id="history-empty" class="muted" hidden>No past sessions yet.</p>
@@ -207,14 +207,14 @@
     </section>
 
     <section id="logs" class="view" hidden>
-      <button id="logs-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <button id="logs-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <h2>Log history</h2>
       <div id="log-list"></div>
       <p id="log-empty" class="muted" hidden>Nothing logged yet.</p>
     </section>
 
     <section id="detail" class="view" hidden>
-      <button id="detail-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+      <button id="detail-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <div id="detail-root"></div>
     </section>
 
@@ -252,15 +252,15 @@
         <div class="field" id="te-columns-field">
           <div class="col-builder-header">
             <span>Columns</span>
-            <button id="te-add-col" type="button" class="secondary small" aria-label="Add column" title="Add column"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+            <button id="te-add-col" type="button" class="secondary small" aria-label="Add column" title="Add column"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
           </div>
           <div id="te-col-builder"></div>
           <p class="muted">Edit existing column names and units, reorder, or add new columns. (Removing columns and changing a column's type are not supported here.)</p>
         </div>
         <p id="te-err" class="err" role="alert"></p>
         <div class="form-actions">
-          <button type="button" id="te-cancel" class="secondary" aria-label="Cancel" title="Cancel"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-          <button type="submit" id="te-save" aria-label="Save changes" title="Save changes"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+          <button type="button" id="te-cancel" class="secondary" aria-label="Cancel" title="Cancel"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          <button type="submit" id="te-save" aria-label="Save changes" title="Save changes"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
         </div>
       </form>
     </dialog>

@@ -9,7 +9,7 @@ test('iconSvg renders an inline lucide svg with app conventions', () => {
   assert.match(svg, /viewBox="0 0 24 24"/);
   assert.match(svg, /fill="none"/);
   assert.match(svg, /stroke="currentColor"/, 'inherits button text color');
-  assert.match(svg, /stroke-width="2"/);
+  assert.match(svg, /stroke-width="1.5"/);
   assert.match(svg, /aria-hidden="true"/, 'decorative — label lives on the button');
   assert.match(svg, /class="icon"/, 'sized by CSS, not width/height attrs');
   assert.match(svg, /M20 6 9 17l-5-5/, 'carries the lucide check path');
