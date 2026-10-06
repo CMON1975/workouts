@@ -129,6 +129,27 @@ test('GET /api/stats does not time swept sessions by the sweep\'s stamp', async 
   for (const s of sessions) assert.notEqual(s.time_source, 'span', s.id);
 });
 
+test('GET /api/stats returns body weight and waist series, last entry per day', async () => {
+  const log = (date, metric, value) => app.inject({ method: 'POST', url: '/api/body-metrics', payload: { date, metric, value } });
+  // a typo corrected the same day: the later entry wins
+  await log('2026-09-01', 'body_weight', '182');
+  await log('2026-09-01', 'body_weight', '102.0');
+  await log('2026-09-03', 'body_weight', '100.4 kg');
+  await log('2026-09-02', 'body_weight', 'forgot');
+  await log('2026-09-01', 'waist', '43.5');
+  await log('2026-09-08', 'waist', '110 cm');
+  await log('2026-09-02', 'food', 'clean');
+  await importWeek('2026-08-31', '2026-09-06', [['DB floor press A', LIFT]]);
+  await draft(sid(7), 'DB floor press A', [{ reps: '5', weight: '34.5' }], { startedAt: new Date(2026, 8, 2, 12).getTime() });
+  await finalize(sid(7));
+
+  const { body, sessions } = await stats(`?tz_offset=${new Date(2026, 8, 2).getTimezoneOffset()}`);
+  assert.deepEqual(body.weight, [{ date: '2026-09-01', kg: 102 }, { date: '2026-09-03', kg: 100.4 }]);
+  assert.deepEqual(body.waist.map((w) => [w.date, Math.round(w.in * 100) / 100]), [['2026-09-01', 43.5], ['2026-09-08', 43.31]]);
+  // energy uses the corrected reading too
+  assert.equal(sessions[0].bw_kg, 102);
+});
+
 test('GET /api/stats rejects a bad tz_offset', async () => {
   for (const qs of ['?tz_offset=abc', '?tz_offset=9999']) {
     const res = await app.inject({ method: 'GET', url: `/api/stats${qs}` });

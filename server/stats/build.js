@@ -6,7 +6,7 @@ import {
   DEFAULT_REST_SECONDS, DEFAULT_WALK_KPH, HANDLE, MAX_SECONDS, MET, REP_SET_SECONDS,
 } from './constants.js';
 import { localDate } from './dates.js';
-import { parseBodyKg } from './parse.js';
+import { parseBodyKg, parseWaistIn } from './parse.js';
 import { ruleFor } from './rules.js';
 import { sessionFacts } from './facts.js';
 import { measuredSeconds, plausible, sessionSeconds, sweptSessionIds, typicalSecondsPerSet } from './duration.js';
@@ -24,14 +24,25 @@ function groupBy(rows, key) {
   return out;
 }
 
-export function buildStats({ sessions, templates, columns, values, rests, bodyWeights, tzOffset = 0, now = Date.now() }) {
+// One reading per day: the last entry wins, so a typo corrected the same
+// day (182 -> 102.0) never shows. rows arrive ordered by date, created_at.
+function lastPerDay(rows, metric, parse, key) {
+  const byDate = new Map();
+  for (const r of rows) {
+    if (r.metric !== metric) continue;
+    const v = parse(r.value);
+    if (v != null) byDate.set(r.date, v);
+  }
+  return [...byDate].sort(([a], [b]) => (a < b ? -1 : 1)).map(([date, v]) => ({ date, [key]: v }));
+}
+
+export function buildStats({ sessions, templates, columns, values, rests, bodyMetrics, tzOffset = 0, now = Date.now() }) {
   const columnsByTpl = groupBy(columns, 'template_id');
   const valuesBySession = groupBy(values, 'session_id');
   const tplById = new Map(templates.map((t) => [t.id, { ...t, columns: columnsByTpl.get(t.id) ?? [] }]));
   const restByKey = new Map(rests.map((r) => [`${r.prescription_id}:${r.template_id}`, r]));
-  const weights = bodyWeights
-    .map((b) => ({ date: b.date, kg: parseBodyKg(b.value) }))
-    .filter((b) => b.kg != null);
+  const weights = lastPerDay(bodyMetrics, 'body_weight', parseBodyKg, 'kg');
+  const waists = lastPerDay(bodyMetrics, 'waist', parseWaistIn, 'in');
   const swept = sweptSessionIds(sessions);
 
   const counted = [];
@@ -100,6 +111,7 @@ export function buildStats({ sessions, templates, columns, values, rests, bodyWe
     generated_at: now,
     sessions: out,
     templates: templatesOut,
+    body: { weight: weights, waist: waists },
     assumptions: {
       met: MET,
       default_body_kg: DEFAULT_BODY_KG,

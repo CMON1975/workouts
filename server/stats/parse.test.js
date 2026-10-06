@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cellRaw, parseLoad, parseReps, parseSeconds, parseSpeedKph, parseGradePct, parseDistanceKm, parseBodyKg,
+  cellRaw, parseLoad, parseReps, parseSeconds, parseSpeedKph, parseGradePct, parseDistanceKm, parseBodyKg, parseWaistIn,
 } from './parse.js';
 
 const col = (name, unit = null) => ({ name, unit });
@@ -119,4 +119,13 @@ test('parseBodyKg accepts plausible kg and converts pounds', () => {
   assert.equal(parseBodyKg('12'), null);
   assert.equal(parseBodyKg('400'), null);
   assert.equal(parseBodyKg('n/a'), null);
+});
+
+test('parseWaistIn reads inches and converts centimetres', () => {
+  assert.equal(parseWaistIn('43.25'), 43.25);
+  assert.equal(parseWaistIn('43.25"'), 43.25);
+  assert.equal(parseWaistIn('44 in'), 44);
+  assert.equal(Math.round(parseWaistIn('110 cm') * 100) / 100, 43.31);
+  assert.equal(parseWaistIn('12'), null);
+  assert.equal(parseWaistIn('n/a'), null);
 });

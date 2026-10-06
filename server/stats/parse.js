@@ -140,3 +140,12 @@ export function parseBodyKg(text) {
   const kg = /lb|pound/.test(t) ? Number(m[0]) / LB_PER_KG : Number(m[0]);
   return kg >= 35 && kg <= 250 ? kg : null;
 }
+
+// Waist in inches (how it's logged); centimetres convert.
+export function parseWaistIn(text) {
+  const t = lower(text);
+  const m = t.match(NUM);
+  if (!m) return null;
+  const inches = /cm/.test(t) ? Number(m[0]) / 2.54 : Number(m[0]);
+  return inches >= 20 && inches <= 80 ? inches : null;
+}
