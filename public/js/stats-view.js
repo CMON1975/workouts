@@ -3,8 +3,9 @@
 // name from the server goes in through textContent, never markup.
 import {
   METRICS, SERIES_LABELS, RANGES, inRange, weeklySeries, totals, byTemplate, coverage, formatDuration, formatCompact,
+  rangeStart, weekLabel, rollingAverage, bodyInRange,
 } from './stats.js';
-import { stackedColumnsSvg } from './charts.js';
+import { stackedColumnsSvg, lineChartSvg } from './charts.js';
 import { iconSvg } from './icons.js';
 
 const RANGE_LABELS = { '4w': '4 wk', '12w': '12 wk', all: 'All' };
@@ -236,12 +237,132 @@ function tableView(weeks, metricName) {
   return details;
 }
 
+const BODY_HEIGHT = 160;
+const kgText = (v) => v.toFixed(1);
+const inText = (v) => String(Math.round(v * 100) / 100);
+// Signed change with a true minus; a change that rounds to zero has no sign.
+function signed(v, fmt) {
+  const abs = fmt(Math.abs(v));
+  if (Number(abs) === 0) return fmt(0);
+  return `${v > 0 ? '+' : '−'}${abs}`;
+}
+
+// A line-chart card for one body measurement. points: [{ ms, value, avg? }]
+// in range, oldest first; withAvg draws daily readings muted under the
+// 7-day average.
+function bodyCard({ id, title, unit, fmt, points, x0, x1, withAvg, emptyText }) {
+  const card = el('section', { id, class: 'stats-card' });
+  card.append(el('h3', { class: 'stats-card-title' }, title));
+  if (!points.length) {
+    card.append(el('p', { class: 'muted' }, emptyText));
+    return { card, draw: null };
+  }
+  const first = points[0];
+  const last = points.at(-1);
+  const level = (p) => (withAvg ? p.avg : p.value);
+  let sub = `${fmt(level(last))} ${unit}${withAvg ? ' 7-day average' : ''}`;
+  if (points.length > 1) sub += ` · ${signed(level(last) - level(first), fmt)} ${unit} since ${weekLabel(first.ms)}`;
+  card.append(el('p', { class: 'stats-card-sub' }, sub));
+
+  const legend = el('ul', { class: 'legend' });
+  if (withAvg) {
+    for (const [key, label] of [['key-raw', 'Daily'], ['key-main', '7-day average']]) {
+      const li = el('li');
+      li.append(el('span', { class: `swatch line-key ${key}`, 'aria-hidden': 'true' }), label);
+      legend.append(li);
+    }
+  }
+  const plot = el('div', { class: 'stats-plot' });
+  const readout = el('p', { class: 'stats-readout', 'aria-live': 'polite' });
+  card.append(legend, plot, readout);
+
+  const raw = points.map((p) => ({ x: p.ms, y: p.value }));
+  const dots = points.length <= 40;
+  const lines = withAvg
+    ? [{ cls: 'line-raw', points: raw, dots }, { cls: 'line-main', points: points.map((p) => ({ x: p.ms, y: p.avg })), endLabel: true }]
+    : [{ cls: 'line-main', points: raw, dots, endLabel: true }];
+  let sel = points.length - 1;
+  const draw = (focus = false) => {
+    const width = Math.max(240, Math.round(plot.clientWidth || 340));
+    plot.innerHTML = lineChartSvg({ lines, x0, x1, width, height: BODY_HEIGHT, format: fmt, selected: points[sel].ms, title });
+    const p = points[sel];
+    readout.textContent = `${weekLabel(p.ms)} · ${fmt(p.value)} ${unit}${withAvg ? ` · 7-day average ${fmt(p.avg)} ${unit}` : ''}`;
+    if (focus) plot.querySelector('.hit-area')?.focus();
+  };
+  // A tap anywhere on the plot picks the reading nearest in time.
+  plot.addEventListener('pointerdown', (e) => {
+    const svg = plot.querySelector('svg');
+    if (!svg || !e.target.closest('.hit-area')) return;
+    const box = svg.getBoundingClientRect();
+    const d = svg.dataset;
+    const px = (e.clientX - box.left) * (svg.viewBox.baseVal.width / box.width);
+    const t = Number(d.x0) + ((px - Number(d.left)) / Number(d.plotWidth)) * (Number(d.x1) - Number(d.x0));
+    sel = points.reduce((best, p, i) => (Math.abs(p.ms - t) < Math.abs(points[best].ms - t) ? i : best), 0);
+    draw();
+  });
+  plot.addEventListener('keydown', (e) => {
+    if (!e.target.closest('.hit-area')) return;
+    const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    sel = Math.min(points.length - 1, Math.max(0, sel + step));
+    draw(true);
+  });
+  return { card, draw };
+}
+
+function bodyCards(body, range, now) {
+  const weights = bodyInRange(rollingAverage(body.weight, 'kg'), range, now);
+  const waists = bodyInRange(rollingAverage(body.waist, 'in'), range, now);
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const x1 = today.getTime();
+  const x0For = (pts) => (RANGES[range] == null ? (pts[0]?.ms ?? x1) : rangeStart(range, [], now));
+  const weight = bodyCard({
+    id: 'stats-weight', title: 'Body weight', unit: 'kg', fmt: kgText, points: weights,
+    x0: x0For(weights), x1, withAvg: true, emptyText: 'No weigh-ins in this range.',
+  });
+  const waist = bodyCard({
+    id: 'stats-waist', title: 'Waist', unit: 'in', fmt: inText, points: waists,
+    x0: x0For(waists), x1, withAvg: false, emptyText: 'No waist measurements in this range.',
+  });
+  return { weights, waists, cards: [weight, waist] };
+}
+
+function bodyTable(weights, waists) {
+  const rows = new Map();
+  for (const w of weights) rows.set(w.ms, { ms: w.ms, kg: w.value, avg: w.avg });
+  for (const w of waists) rows.set(w.ms, { ...(rows.get(w.ms) ?? { ms: w.ms }), waist: w.value });
+  const details = el('details', { class: 'home-disclosure stats-details' });
+  details.append(el('summary', { class: 'home-heading home-disclosure-summary' }, 'Body table'));
+  const table = el('table', { id: 'stats-body-table', class: 'detail-table' });
+  const head = el('tr');
+  for (const h of ['Date', 'Weight (kg)', '7-day average', 'Waist (in)']) head.append(el('th', { scope: 'col' }, h));
+  const thead = el('thead');
+  thead.append(head);
+  const tbody = el('tbody');
+  for (const r of [...rows.values()].sort((a, b) => b.ms - a.ms)) {
+    const tr = el('tr');
+    tr.append(el('th', { scope: 'row' }, weekLabel(r.ms)),
+      el('td', {}, r.kg != null ? kgText(r.kg) : ''), el('td', {}, r.avg != null ? kgText(r.avg) : ''),
+      el('td', {}, r.waist != null ? inText(r.waist) : ''));
+    tbody.append(tr);
+  }
+  table.append(thead, tbody);
+  details.append(table);
+  return details;
+}
+
 // state: { range, metric, selected }; onState(patch) re-renders.
 export function renderStatsView(root, { payload, state, now = Date.now(), onState, focusWeek = null }) {
   root.classList.remove('stale');
   root.removeAttribute('aria-busy');
+  const body = bodyCards(payload.body ?? { weight: [], waist: [] }, state.range, now);
+  const hasBody = body.weights.length || body.waists.length;
   if (!payload.sessions.length) {
-    root.replaceChildren(el('p', { id: 'stats-empty', class: 'muted' }, 'No finished workouts yet.'));
+    root.replaceChildren(el('p', { id: 'stats-empty', class: 'muted' }, 'No finished workouts yet.'),
+      ...(hasBody ? body.cards.map((c) => c.card) : []));
+    if (hasBody) body.cards.forEach((c) => c.draw?.());
     return;
   }
   const sessions = inRange(payload.sessions, state.range, now);
@@ -257,8 +378,11 @@ export function renderStatsView(root, { payload, state, now = Date.now(), onStat
   // Chart first: a metric chip changes it, so it must be on screen under them.
   root.replaceChildren(
     filters, figure, kpiTiles(totals(sessions), state.range),
+    ...body.cards.map((c) => c.card),
     exerciseBars(sessions, payload.templates, state.metric),
     estimatesPanel(payload, sessions), tableView(weeks, state.metric),
+    bodyTable(body.weights, body.waists),
   );
   draw();
+  body.cards.forEach((c) => c.draw?.());
 }

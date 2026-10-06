@@ -374,6 +374,62 @@ const scenarios = {
       return page.errors;
     } finally { await page.close(); }
   },
+  // Body weight (daily + 7-day average) and waist as line charts under the
+  // tiles; a tap picks the nearest reading.
+  async 'stats: body weight and waist charts'(server) {
+    await seedStats(server); // includes 100 kg ten days ago
+    const day = (daysAgo) => { const d = new Date(Date.now() - daysAgo * 86_400_000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    for (const [ago, kg] of [[9, '101.0'], [8, '99.5'], [3, '100.2'], [0, '99.8']]) {
+      await server.api('POST', '/api/body-metrics', { date: day(ago), metric: 'body_weight', value: kg });
+    }
+    for (const [ago, inches] of [[14, '44'], [7, '43.5']]) {
+      await server.api('POST', '/api/body-metrics', { date: day(ago), metric: 'waist', value: inches });
+    }
+    const page = await openBrowser(server.base + '/');
+    const card = (id) => page.evaluate(`(() => {
+      const c = document.getElementById('${id}');
+      return c && {
+        legend: [...c.querySelectorAll('.legend li')].map(li => li.textContent),
+        lines: [...c.querySelectorAll('svg path')].map(p => p.getAttribute('class')),
+        dots: c.querySelectorAll('svg circle.dot').length,
+        sub: c.querySelector('.stats-card-sub').textContent,
+        readout: c.querySelector('.stats-readout').textContent,
+      };
+    })()`);
+    try {
+      await openStatsView(page);
+      assert.deepEqual(await page.evaluate(`[...document.getElementById('stats-root').children].map(c => c.id || c.className).slice(2, 5)`),
+        ['kpis', 'stats-weight', 'stats-waist'], 'body charts follow the tiles');
+
+      const weight = await card('stats-weight');
+      assert.deepEqual(weight.legend, ['Daily', '7-day average']);
+      assert.deepEqual(weight.lines, ['line-raw', 'line-main']);
+      // 7-day average today: 100.2 (3 days ago) and 99.8 (today); the
+      // first weigh-in in range (ten days ago) averaged 100 too
+      assert.match(weight.sub, /^100\.0 kg 7-day average · 0\.0 kg since /);
+      assert.match(weight.readout, /99\.8 kg · 7-day average 100\.0 kg$/);
+      // a tap at the left edge picks the first weigh-in (100 kg, ten days ago)
+      await page.evaluate(`(() => {
+        const hit = document.querySelector('#stats-weight .hit-area');
+        const r = hit.getBoundingClientRect();
+        hit.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: r.left + 1, clientY: r.top + 5 }));
+      })()`);
+      assert.match((await card('stats-weight')).readout, /· 100\.0 kg · 7-day average 100\.0 kg$/);
+
+      const waist = await card('stats-waist');
+      assert.deepEqual(waist.legend, [], 'one series, no legend');
+      assert.equal(waist.dots, 2);
+      assert.match(waist.sub, /^43\.5 in · −0\.5 in since /);
+
+      const body = await page.evaluate(`[...document.querySelectorAll('#stats-body-table tr')].map(tr => [...tr.children].map(c => c.textContent))`);
+      assert.deepEqual(body[0], ['Date', 'Weight (kg)', '7-day average', 'Waist (in)']);
+      assert.equal(body.length, 1 + 7, 'header + every day with a reading');
+
+      await chip(page, 'range', '4w');
+      assert.ok(await card('stats-weight'), 'the range chips scope the body charts too');
+      return page.errors;
+    } finally { await page.close(); }
+  },
 };
 
 // ---- runner --------------------------------------------------------------

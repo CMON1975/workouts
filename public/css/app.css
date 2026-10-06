@@ -1305,3 +1305,23 @@ button.chip[aria-pressed='true'] {
 
 .stats-details { margin-top: var(--spacing-2); }
 .stats-note { font-size: var(--text-sm); color: var(--color-muted); margin: 0 0 var(--spacing-3); }
+
+/* Body measurement lines: daily readings recede, the average carries the hue */
+.stats-card-sub { margin: 0 0 var(--spacing-2); font-size: var(--text-sm); }
+.swatch.line-key { width: 14px; height: 2px; border-radius: 0; }
+.swatch.key-raw { background: var(--color-muted); }
+.swatch.key-main { background: var(--color-series-1); }
+.line-chart .line-raw,
+.line-chart .line-main { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.line-chart path.line-raw { stroke: color-mix(in srgb, var(--color-muted) 55%, transparent); }
+.line-chart path.line-main { stroke: var(--color-series-1); }
+/* Dots wear a 2px ring in the card's surface so they read where lines cross */
+.line-chart .dot { stroke: var(--color-surface-inset); stroke-width: 2; }
+.line-chart .dot.line-raw { fill: var(--color-muted); }
+.line-chart .dot.line-main { fill: var(--color-series-1); }
+.line-chart .dot.sel { stroke: var(--color-fg); }
+.line-chart .crosshair { stroke: color-mix(in srgb, var(--color-fg) 35%, transparent); stroke-width: 1; }
+.line-chart .end-label { fill: var(--color-fg); font-size: var(--text-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
+.line-chart .hit-area { fill: transparent; cursor: crosshair; }
+.line-chart .hit-area:focus { outline: none; }
+.line-chart .hit-area:focus-visible { stroke: var(--color-fg); stroke-width: 2; }
