@@ -475,3 +475,9 @@ Deployed 2026-10-04: prod at `513df7f` (static only, no restart); prod serves th
 **What:** Ran `/api/stats` over a same-day prod snapshot (user-made `VACUUM INTO`, read-only, no sudo): 366 sessions, every template on a rule, 1 unreadable cell (an incline typed `p` on 06-23). Fixed interval sessions (`03bac4d`): energy and distance now split by the pinned prescription's program, hard rounds at the logged speed/incline, the rest at 5 kph flat.
 **Why:** Today's intervals read 592 kcal against the health plan's 250–330, because since the incline column (10-04) all 43 min were costed at 6.5 kph / 9 %. Now 271 kcal; distance 3.8 km instead of 4.66.
 **Notes:** Intervals before 10-04 have no logged incline, so their hard rounds read as flat (~180 kcal, likely ~30 % low); left as is, nothing logged to recover it from. Totals so far: 87 h, 22.0K kcal, 211 km, 7,815 reps; weight moved 755K lb of which 509K bodyweight share and 140K carried. `~/workouts-backups/workouts-pre-deploy.db` on the droplet is a 0-byte leftover from 05-10, not a backup; the read-only `VACUUM INTO` one-liner works as user `c` without sudo, which DEPLOY.md doesn't say yet. Tailnet dev server now runs on a copy of `data/prod-snap.db` (untracked, under `data/`).
+
+---
+## 2026-10-06 — Stats: Other bar ran off the exercise card
+**What:** The "by exercise" bars now scale to the longest row rather than the first (`0848abe` moves the width math into `stats.js` so it has tests; `5355b77` is the fix).
+**Why:** Other sums the whole tail, so it can be longer than the top exercise. On the prod snapshot, all-time Other is 1.17× Zone 2 for Time, 1.07× for Reps and 1.02× for Energy, so its fill was drawn at 117% and went past the card.
+**Notes:** Other now fills the track and the leader shrinks by under 20%. Checked in headless Chromium against the snapshot: every fill ends inside the card. Kept Other in the same hue rather than restyling it; that wasn't asked for.
