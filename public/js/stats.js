@@ -129,3 +129,42 @@ export function weekLabel(ms) {
   const d = new Date(ms);
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
+
+// Body series ({ date: 'YYYY-MM-DD', <key>: n }, one per day, ascending).
+export function dateMs(date) {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(y, m - 1, d).getTime();
+}
+
+// Day numbers from the calendar date itself, so a DST change can't make a
+// "7-day" window 6 days and 23 hours.
+const dayNumber = (date) => {
+  const [y, m, d] = date.split('-').map(Number);
+  return Date.UTC(y, m - 1, d) / 86_400_000;
+};
+
+// Trailing average over `days` calendar days, the day itself included.
+// Computed over the whole series so a range's first points still average
+// over the days before it.
+export function rollingAverage(series, key, days = 7) {
+  const out = [];
+  let from = 0;
+  for (let i = 0; i < series.length; i++) {
+    const today = dayNumber(series[i].date);
+    while (dayNumber(series[from].date) <= today - days) from += 1;
+    const window = series.slice(from, i + 1);
+    out.push({
+      date: series[i].date,
+      ms: dateMs(series[i].date),
+      value: series[i][key],
+      avg: window.reduce((a, p) => a + p[key], 0) / window.length,
+    });
+  }
+  return out;
+}
+
+export function bodyInRange(points, range, now) {
+  if (RANGES[range] == null) return points;
+  const start = rangeStart(range, [], now);
+  return points.filter((p) => p.ms >= start);
+}

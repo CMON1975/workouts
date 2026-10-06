@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   weekStart, weeklySeries, totals, byTemplate, formatDuration, formatCompact, weekLabel, METRICS,
+  dateMs, rollingAverage, bodyInRange,
 } from './stats.js';
 
 const at = (y, m, d, h = 12) => new Date(y, m - 1, d, h).getTime();
@@ -91,4 +92,29 @@ test('formatting', () => {
   assert.equal(formatCompact(4_200_000), '4.2M');
   assert.equal(formatCompact(3.75), '3.8');
   assert.equal(weekLabel(at(2026, 1, 5)), 'Jan 5');
+});
+
+test('dateMs: a logged YYYY-MM-DD is local midnight', () => {
+  assert.equal(dateMs('2026-10-05'), at(2026, 10, 5, 0));
+  assert.equal(dateMs('2026-11-01'), at(2026, 11, 1, 0));
+});
+
+test('rollingAverage: trailing 7 calendar days, the day itself included', () => {
+  const pts = rollingAverage([
+    { date: '2026-09-01', kg: 102 }, { date: '2026-09-03', kg: 100 },
+    { date: '2026-09-08', kg: 101 }, { date: '2026-09-09', kg: 99 },
+  ], 'kg');
+  assert.deepEqual(pts.map((p) => p.avg), [102, 101, 100.5, 100]);
+  assert.deepEqual(pts.map((p) => p.value), [102, 100, 101, 99]);
+  assert.equal(pts[0].ms, at(2026, 9, 1, 0));
+  // a 7-day window across the DST change still spans 7 days
+  const dst = rollingAverage([{ date: '2026-10-26', kg: 100 }, { date: '2026-11-01', kg: 98 }, { date: '2026-11-02', kg: 96 }], 'kg');
+  assert.deepEqual(dst.map((p) => p.avg), [100, 99, 97]);
+});
+
+test('bodyInRange keeps readings from the range start; All keeps everything', () => {
+  const now = at(2026, 10, 7);
+  const pts = rollingAverage([{ date: '2026-08-01', kg: 103 }, { date: '2026-09-15', kg: 101 }, { date: '2026-10-06', kg: 100 }], 'kg');
+  assert.deepEqual(bodyInRange(pts, '4w', now).map((p) => p.date), ['2026-09-15', '2026-10-06']);
+  assert.equal(bodyInRange(pts, 'all', now).length, 3);
 });
