@@ -953,12 +953,19 @@ function openHistoryMenu() {
 // Stats: one fetch per open; a refetch dims the last render rather than
 // blanking it.
 let statsPayload = null;
+let statsState = { range: 'all', metric: 'time', selected: null };
+function drawStats({ focusWeek = null } = {}) {
+  renderStatsView(els.statsRoot, {
+    payload: statsPayload, state: statsState, focusWeek,
+    onState: (patch, opts) => { statsState = { ...statsState, ...patch }; drawStats(opts); },
+  });
+}
 async function openStats() {
   showView('stats');
   renderStatsLoading(els.statsRoot);
   try {
     statsPayload = await api.stats();
-    renderStatsView(els.statsRoot, { payload: statsPayload });
+    drawStats();
   } catch (err) {
     console.warn('stats failed to load', err);
     renderStatsError(els.statsRoot, openStats);

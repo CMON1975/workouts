@@ -159,6 +159,48 @@ const DIPS = {
   targets: [0, 1, 2].map(r => ({ row_index: r, column: 'reps', target_num: 5 })),
 };
 
+// Two finished sessions for the stats view: split squats a minute ago
+// (3 x 10/side @ 9.5 per DB, 600 s on the stopwatch) and a 45-minute Zone 2
+// walk at 5 kph a week ago (2,700 s), over a 100 kg weigh-in.
+async function seedStats(server) {
+  await server.api('POST', '/api/prescriptions/import', {
+    week_starts_on: '2026-09-28', week_ends_on: '2026-10-04', source: 'e2e', max_new_routines: 1, max_new_templates: 2,
+    days: [{ routine_name: 'E2E', exercises: [
+      { template_name: 'DB Split squat', kind: 'standard', default_rows: 3, rows_fixed: 0, rest_seconds: 90, targets: [],
+        columns: [{ name: 'reps', unit: null, value_type: 'text' }, { name: 'weight', unit: 'lb', value_type: 'text' }] },
+      { template_name: 'Zone 2', kind: 'standard', default_rows: 1, rows_fixed: 1, targets: [],
+        columns: [{ name: 'time', unit: 'min', value_type: 'text' }, { name: 'speed', unit: 'kph', value_type: 'text' }] },
+    ] }],
+  });
+  const tpls = await server.api('GET', '/api/templates');
+  const col = (tpl, name) => tpl.columns.find(c => c.name === name).id;
+  const squat = tpls.find(t => t.name === 'DB Split squat');
+  const walk = tpls.find(t => t.name === 'Zone 2');
+  const now = Date.now();
+  const day = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  await server.api('POST', '/api/body-metrics', { date: day(now - 10 * 86_400_000), metric: 'body_weight', value: '100' });
+  const finish = async (id, tpl, startedAt, values, durationSeconds) => {
+    await server.api('PATCH', `/api/drafts/${id}`, { id, template_id: tpl.id, started_at: startedAt, updated_at: startedAt, client_version: 1, values });
+    await server.api('POST', `/api/sessions/${id}/finalize`, { client_version: 1, duration_seconds: durationSeconds });
+  };
+  await finish('019f1111-0000-7000-8000-000000000001', squat, now - 60_000,
+    [0, 1, 2].flatMap(r => [{ row_index: r, column_id: col(squat, 'reps'), value_text: '10' }, { row_index: r, column_id: col(squat, 'weight'), value_text: '9.5' }]), 600);
+  await finish('019f1111-0000-7000-8000-000000000002', walk, now - 7 * 86_400_000,
+    [{ row_index: 0, column_id: col(walk, 'time'), value_text: '45' }, { row_index: 0, column_id: col(walk, 'speed'), value_text: '5' }], 2700);
+}
+
+async function openStatsView(page) {
+  await waitFor(page, `!document.getElementById('open-stats').hidden`, 'the stats button');
+  await page.evaluate(`document.getElementById('open-stats').click()`);
+  await waitFor(page, `!!document.querySelector('#stats-root .kpi')`, 'the stats tiles');
+}
+
+const kpis = (page) => page.evaluate(`Object.fromEntries([...document.querySelectorAll('#stats-root .kpi')]
+  .map(k => [k.dataset.kpi, k.querySelector('.kpi-value').textContent]))`);
+const legend = (page) => page.evaluate(`[...document.querySelectorAll('#stats-chart .legend li')].map(li => li.textContent)`);
+const columns = (page) => page.evaluate(`document.querySelectorAll('#stats-chart svg g.col').length`);
+const chip = (page, attr, value) => page.evaluate(`document.querySelector('#stats-root [data-${attr}="${value}"]').click()`);
+
 // ---- scenarios -----------------------------------------------------------
 
 const scenarios = {
@@ -248,6 +290,37 @@ const scenarios = {
       assert.match(await page.evaluate(`document.getElementById('stats-root').textContent`), /Couldn.t load stats/);
       await page.evaluate(`window.fetch = window.__fetch; document.getElementById('stats-retry').click()`);
       await waitFor(page, `!!document.getElementById('stats-empty')`, 'recovery after retry');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
+  // Totals and the weekly chart from two seeded sessions; chips re-slice
+  // everything and tapping a week fills the readout.
+  async 'stats: totals, chips, weekly chart and readout'(server) {
+    await seedStats(server);
+    const page = await openBrowser(server.base + '/');
+    try {
+      await openStatsView(page);
+      // all time by default; 600 s + 2,700 s measured
+      assert.deepEqual(await kpis(page), {
+        time: '55 m', energy: '220 kcal', weight: '12.8K lb', reps: '60', distance: '3.8 km', days: '2',
+      });
+      assert.equal(await page.evaluate(`document.querySelector('[data-kpi="time"] .kpi-sub').textContent`), '100% measured');
+      assert.match(await page.evaluate(`document.querySelector('[data-kpi="weight"] .kpi-sub').textContent`), /1,140 lifted · 11\.6K bodyweight \(est\.\) · 0 carried \(est\.\)/);
+
+      assert.equal(await columns(page), 2, 'two weeks, all time');
+      assert.deepEqual(await legend(page), ['Strength', 'Cardio', 'Mobility']);
+      assert.match(await page.evaluate(`document.getElementById('stats-readout').textContent`), /10 m/, 'the current week is selected');
+      await page.evaluate(`document.querySelector('#stats-chart g.col[data-index="0"] .hit').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+      assert.match(await page.evaluate(`document.getElementById('stats-readout').textContent`), /45 m/, 'tapping last week selects it');
+
+      await chip(page, 'metric', 'weight');
+      assert.deepEqual(await legend(page), ['Lifted', 'Bodyweight (est.)', 'Carried (est.)']);
+      assert.equal(await page.evaluate(`document.querySelector('[data-metric="weight"]').getAttribute('aria-pressed')`), 'true');
+      await chip(page, 'metric', 'reps');
+      assert.deepEqual(await legend(page), [], 'one series, no legend box');
+      await chip(page, 'range', '4w');
+      assert.equal(await columns(page), 4);
       return page.errors;
     } finally { await page.close(); }
   },
