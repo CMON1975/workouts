@@ -101,3 +101,13 @@ test('lineChartSvg: dots, a lone point, the selection crosshair and geometry for
   assert.doesNotMatch(line(), /crosshair/);
   assert.match(line(), /data-x0="0" data-x1="259200000" data-left="\d+" data-plot-width="\d+(\.\d+)?"/);
 });
+
+test('lineChartSvg tick labels carry their step\'s decimals', () => {
+  const ticks = (ys) => {
+    const out = lineChartSvg({ lines: [{ cls: 'line-main', points: ys.map((y, i) => ({ x: i * DAY, y })) }], x0: 0, x1: (ys.length - 1) * DAY, width: 300, height: 160, format: String });
+    return [...out.matchAll(/<text class="tick"[^>]*>([^<]+)</g)].map((m) => m[1]);
+  };
+  assert.deepEqual(ticks([41.75, 42.2]), ['41.6', '41.8', '42.0', '42.2']);
+  assert.deepEqual(ticks([43.1, 44]), ['43.00', '43.25', '43.50', '43.75', '44.00']);
+  assert.deepEqual(ticks([99.4, 102]), ['99', '100', '101', '102']);
+});

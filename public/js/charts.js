@@ -92,9 +92,10 @@ export function stackedColumnsSvg({ weeks, keys, width, height, selected = null,
 // zero needn't be on the axis), widened to clean steps.
 export function niceDomain(min, max, ticks = 4) {
   const span = max - min || Math.abs(max) * 0.02 || 1;
-  const step = niceStep(span / ticks);
-  let lo = Math.floor(min / step) * step;
-  let hi = Math.ceil(max / step) * step;
+  const step = Number(niceStep(span / ticks).toPrecision(12));
+  // The epsilon keeps 42.2 / 0.2 = 211.00000000000003 from rounding up a step.
+  let lo = Math.floor(min / step + 1e-9) * step;
+  let hi = Math.ceil(max / step - 1e-9) * step;
   if (hi - lo < step / 2) { lo -= step; hi += step; }
   const out = [];
   for (let v = lo; v <= hi + step / 1e6; v += step) out.push(Math.round(v * 1e6) / 1e6);
@@ -116,6 +117,8 @@ export function lineChartSvg({ lines, x0, x1, width, height, format, selected = 
   const ys = lines.flatMap((l) => l.points.map((p) => p.y));
   const dom = ys.length ? niceDomain(Math.min(...ys), Math.max(...ys)) : { lo: 0, hi: 1, ticks: [0, 1] };
   const sx = (x) => LINE_PAD.left + ((x - d0) / (d1 - d0)) * plotW;
+  // Ticks show as many decimals as their step needs: 42.0 next to 42.2.
+  const tickDecimals = (String(dom.step ?? 1).split('.')[1] ?? '').length;
   const sy = (y) => base - ((y - dom.lo) / (dom.hi - dom.lo)) * plotH;
 
   const parts = [`<svg class="chart line-chart" viewBox="0 0 ${width} ${height}" role="group" aria-label="${esc(title)}" `
@@ -123,7 +126,7 @@ export function lineChartSvg({ lines, x0, x1, width, height, format, selected = 
   for (const t of dom.ticks) {
     const y = r2(sy(t));
     parts.push(`<line class="grid" x1="${LINE_PAD.left}" x2="${width - LINE_PAD.right}" y1="${y}" y2="${y}"/>`);
-    parts.push(`<text class="tick" x="${LINE_PAD.left - 6}" y="${y}" dy="0.32em" text-anchor="end">${esc(format(t))}</text>`);
+    parts.push(`<text class="tick" x="${LINE_PAD.left - 6}" y="${y}" dy="0.32em" text-anchor="end">${esc(t.toFixed(tickDecimals))}</text>`);
   }
   const labels = Math.max(2, Math.floor(plotW / 80));
   for (let k = 0; k < labels; k++) {
