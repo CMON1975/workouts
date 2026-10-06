@@ -28,12 +28,26 @@ export function activeKcal(met, kg, seconds) {
 
 // Cardio without a fixed MET walks at the logged speed and incline over the
 // logged time (else the session's time); no logged speed means 5 kph flat,
-// flagged as assumed.
-export function sessionKcal({ rule, facts, seconds, kg }) {
+// flagged as assumed. An interval program (the pinned prescription's) puts
+// only its hard rounds at the logged speed and incline, which are the hard
+// pace; warm-up, easy and cool-down walk at 5 kph flat.
+// How much of `time` an interval program spends on its hard rounds.
+export function programSplit(program, time) {
+  if (!(program?.rounds > 0 && program?.work_seconds > 0)) return null;
+  const hard = Math.min(time, program.rounds * program.work_seconds);
+  return { hard, easy: time - hard };
+}
+
+export function sessionKcal({ rule, facts, seconds, kg, program = null }) {
   if (rule.category === 'cardio' && rule.met == null) {
     const assumed = facts.speed_kph == null;
     const met = walkMet(facts.speed_kph ?? DEFAULT_WALK_KPH, facts.grade_pct ?? 0);
     const time = facts.work_seconds > 0 ? facts.work_seconds : seconds;
+    const split = assumed ? null : programSplit(program, time);
+    if (split) {
+      const easy = activeKcal(walkMet(DEFAULT_WALK_KPH, 0), kg, split.easy);
+      return { kcal: activeKcal(met, kg, split.hard) + easy, basis: 'intervals' };
+    }
     return { kcal: activeKcal(met, kg, time), basis: assumed ? 'walk_assumed' : 'walk' };
   }
   return { kcal: activeKcal(rule.met, kg, seconds), basis: 'met' };

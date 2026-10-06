@@ -367,6 +367,7 @@ const scenarios = {
       assert.match(estimates, /DB Split squat.*2 dumbbells.*per side.*88% body weight/s);
       assert.match(estimates, /Zone 2.*walking equation/s);
       assert.match(estimates, /100 steps a minute/);
+      assert.match(estimates, /hard rounds at the logged speed and incline/);
 
       const table = await page.evaluate(`[...document.querySelectorAll('#stats-table tr')].map(tr => [...tr.children].map(c => c.textContent))`);
       assert.deepEqual(table[0], ['Week', 'Lifted', 'Bodyweight (est.)', 'Carried (est.)', 'Total']);

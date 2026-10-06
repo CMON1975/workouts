@@ -46,3 +46,20 @@ test('sessionKcal: walking equation for cardio, METs for the rest', () => {
   const stretch = sessionKcal({ rule: ruleFor({ name: 'Cat-camel', columns: [] }), facts: {}, seconds: 600, kg: 100 });
   assert.equal(r1(stretch.kcal), r1(1.3 * 100 * 600 / 3600));
 });
+
+test('sessionKcal: an interval program costs only its rounds at the logged pace', () => {
+  const intervals = ruleFor({ name: 'Intervals', columns: [] });
+  const program = { warmup_seconds: 480, work_seconds: 60, easy_seconds: 120, rounds: 10, cooldown_seconds: 300 };
+  const facts = { speed_kph: 6.5, grade_pct: 9, work_seconds: 2580 };
+  // 600 s hard at 6.5 kph / 9 %, the other 1,980 s easy at 5 kph flat
+  const want = activeKcal(walkMet(6.5, 9), 100, 600) + activeKcal(walkMet(5, 0), 100, 1980);
+  const got = sessionKcal({ rule: intervals, facts, seconds: 2640, kg: 100, program });
+  assert.equal(Math.round(got.kcal), Math.round(want));
+  assert.equal(Math.round(got.kcal), 266);
+  assert.equal(got.basis, 'intervals');
+  // a session shorter than the program can't have more hard time than it had time
+  const short = sessionKcal({ rule: intervals, facts: { ...facts, work_seconds: 300 }, seconds: 300, kg: 100, program });
+  assert.equal(Math.round(short.kcal), Math.round(activeKcal(walkMet(6.5, 9), 100, 300)));
+  // no program: the plain walking estimate
+  assert.equal(sessionKcal({ rule: intervals, facts, seconds: 2640, kg: 100, program: null }).basis, 'walk');
+});

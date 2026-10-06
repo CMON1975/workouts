@@ -27,7 +27,7 @@ export function sessionFacts({ template, columns, values, rule, localDate, bodyK
 
   const facts = {
     counted: false, sets: 0, reps: 0, lifted_lb: 0, carried_lb: 0, bw_lb: 0, corrected: 0,
-    work_seconds: 0, distance_km: 0, speed_kph: null, grade_pct: null, unparsed: 0,
+    work_seconds: 0, distance_km: 0, distance_logged: false, speed_kph: null, grade_pct: null, unparsed: 0,
   };
   const speeds = [];
   const grades = [];
@@ -84,6 +84,7 @@ export function sessionFacts({ template, columns, values, rule, localDate, bodyK
   facts.speed_kph = mean(speeds);
   facts.grade_pct = mean(grades);
   // Without a logged distance, cardio covers speed x time.
+  facts.distance_logged = loggedKm != null;
   facts.distance_km = loggedKm
     ?? (cardio && facts.speed_kph != null ? facts.speed_kph * facts.work_seconds / 3600 : 0);
   return facts;

@@ -192,7 +192,8 @@ function estimatesPanel(payload, sessions) {
     + `${a.handle.lb_per_db} lb per dumbbell (${corrected} rows): the handle weighs about 0.5 lb, not 5. `
     + `Carries count their weight at ${a.carry_steps_per_minute} steps a minute over the logged time. `
     + 'Bodyweight movements add a share of body weight per rep.');
-  p(`Active energy (above resting): walks and intervals use the ACSM walking equation on the logged speed and incline; `
+  p(`Active energy (above resting): walks use the ACSM walking equation on the logged speed and incline; interval `
+    + `sessions put their hard rounds at the logged speed and incline and the rest at ${a.default_walk_kph} kph flat; `
     + `everything else uses a MET (strength ${a.met.strength}, mobility ${a.met.mobility}) over its time.`
     + (assumedWalks ? ` ${assumedWalks} without a logged speed assume ${a.default_walk_kph} kph flat.` : ''));
   if (unparsed) p(`${unparsed} logged values couldn't be read and count as nothing.`);

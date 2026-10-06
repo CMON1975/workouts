@@ -10,7 +10,7 @@ import { parseBodyKg, parseWaistIn } from './parse.js';
 import { ruleFor } from './rules.js';
 import { sessionFacts } from './facts.js';
 import { measuredSeconds, plausible, sessionSeconds, sweptSessionIds, typicalSecondsPerSet } from './duration.js';
-import { bodyKgOn, sessionKcal } from './energy.js';
+import { bodyKgOn, programSplit, sessionKcal } from './energy.js';
 
 const r1 = (n) => Math.round(n * 10) / 10;
 
@@ -34,6 +34,12 @@ function lastPerDay(rows, metric, parse, key) {
     if (v != null) byDate.set(r.date, v);
   }
   return [...byDate].sort(([a], [b]) => (a < b ? -1 : 1)).map(([date, v]) => ({ date, [key]: v }));
+}
+
+// The interval program stored (as JSON) on a prescription exercise.
+function programOf(rest) {
+  if (!rest?.intervals) return null;
+  try { return JSON.parse(rest.intervals); } catch { return null; }
 }
 
 export function buildStats({ sessions, templates, columns, values, rests, bodyMetrics, tzOffset = 0, now = Date.now() }) {
@@ -70,7 +76,13 @@ export function buildStats({ sessions, templates, columns, values, rests, bodyMe
   const out = counted.map(({ session, template, rule, facts, bw, swept: isSwept }) => {
     const rest = restByKey.get(`${session.prescription_id}:${session.template_id}`) ?? null;
     const time = sessionSeconds({ session, facts, category: rule.category, kind: template.kind, swept: isSwept, typical, rest });
-    const energy = sessionKcal({ rule, facts, seconds: time.seconds, kg: bw.kg });
+    const program = programOf(rest);
+    const energy = sessionKcal({ rule, facts, seconds: time.seconds, kg: bw.kg, program });
+    // An interval session covers its hard rounds at the logged (hard) speed
+    // and the rest at walking pace, unless a distance was logged.
+    let distance = facts.distance_km;
+    const split = energy.basis === 'intervals' && !facts.distance_logged ? programSplit(program, facts.work_seconds) : null;
+    if (split) distance = (split.hard * facts.speed_kph + split.easy * DEFAULT_WALK_KPH) / 3600;
     return {
       id: session.id,
       template_id: session.template_id,
@@ -83,7 +95,7 @@ export function buildStats({ sessions, templates, columns, values, rests, bodyMe
       carried_lb: r1(facts.carried_lb),
       bw_lb: r1(facts.bw_lb),
       work_seconds: Math.round(facts.work_seconds),
-      distance_km: Math.round(facts.distance_km * 100) / 100,
+      distance_km: Math.round(distance * 100) / 100,
       seconds: Math.round(time.seconds),
       time_source: time.source,
       kcal: r1(energy.kcal),

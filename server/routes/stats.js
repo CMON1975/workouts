@@ -35,7 +35,7 @@ export default async function statsRoutes(app) {
       values,
       templates: db.prepare('SELECT id, name, kind, archived_at FROM templates').all(),
       columns: db.prepare('SELECT id, template_id, name, unit, value_type, retired_at FROM template_columns').all(),
-      rests: db.prepare('SELECT prescription_id, template_id, rest_seconds, rows_per_rest FROM prescription_exercises').all(),
+      rests: db.prepare('SELECT prescription_id, template_id, rest_seconds, rows_per_rest, intervals FROM prescription_exercises').all(),
       bodyMetrics: db.prepare(`
         SELECT date, metric, value FROM body_metrics
          WHERE metric IN ('body_weight', 'waist')

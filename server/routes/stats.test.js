@@ -150,6 +150,35 @@ test('GET /api/stats returns body weight and waist series, last entry per day', 
   assert.equal(sessions[0].bw_kg, 102);
 });
 
+test('GET /api/stats costs an interval session by its pinned program', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/api/prescriptions/import',
+    payload: {
+      week_starts_on: '2026-10-05', week_ends_on: '2026-10-11',
+      days: [{ routine_name: 'Tue', exercises: [{
+        template_name: 'Intervals', default_rows: 1, rows_fixed: 1, targets: [],
+        columns: ['rounds', 'speed', 'incline', 'time'].map((name) => ({ name, unit: null, value_type: 'text' })),
+        intervals: { warmup_seconds: 480, work_seconds: 60, easy_seconds: 120, rounds: 10, cooldown_seconds: 300 },
+      }] }],
+    },
+  });
+  assert.equal(res.statusCode, 201, res.body);
+  const routineId = app.db.prepare("SELECT id FROM routines WHERE name = 'Tue'").get().id;
+  const started = Date.now() - 50 * 60_000;
+  await app.inject({
+    method: 'PATCH', url: `/api/workouts/${wid(2)}`,
+    payload: { id: wid(2), routine_id: routineId, started_at: started, updated_at: started, client_version: 1 },
+  });
+  await draft(sid(8), 'Intervals', [{ rounds: '10', speed: '6.5', incline: '9', time: '43' }], { startedAt: started, workoutId: wid(2) });
+  await finalize(sid(8), 2640);
+
+  const [s] = (await stats()).sessions;
+  assert.equal(s.kcal_basis, 'intervals');
+  assert.equal(Math.round(s.kcal), 266);
+  // distance too: 600 s at 6.5 kph and 1,980 s at 5 kph, not 43 min at 6.5
+  assert.equal(s.distance_km, Math.round(((600 * 6.5 + 1980 * 5) / 3600) * 100) / 100);
+});
+
 test('GET /api/stats rejects a bad tz_offset', async () => {
   for (const qs of ['?tz_offset=abc', '?tz_offset=9999']) {
     const res = await app.inject({ method: 'GET', url: `/api/stats${qs}` });
