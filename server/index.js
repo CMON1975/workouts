@@ -11,6 +11,7 @@ import routinesRoutes from './routes/routines.js';
 import workoutsRoutes from './routes/workouts.js';
 import prescriptionsRoutes from './routes/prescriptions.js';
 import bodyMetricsRoutes from './routes/body-metrics.js';
+import statsRoutes from './routes/stats.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(__dirname, '..', 'public');
@@ -37,6 +38,7 @@ export async function buildApp(opts = {}) {
   await app.register(bodyMetricsRoutes);
   await app.register(draftsRoutes);
   await app.register(sessionsRoutes);
+  await app.register(statsRoutes);
 
   await app.register(fastifyStatic, {
     root: publicDir,
