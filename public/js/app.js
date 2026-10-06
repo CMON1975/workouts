@@ -1784,8 +1784,6 @@ async function handleArchiveToggle(tpl) {
 
 async function enterApp() {
   show(els.app);
-  show(els.openHistory);
-  show(els.openStats);
   // Before anything that can throw (a flaky fetch, IDB): a failed boot must
   // still flush on hide and drain the outbox later.
   installHideFlush(() => currentSession?.getDraft());
@@ -1801,6 +1799,10 @@ async function enterApp() {
   }
   renderHomeRoutines();
   showView('home');
+  // Only now: a header view opened before this point would be sent back to
+  // Home by the showView above.
+  show(els.openHistory);
+  show(els.openStats);
 
   const workoutResumed = await tryResumeWorkout();
   if (!workoutResumed) {

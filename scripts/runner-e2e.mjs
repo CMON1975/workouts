@@ -40,7 +40,8 @@ async function startServer() {
   };
 }
 
-async function openBrowser(url) {
+// init: a script run before the page's own (e.g. to slow a fetch down).
+async function openBrowser(url, { init = null } = {}) {
   const port = 9333 + Math.floor(Math.random() * 500);
   const prof = mkdtempSync(join(tmpdir(), 'workouts-e2e-cdp-'));
   const chrome = spawn(process.env.CHROMIUM || 'chromium', [
@@ -74,6 +75,7 @@ async function openBrowser(url) {
   });
   await send('Runtime.enable');
   await send('Page.enable');
+  if (init) await send('Page.addScriptToEvaluateOnNewDocument', { source: init });
   await send('Page.navigate', { url });
 
   const evaluate = async (expression) => {
@@ -292,6 +294,24 @@ const scenarios = {
       await waitFor(page, `!!document.getElementById('stats-empty')`, 'recovery after retry');
       return page.errors;
     } finally { await page.close(); }
+  },
+
+  // Boot finishes loading Home after the header buttons appear; a view
+  // opened in that window must not be thrown back to Home.
+  async 'stats and history opened during boot stay open'(server) {
+    const slowRoutines = `const f = window.fetch; window.fetch = (u, o) => String(u).startsWith('/api/routines')
+      ? new Promise(r => setTimeout(r, 1500)).then(() => f(u, o)) : f(u, o);`;
+    for (const [button, view] of [['open-stats', 'stats'], ['open-history', 'history-menu']]) {
+      const page = await openBrowser(server.base + '/', { init: slowRoutines });
+      try {
+        await waitFor(page, `!document.getElementById('${button}').hidden`, button);
+        await page.evaluate(`document.getElementById('${button}').click()`);
+        await sleep(2500);
+        assert.equal(await page.evaluate(`document.getElementById('${view}').hidden`), false, `${view} still open`);
+        assert.deepEqual(page.errors, []);
+      } finally { await page.close(); }
+    }
+    return [];
   },
 
   // Totals and the weekly chart from two seeded sessions; chips re-slice
