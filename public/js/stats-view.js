@@ -254,8 +254,9 @@ export function renderStatsView(root, { payload, state, now = Date.now(), onStat
     chips('Metric', Object.entries(METRICS).map(([m, d]) => [m, d.label]), state.metric, (metric) => onState({ metric, selected: null })),
   );
   const { figure, draw } = chartFigure(weeks, state.metric, selected, (i, keyboard) => onState({ selected: i }, { focusWeek: keyboard ? i : null }), focusWeek);
+  // Chart first: a metric chip changes it, so it must be on screen under them.
   root.replaceChildren(
-    filters, kpiTiles(totals(sessions), state.range), figure,
+    filters, figure, kpiTiles(totals(sessions), state.range),
     exerciseBars(sessions, payload.templates, state.metric),
     estimatesPanel(payload, sessions), tableView(weeks, state.metric),
   );

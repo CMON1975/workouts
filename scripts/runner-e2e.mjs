@@ -328,6 +328,9 @@ const scenarios = {
       assert.equal(await page.evaluate(`document.querySelector('[data-kpi="time"] .kpi-sub').textContent`), '100% measured');
       assert.match(await page.evaluate(`document.querySelector('[data-kpi="weight"] .kpi-sub').textContent`), /1,140 lifted · 11\.6K bodyweight \(est\.\) · 0 carried \(est\.\)/);
 
+      // The chart sits right under the chips, so switching metric is seen
+      assert.deepEqual(await page.evaluate(`[...document.getElementById('stats-root').children].slice(0, 3).map(c => c.id || c.className)`),
+        ['stats-filters', 'stats-chart', 'kpis']);
       assert.equal(await columns(page), 2, 'two weeks, all time');
       assert.deepEqual(await legend(page), ['Strength', 'Cardio', 'Mobility']);
       assert.match(await page.evaluate(`document.getElementById('stats-readout').textContent`), /10 m/, 'the current week is selected');
