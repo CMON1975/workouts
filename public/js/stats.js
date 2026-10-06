@@ -104,8 +104,9 @@ export function byTemplate(sessions, templates, metricName, { limit = 10 } = {})
 }
 
 // Bar lengths as a percent of the track, floored at 1% so a sliver still shows.
+// The longest row fills it: Other trails the ranking but can outweigh the leader.
 export function barWidths(rows) {
-  const top = rows[0].value;
+  const top = Math.max(...rows.map((r) => r.value));
   return rows.map((r) => Math.max(1, (r.value / top) * 100));
 }
 

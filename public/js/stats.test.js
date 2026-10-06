@@ -86,6 +86,12 @@ test('barWidths gives the leader the full track, the rest their share, never und
   assert.deepEqual(barWidths([{ value: 400 }, { value: 100 }, { value: 1 }]), [100, 25, 1]);
 });
 
+test('barWidths scales to the longest row when Other outweighs the leader', () => {
+  // Other sums the whole tail, so it can pass the top exercise (all-time
+  // Time: 1.17x Zone 2) and ran off the card at 117%.
+  assert.deepEqual(barWidths([{ value: 200 }, { value: 100 }, { name: 'Other', value: 400 }]), [50, 25, 100]);
+});
+
 test('formatting', () => {
   assert.equal(formatDuration(0), '0 m');
   assert.equal(formatDuration(3300), '55 m');
