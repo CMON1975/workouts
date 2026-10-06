@@ -148,3 +148,10 @@ test('carries: weight x dumbbells x 100 steps/min over the logged time', () => {
   // no time, no carry
   assert.equal(session('Farmer carry (loaded DBs)', ['time', 'weight'], [{ weight: '19.5' }]).carried_lb, 0);
 });
+
+test('a logged zero is a set not done, not an unreadable cell', () => {
+  const plank = session('Plank', [{ name: 'time', unit: 'sec' }], [{ time: '45' }, { time: '0' }, { time: 0 }]);
+  assert.equal(plank.unparsed, 0);
+  assert.equal(plank.work_seconds, 45);
+  assert.equal(session('BW Push-up', ['reps'], [{ reps: '0' }]).unparsed, 0);
+});

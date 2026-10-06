@@ -47,7 +47,8 @@ export function sessionFacts({ template, columns, values, rule, localDate, bodyK
     const read = (c, fn) => {
       if (!c) return null;
       const out = fn(c);
-      if (out == null) facts.unparsed += 1;
+      // "0" reads as nothing done, which is not the same as unreadable.
+      if (out == null && !/^0+(\.0+)?$/.test(c.raw)) facts.unparsed += 1;
       return out;
     };
 
