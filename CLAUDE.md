@@ -73,6 +73,16 @@ Module split under `public/js/`:
 - `session-state.js` — per-session state machine + debounced saver.
 - `renderer.js` — renders forms from `template_columns` and history/detail views.
 - `uuidv7.js` — ~20-line UUIDv7 impl.
+- `stats.js` (pure: local-Monday weeks, totals, per-exercise ranking), `charts.js` (pure: stacked weekly columns as an SVG string), `stats-view.js` (the Stats view's DOM; names go in via `textContent`).
+
+### Stats (`GET /api/stats`, `server/stats/`)
+
+Read-only, no migration. The server derives per-session facts; the client buckets weeks in local time and re-slices by range/metric without refetching.
+- `parse.js` reads the free-text cells (every column is `text` since 009; May–June values live only in `value_num`, so read `value_text ?? value_num`). Bare times go through the runner's `timeUnitScale`.
+- `rules.js` is an explicit first-match table on template name (dumbbells per rep, per-DB vs total, per-side reps, bodyweight fraction, carry, hold, category). A renamed template falls back on its columns and shows as "default" in the page's estimates panel.
+- `duration.js`: stopwatch → start-to-finish span → logged work + prescribed rest → the template's median pace → set rule, each bounded (≥ 30 s/set, category caps, 3× usual pace). A `finalized_at` shared with a sibling or the workout is the import sweep's stamp, not a finish time (pinned by a prescriptions characterization test).
+- `energy.js`: active kcal = (MET − 1) × kg × h; walks/intervals use the ACSM walking equation on logged speed and incline.
+- Every assumption lives in `constants.js` and is returned under `assumptions`; the page prints them. Handle correction: dumbbell logs before 2026-07-20 lose 4.5 lb per DB.
 
 ## Testing
 
@@ -81,6 +91,8 @@ Use Node's built-in test runner (`node:test`, `node:assert/strict`). Each route 
 - uses `app.inject({ method, url, payload })` rather than a live socket.
 
 `server/hardening.test.js` exercises rate-limit and auth behavior end-to-end. Keep tests hermetic — no shared DB between files.
+
+`scripts/style-contract.test.js` holds `public/css/app.css` to the design bible (`~/claude_projects/design_bible`): colours only via tokens and no `var()` fallbacks, spacing/type/radii on the bible scales, lower-left shadows, slab buttons and cavity panels. Add a token to the bible first, then copy it into the `:root` block. App deviations (17px root, 44px taps, base-size button text) are commented in the CSS.
 
 ## Conventions worth knowing
 
