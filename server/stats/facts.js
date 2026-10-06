@@ -3,7 +3,7 @@
 import {
   LB_PER_KG, cellRaw, parseLoad, parseReps, parseSeconds, parseSpeedKph, parseGradePct, parseDistanceKm,
 } from './parse.js';
-import { HANDLE } from './constants.js';
+import { CARRY_STEPS_PER_SECOND, HANDLE } from './constants.js';
 
 const role = (column) => {
   const n = String(column?.name ?? '').trim().toLowerCase();
@@ -26,7 +26,7 @@ export function sessionFacts({ template, columns, values, rule, localDate, bodyK
   }
 
   const facts = {
-    counted: false, sets: 0, reps: 0, lifted_lb: 0, bw_lb: 0, corrected: 0,
+    counted: false, sets: 0, reps: 0, lifted_lb: 0, carried_lb: 0, bw_lb: 0, corrected: 0,
     work_seconds: 0, distance_km: 0, speed_kph: null, grade_pct: null, unparsed: 0,
   };
   const speeds = [];
@@ -57,18 +57,21 @@ export function sessionFacts({ template, columns, values, rule, localDate, bodyK
     facts.reps += repTotal;
     if (rule.bw_fraction > 0) facts.bw_lb += rule.bw_fraction * bodyKg * LB_PER_KG * repTotal;
 
+    const seconds = read(cell('time'), (c) => parseSeconds(c.raw, c.column, cardio ? 60 : 1));
+    if (seconds != null) facts.work_seconds += seconds;
+
     const load = read(cell('weight'), (c) => parseLoad(c.raw, c.column.unit));
-    if (load && repTotal > 0 && !rule.hold && !rule.carry) {
+    // Carries move their load every step of the logged time; lifts every rep.
+    const moves = rule.carry ? (seconds ?? 0) * CARRY_STEPS_PER_SECOND : rule.hold ? 0 : repTotal;
+    if (load && moves > 0) {
       const total = load.total || (load.implements == null && rule.value_is === 'total');
       // A total is one implement carrying every handle in the pair.
       const implementsMoved = total ? 1 : load.implements ?? Math.max(rule.dbs, 1);
       const shed = handleOff * (total ? Math.max(rule.dbs, 1) : 1);
       if (shed > 0) facts.corrected += 1;
-      facts.lifted_lb += Math.max(0, load.lb - shed) * implementsMoved * repTotal;
+      const moved = Math.max(0, load.lb - shed) * implementsMoved * moves;
+      if (rule.carry) facts.carried_lb += moved; else facts.lifted_lb += moved;
     }
-
-    const seconds = read(cell('time'), (c) => parseSeconds(c.raw, c.column, cardio ? 60 : 1));
-    if (seconds != null) facts.work_seconds += seconds;
     const speed = read(cell('speed') ?? cell('pace'), (c) => parseSpeedKph(c.raw, c.column));
     if (speed != null) speeds.push(speed);
     const grade = read(cell('incline'), (c) => parseGradePct(c.raw));

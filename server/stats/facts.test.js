@@ -129,3 +129,22 @@ test('bodyweight share: fraction x body weight x reps, apart from lifted load', 
   assert.equal(round(push.bw_lb), round(0.55 * 100 * kgToLb * 10));
   assert.equal(session('DB front-rack squat A', ['reps', 'weight'], [{ reps: '5', weight: '29.5' }]).bw_lb, 0);
 });
+
+test('carries: weight x dumbbells x 100 steps/min over the logged time', () => {
+  const farmer = session('Farmer carry (loaded DBs)', [{ name: 'time', unit: 'sec' }, 'weight'],
+    [{ time: '60', weight: '19.5' }, { time: '60', weight: '19.5' }, { time: '45', weight: '19.5' }]);
+  assert.equal(round(farmer.carried_lb), round(19.5 * 2 * (100 / 60) * 165));
+  assert.equal(farmer.lifted_lb, 0);
+  assert.equal(farmer.work_seconds, 165);
+  // suitcase rows are already one side each: no doubling
+  const suitcase = session('Suitcase carry (single DB)', [{ name: 'time', unit: 'sec/side' }, 'weight'],
+    [{ time: '60', weight: '19.5' }, { time: '60', weight: '19.5' }]);
+  assert.equal(round(suitcase.carried_lb), round(19.5 * (100 / 60) * 120));
+  // the handle correction applies to carried dumbbells too
+  const early = session('Farmer carry (loaded DBs)', [{ name: 'time', unit: 'sec' }, 'weight'],
+    [{ time: '30', weight: '15' }], { localDate: '2026-06-01' });
+  assert.equal(round(early.carried_lb), round(10.5 * 2 * (100 / 60) * 30));
+  assert.equal(early.corrected, 1);
+  // no time, no carry
+  assert.equal(session('Farmer carry (loaded DBs)', ['time', 'weight'], [{ weight: '19.5' }]).carried_lb, 0);
+});
