@@ -1,7 +1,7 @@
 // One session's cells -> the quantities the stats page adds up. Pure: the
 // route hands in rows, the rule says how the exercise counts.
 import {
-  cellRaw, parseLoad, parseReps, parseSeconds, parseSpeedKph, parseGradePct, parseDistanceKm,
+  LB_PER_KG, cellRaw, parseLoad, parseReps, parseSeconds, parseSpeedKph, parseGradePct, parseDistanceKm,
 } from './parse.js';
 import { HANDLE } from './constants.js';
 
@@ -14,7 +14,7 @@ const role = (column) => {
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const ticked = (raw) => raw != null && /^(1(\.0+)?|true|yes|done|✓)$/i.test(raw);
 
-export function sessionFacts({ template, columns, values, rule, localDate }) {
+export function sessionFacts({ template, columns, values, rule, localDate, bodyKg }) {
   const colById = new Map(columns.map((c) => [c.id, c]));
   const rows = new Map();
   for (const v of values) {
@@ -26,7 +26,7 @@ export function sessionFacts({ template, columns, values, rule, localDate }) {
   }
 
   const facts = {
-    counted: false, sets: 0, reps: 0, lifted_lb: 0, corrected: 0,
+    counted: false, sets: 0, reps: 0, lifted_lb: 0, bw_lb: 0, corrected: 0,
     work_seconds: 0, distance_km: 0, speed_kph: null, grade_pct: null, unparsed: 0,
   };
   const speeds = [];
@@ -55,6 +55,7 @@ export function sessionFacts({ template, columns, values, rule, localDate }) {
     const repTotal = reps == null ? 0
       : reps.count * (reps.sides === 'per_side' || (reps.sides === 'bare' && rule.per_side) ? 2 : 1);
     facts.reps += repTotal;
+    if (rule.bw_fraction > 0) facts.bw_lb += rule.bw_fraction * bodyKg * LB_PER_KG * repTotal;
 
     const load = read(cell('weight'), (c) => parseLoad(c.raw, c.column.unit));
     if (load && repTotal > 0 && !rule.hold && !rule.carry) {

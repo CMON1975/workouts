@@ -116,3 +116,16 @@ test('handle correction: logs before 2026-07-20 lose 4.5 lb per dumbbell', () =>
   assert.equal(kb.lifted_lb, 200);
   assert.equal(kb.corrected, 0);
 });
+
+test('bodyweight share: fraction x body weight x reps, apart from lifted load', () => {
+  const kgToLb = 2.20462;
+  const split = session('DB Split squat', ['reps', 'weight'], [{ reps: '12', weight: '9.5' }], { bodyKg: 100 });
+  assert.equal(round(split.bw_lb), round(0.88 * 100 * kgToLb * 24));
+  assert.equal(split.lifted_lb, 9.5 * 2 * 24);
+  const rows = session('Pull-up progression (inverted row)', ['reps'], [{ reps: '6' }, { reps: '3' }], { bodyKg: 101 });
+  assert.equal(round(rows.bw_lb), round(0.5 * 101 * kgToLb * 9));
+  assert.equal(rows.lifted_lb, 0);
+  const push = session('BW Pushup (Incline)', ['reps'], [{ reps: '10' }], { bodyKg: 100 });
+  assert.equal(round(push.bw_lb), round(0.55 * 100 * kgToLb * 10));
+  assert.equal(session('DB front-rack squat A', ['reps', 'weight'], [{ reps: '5', weight: '29.5' }]).bw_lb, 0);
+});
