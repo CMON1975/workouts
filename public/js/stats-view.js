@@ -2,7 +2,7 @@
 // lose on a tab eviction, so it skips the drafts/outbox machinery. Every
 // name from the server goes in through textContent, never markup.
 import {
-  METRICS, SERIES_LABELS, RANGES, inRange, weeklySeries, totals, byTemplate, coverage, formatDuration, formatCompact,
+  METRICS, SERIES_LABELS, RANGES, inRange, weeklySeries, totals, byTemplate, barWidths, coverage, formatDuration, formatCompact,
   rangeStart, weekLabel, rollingAverage, bodyInRange,
 } from './stats.js';
 import { stackedColumnsSvg, lineChartSvg } from './charts.js';
@@ -136,12 +136,12 @@ function exerciseBars(sessions, templates, metricName) {
     return card;
   }
   const list = el('ol', { id: 'stats-exercises', class: 'bars' });
-  const top = rows[0].value;
-  for (const r of rows) {
+  const widths = barWidths(rows);
+  for (const [i, r] of rows.entries()) {
     const li = el('li');
     const track = el('span', { class: 'bar-track', 'aria-hidden': 'true' });
     const fill = el('span', { class: 'bar-fill' });
-    fill.style.width = `${Math.max(1, (r.value / top) * 100)}%`;
+    fill.style.width = `${widths[i]}%`;
     track.append(fill);
     li.append(el('span', { class: 'bar-name' }, r.name), el('span', { class: 'bar-value' }, metric.format(r.value)), track);
     list.append(li);

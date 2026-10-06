@@ -103,6 +103,12 @@ export function byTemplate(sessions, templates, metricName, { limit = 10 } = {})
   return [...rows.slice(0, limit), { id: null, name: 'Other', value: other }];
 }
 
+// Bar lengths as a percent of the track, floored at 1% so a sliver still shows.
+export function barWidths(rows) {
+  const top = rows[0].value;
+  return rows.map((r) => Math.max(1, (r.value / top) * 100));
+}
+
 export function coverage(sessions) {
   const out = { stopwatch: 0, span: 0, logged: 0, typical: 0, rule: 0 };
   for (const s of sessions) out[s.time_source] = (out[s.time_source] ?? 0) + 1;

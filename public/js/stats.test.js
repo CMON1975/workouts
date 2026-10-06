@@ -4,7 +4,7 @@ process.env.TZ = 'America/Los_Angeles';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  weekStart, weeklySeries, totals, byTemplate, formatDuration, formatCompact, weekLabel, METRICS,
+  weekStart, weeklySeries, totals, byTemplate, barWidths, formatDuration, formatCompact, weekLabel, METRICS,
   dateMs, rollingAverage, bodyInRange,
 } from './stats.js';
 
@@ -80,6 +80,10 @@ test('byTemplate ranks exercises by the metric and folds the tail into Other', (
   assert.deepEqual(rows, [{ id: 2, name: 'T2', value: 300 }, { id: 1, name: 'T1', value: 200 }, { id: null, name: 'Other', value: 50 }]);
   // zero rows drop out
   assert.deepEqual(byTemplate([s(1, { carried_lb: 0, lifted_lb: 0, bw_lb: 0 })], templates, 'weight'), []);
+});
+
+test('barWidths gives the leader the full track, the rest their share, never under 1%', () => {
+  assert.deepEqual(barWidths([{ value: 400 }, { value: 100 }, { value: 1 }]), [100, 25, 1]);
 });
 
 test('formatting', () => {
