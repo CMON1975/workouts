@@ -468,7 +468,8 @@ function timeColumnOf(template) {
 
 // Completed work phases → the set's time input ("marking the total time I was
 // able to hold"), in the column's unit (tenths of a minute on minutes). Goes through the input's own 'input' event so it persists
-// exactly like typed input; a cell the user already filled is never touched.
+// exactly like typed input; a cell the user already filled, or a sealed
+// exercise's (read-only: the server would drop it), is never touched.
 function drainRecordedTimes() {
   if (!activeWorkout || !stopwatch) return;
   const template = activeWorkout.routine.templates[activeWorkout.currentIndex];
@@ -480,7 +481,7 @@ function drainRecordedTimes() {
     const input = els.runnerRoot.querySelector(
       `input[data-row-index="${row}"][data-column-id="${col.id}"]`,
     );
-    if (!input || input.value !== '') continue;
+    if (!input || input.value !== '' || input.readOnly) continue;
     input.value = recordedTimeValue(seconds, col);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   }

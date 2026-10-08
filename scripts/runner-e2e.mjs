@@ -352,6 +352,32 @@ const scenarios = {
     } finally { await page.close(); }
   },
 
+  // A failed Finish leaves the exercise sealed and read-only; a hold run
+  // after it must not write a time the server would drop.
+  async 'plank: a hold after a failed Finish leaves the sealed cell alone'(server) {
+    await importWeek(server, {
+      template_name: 'Plank',
+      kind: 'standard',
+      columns: [{ name: 'time', unit: 'seconds', value_type: 'number' }],
+      default_rows: 2,
+      rows_fixed: 0,
+      rest_seconds: 2,
+      targets: [0, 1].map(r => ({ row_index: r, column: 'time', target_num: 2 })),
+    });
+    const page = await startRoutine(server);
+    try {
+      await page.evaluate(`window.__alerts = []; window.alert = (m) => window.__alerts.push(m); window.confirm = () => true`);
+      await page.evaluate(FAIL_FINALIZE);
+      await page.evaluate(`document.getElementById('runner-next').click()`);
+      await waitFor(page, `window.__alerts.length > 0`, 'the alert');
+      assert.deepEqual(await editable(page), []);
+      await press(page);
+      await sleep(2600);
+      assert.equal(await inputValue(page, 0, 'time'), '', 'no time written into the sealed cell');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // HANDOFF 2026-09-27 (b1e5b02, 24503ba): a retired time column is off the
   // form, and the template runs as a plain rep lift (press = rest).
   async 'retired time column: off the form, plain rest'(server) {
