@@ -87,6 +87,14 @@ async function openBrowser(url, { init = null, viewport = null } = {}) {
     if (r.result?.exceptionDetails) throw new Error(`page: ${r.result.exceptionDetails.text} in ${expression}`);
     return r.result?.result?.value;
   };
+  // Page.navigate answers before the new document replaces about:blank;
+  // until it does, getElementById() finds nothing and a check throws.
+  let arrived = false;
+  for (let i = 0; i < 50 && !arrived; i += 1) {
+    arrived = await evaluate(`location.href !== 'about:blank' && document.readyState !== 'loading'`);
+    if (!arrived) await sleep(100);
+  }
+  if (!arrived) throw new Error(`the page never left about:blank for ${url}`);
   // A real key press, default action included (Tab moves focus).
   const key = async (name, { shift = false } = {}) => {
     const codes = { Tab: 9, Enter: 13, Escape: 27 };
