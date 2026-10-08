@@ -178,11 +178,13 @@ test('spacing comes from the bible scale', () => {
 
 test('shadows fall to the lower left (one light source)', () => {
   for (const d of ruleDecls.filter((x) => x.prop === 'box-shadow' && x.value !== 'none')) {
+    // A shadow token is checked by what it holds.
+    const value = d.value.replace(/var\((--[\w-]+)\)/g, (m, name) => LIGHT_TOKENS.get(name) ?? m);
     // Split the shadow list on top-level commas.
     const layers = [];
     let cur = '';
     let depth = 0;
-    for (const ch of d.value) {
+    for (const ch of value) {
       if (ch === '(') depth++;
       if (ch === ')') depth--;
       if (ch === ',' && depth === 0) { layers.push(cur.trim()); cur = ''; continue; }
@@ -210,7 +212,8 @@ test('controls are extruded slabs and panels are hairline cavities', () => {
     .map((d) => [d.prop, d.value]));
   const EXTRUDE = '-2px 2px 4px rgba(15, 23, 42, 0.28), inset 1px -1px 0 rgba(255, 255, 255, 0.10), inset -1px 1px 0 rgba(15, 23, 42, 0.10)';
   const PRIMARY = '-2px 3px 5px rgba(15, 23, 42, 0.40), inset 1px -1px 0 rgba(255, 255, 255, 0.08), inset -1px 1px 0 rgba(0, 0, 0, 0.25)';
-  const CAVITY = 'inset 1px -1px 2px rgba(15, 23, 42, 0.18)';
+  const HAIRLINE = 'inset 1px -1px 2px rgba(15, 23, 42, 0.18)';
+  const CAVITY = 'var(--inset-shadow-hairline)';
   const PRESS = 'inset 1px -1px 2px rgba(15, 23, 42, 0.28), inset -1px 1px 0 rgba(255, 255, 255, 0.04)';
 
   const primary = rule('button');
@@ -235,6 +238,11 @@ test('controls are extruded slabs and panels are hairline cavities', () => {
     const r = rule(sel);
     assert.equal(r.get('background'), 'var(--color-surface-inset)', `${sel} background`);
     assert.equal(r.get('box-shadow'), CAVITY, `${sel} shadow`);
+  }
+  // The bible's cavity depth is one token, never a repeated literal.
+  assert.equal(LIGHT_TOKENS.get('--inset-shadow-hairline'), HAIRLINE);
+  for (const d of ruleDecls.filter((x) => x.prop === 'box-shadow')) {
+    assert.notEqual(d.value, HAIRLINE, `hairline literal instead of the token in ${where(d)}`);
   }
 });
 

@@ -77,6 +77,11 @@
   --spacing-24: 6rem;
   --spacing-32: 8rem;
 
+  /* The canonical cavity depth: the lower-left light falls into the
+     cavity's bottom-left. Presses share its geometry, darker, and spell
+     out their own. */
+  --inset-shadow-hairline: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+
   --noise-bg: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0.2 0.2 0.2 0 0.15 0.2 0.2 0.2 0 0.15 0.2 0.2 0.2 0 0.15 0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/></svg>");
 
   /* Light theme (OS light) */
@@ -184,7 +189,7 @@ html:has(.stopwatch-bar:not([hidden])) {
   z-index: 40; /* under the .manage-row drag ghost (50) */
   /* A cavity band: opaque so content scrolls under it */
   background: var(--color-surface-inset);
-  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--inset-shadow-hairline);
 }
 
 .stopwatch-inner {
@@ -255,7 +260,7 @@ input, button {
 /* Fields are carved into the surface: the bible's hairline cavity. */
 input[type='text'], input[type='number'], input[type='date'], select, textarea {
   background: var(--color-surface-inset);
-  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--inset-shadow-hairline);
   color: var(--color-fg);
   border: 0;
   border-radius: 2px;
@@ -501,7 +506,7 @@ button:disabled {
 
 .banner {
   background: var(--color-surface-inset);
-  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--inset-shadow-hairline);
   padding: var(--spacing-2) var(--spacing-3);
   border-radius: 2px;
   margin-bottom: var(--spacing-3);
@@ -644,7 +649,7 @@ button.danger:active:not(:disabled) {
   gap: var(--spacing-2);
   padding: var(--spacing-2);
   background: var(--color-surface-inset);
-  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--inset-shadow-hairline);
   border-radius: 2px;
 }
 .confirm-bar[hidden] { display: none; }
@@ -734,7 +739,7 @@ button.danger:active:not(:disabled) {
 
 .manage-row {
   background: var(--color-surface-inset);
-  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--inset-shadow-hairline);
   border-radius: 2px;
   padding: var(--spacing-3) var(--spacing-4);
   display: flex;
@@ -807,7 +812,7 @@ button.danger:active:not(:disabled) {
   margin-top: var(--spacing-2);
   padding: var(--spacing-2) var(--spacing-3);
   background: var(--color-surface-inset);
-  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--inset-shadow-hairline);
   border-left: 3px solid var(--color-rest);
   font-size: var(--text-sm);
 }
@@ -883,7 +888,7 @@ button.small {
   align-items: center;
   padding: var(--spacing-2);
   background: var(--color-surface-inset);
-  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--inset-shadow-hairline);
   border-radius: 2px;
 }
 
@@ -963,7 +968,7 @@ button.small {
   gap: var(--spacing-3);
   padding: var(--spacing-2) var(--spacing-3);
   background: var(--color-surface-inset);
-  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--inset-shadow-hairline);
   border-radius: 2px;
 }
 
@@ -1141,7 +1146,7 @@ button.small {
 /* Each exercise of a workout detail sits in its own cavity panel */
 .workout-child.row-foreground {
   background: var(--color-surface-inset);
-  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--inset-shadow-hairline);
   padding: 0 var(--spacing-3) var(--spacing-2);
 }
 .workout-child-wrap { margin-top: var(--spacing-3); }
@@ -1252,7 +1257,7 @@ button.chip[aria-pressed='true'] {
   gap: var(--spacing-1);
   padding: var(--spacing-3);
   background: var(--color-surface-inset);
-  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--inset-shadow-hairline);
   border-radius: 2px;
   min-width: 0;
 }
@@ -1275,7 +1280,7 @@ button.chip[aria-pressed='true'] {
   margin: 0 0 var(--spacing-4);
   padding: var(--spacing-3);
   background: var(--color-surface-inset);
-  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--inset-shadow-hairline);
   border-radius: 2px;
 }
 .stats-card-title {
