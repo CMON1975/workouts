@@ -220,7 +220,7 @@ test('controls are extruded slabs, panels are hairline cavities and fields are p
   const PRESS = 'inset 1px -1px 2px rgba(15, 23, 42, 0.28), inset -1px 1px 0 rgba(255, 255, 255, 0.04)';
 
   const primary = rule('button');
-  assert.equal(primary.get('background'), 'var(--color-neutral-800)');
+  assert.equal(primary.get('background'), 'var(--color-accent)');
   assert.equal(primary.get('color'), 'var(--color-neutral-50)');
   assert.equal(primary.get('box-shadow'), PRIMARY);
   assert.equal(rule('button.danger').get('background'), 'var(--color-danger)');
@@ -253,6 +253,26 @@ test('controls are extruded slabs, panels are hairline cavities and fields are p
   for (const d of ruleDecls.filter((x) => x.prop === 'box-shadow')) {
     assert.notEqual(d.value, HAIRLINE, `hairline literal instead of the token in ${where(d)}`);
   }
+});
+
+// Rules inside one at-rule whose selector list names `sel`.
+const ruleIn = (media, sel) => new Map(DECLS
+  .filter((d) => d.context.length === 2 && d.context[0] === media
+    && d.context[1].split(',').map((x) => x.trim()).includes(sel))
+  .map((d) => [d.prop, d.value]));
+
+// The bible's primary (2026-10-06) is the accent slab: neutral-800 in light,
+// pale in dark, where the ink flips dark and hover and press step the other
+// way. Raw neutral-800 sat darker than a dark cavity, so in dark the most
+// important button read as the least prominent face.
+// A toggle that stays on is a primary button, not a secondary one with an
+// override (whose hover and press were the secondary's).
+test('the primary is the accent slab; in dark its ink and steps flip', () => {
+  assert.equal(rule('button').get('background'), 'var(--color-accent)');
+  assert.equal(ruleIn(DARK, 'button').get('color'), 'var(--color-neutral-900)');
+  assert.equal(rule("button.chip[aria-pressed='true']").size, 0, 'pressed chip override');
+  assert.equal(ruleIn(DARK, 'button:active:not(:disabled)').get('background'), 'var(--color-neutral-300)');
+  assert.equal(ruleIn(`${DARK} and (hover: hover)`, 'button:hover:not(:disabled)').get('background'), 'var(--color-neutral-100)');
 });
 
 // The bible's forms: focus is the button's 2px fg outline, and a group of

@@ -686,6 +686,9 @@ const scenarios = {
       await chip(page, 'metric', 'weight');
       assert.deepEqual(await legend(page), ['Lifted', 'Bodyweight (est.)', 'Carried (est.)']);
       assert.equal(await page.evaluate(`document.querySelector('[data-metric="weight"]').getAttribute('aria-pressed')`), 'true');
+      // A toggle that stays on wears the primary; off, it's secondary
+      assert.deepEqual(await page.evaluate(`[...document.querySelectorAll('[data-metric]')].map(b => b.dataset.metric + (b.classList.contains('secondary') ? '' : ' primary'))`),
+        ['time', 'energy', 'weight primary', 'reps']);
       await chip(page, 'metric', 'reps');
       assert.deepEqual(await legend(page), [], 'one series, no legend box');
       await chip(page, 'range', '4w');

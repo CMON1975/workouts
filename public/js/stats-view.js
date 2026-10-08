@@ -43,7 +43,8 @@ export function renderStatsError(root, onRetry) {
 function chips(name, options, current, onPick) {
   const group = el('div', { class: 'chips', role: 'group', 'aria-label': name });
   for (const [value, label] of options) {
-    const b = el('button', { type: 'button', class: 'secondary chip', [`data-${name.toLowerCase()}`]: value, 'aria-pressed': String(value === current) }, label);
+    // On wears the primary, off the secondary (the bible's toggle)
+    const b = el('button', { type: 'button', class: value === current ? 'chip' : 'secondary chip', [`data-${name.toLowerCase()}`]: value, 'aria-pressed': String(value === current) }, label);
     b.addEventListener('click', () => onPick(value));
     group.append(b);
   }
