@@ -496,3 +496,4 @@ Deployed 2026-10-04: prod at `513df7f` (static only, no restart); prod serves th
 - All five stats e2e scenarios failed on the committed code (checks ran in about:blank) until `17af15b`. Plank flaked once (bar read `Lap 0:00`: the prescription fetch failed and only warned); 12 reruns green.
 - The scroll padding is a constant 8rem for a bar of 6.15rem, or 7.55rem with the interval label. iOS's own form-assistant scrolling wasn't checked.
 - Not deployed: static only (`git pull`, no restart). The tailnet dev server runs on `data/smoke.db`, a copy of the 10-06 prod snapshot.
+Deployed 2026-10-08: prod pulled from `b4d92b4` to `08221b5` (static only, no restart); prod serves `confirm.js` with `no-cache`, and a headless load boots with 7 routines and no console errors.
