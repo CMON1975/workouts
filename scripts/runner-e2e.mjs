@@ -97,7 +97,7 @@ async function openBrowser(url, { init = null, viewport = null } = {}) {
   if (!arrived) throw new Error(`the page never left about:blank for ${url}`);
   // A real key press, default action included (Tab moves focus).
   const key = async (name, { shift = false } = {}) => {
-    const codes = { Tab: 9, Enter: 13, Escape: 27, Space: 32 };
+    const codes = { Tab: 9, Enter: 13, Escape: 27, Space: 32, ArrowLeft: 37, ArrowRight: 39 };
     const base = { key: name === 'Space' ? ' ' : name, code: name, windowsVirtualKeyCode: codes[name], modifiers: shift ? 8 : 0 };
     await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
     if (name === 'Enter') await send('Input.dispatchKeyEvent', { type: 'char', text: '\r', ...base });
@@ -615,6 +615,40 @@ const scenarios = {
       await pick('standard');
       seen.push(await shown());
       assert.deepEqual(seen, [false, true, false]);
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
+  // Type is the bible's segmented pick: a native radio group under painted
+  // faces, the pick a primary face and the rest secondary; a tap on a face
+  // or an arrow key moves it, and keyboard focus rings the face.
+  async 'new exercise: Type is a segmented pick'(server) {
+    const page = await openBrowser(server.base + '/');
+    const look = () => page.evaluate(`[...document.querySelectorAll('.nt-kind label')].map((l) => {
+      const face = l.querySelector('input + span'), s = face && getComputedStyle(face);
+      if (!s) return l.textContent.trim();
+      const fill = s.backgroundColor;
+      return face.textContent + ' ' + (fill === getComputedStyle(document.getElementById('nt-submit')).backgroundColor ? 'pick'
+        : fill === getComputedStyle(document.getElementById('nt-add-col')).backgroundColor ? 'face' : fill)
+        + (s.outlineStyle === 'none' ? '' : ' ringed');
+    })`);
+    try {
+      await waitFor(page, `!document.getElementById('open-stats').hidden`, 'home');
+      await page.evaluate(`document.getElementById('new-template').click()`);
+      await waitFor(page, `document.getElementById('nt-name').checkVisibility()`, 'new exercise');
+      const seen = [await look()];
+      await page.evaluate(`[...document.querySelectorAll('.nt-kind label')][1].querySelector('span').click()`);
+      seen.push(await look());
+      await page.evaluate(`document.querySelector('input[name=nt-kind]:checked').focus()`);
+      await page.key('Tab', { shift: true });
+      await page.key('Tab');
+      await page.key('ArrowLeft');
+      seen.push(await look());
+      assert.deepEqual(seen, [
+        ['Standard pick', 'Checkbox face'],
+        ['Standard face', 'Checkbox pick'],
+        ['Standard pick ringed', 'Checkbox face'],
+      ]);
       return page.errors;
     } finally { await page.close(); }
   },

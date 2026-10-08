@@ -157,10 +157,13 @@
           <input id="nt-name" type="text" required maxlength="100" autocomplete="off" placeholder="e.g. Lunge, Walk">
         </label>
 
-        <fieldset class="field nt-kind">
+        <fieldset class="field nt-kind" aria-describedby="nt-kind-help">
           <legend>Type</legend>
-          <label><input type="radio" name="nt-kind" value="standard" checked> Standard (rows × columns)</label>
-          <label><input type="radio" name="nt-kind" value="checkbox"> Checkbox (just done / not done)</label>
+          <div class="seg-concrete">
+            <label><input type="radio" name="nt-kind" value="standard" checked><span>Standard</span></label>
+            <label><input type="radio" name="nt-kind" value="checkbox"><span>Checkbox</span></label>
+          </div>
+          <p class="muted" id="nt-kind-help">Standard logs rows × columns; Checkbox is just done / not done.</p>
         </fieldset>
 
         <label class="field" id="nt-description-field" hidden>

@@ -508,7 +508,7 @@ button:disabled {
   margin: 0 0 var(--spacing-2) 0;
 }
 .nt-kind { display: flex; flex-direction: column; gap: var(--spacing-1); }
-.nt-kind label { font-weight: normal; }
+.nt-kind p { margin: 0; }
 
 .session-footer {
   display: flex;
@@ -754,7 +754,8 @@ fieldset.field {
   color: var(--color-fg);
   cursor: pointer;
 }
-.check-concrete > input {
+.check-concrete > input,
+.seg-concrete input {
   position: absolute;
   top: 0;
   left: 0;
@@ -792,6 +793,47 @@ fieldset.field {
 .check-concrete > input:checked + .check-box > svg.icon { visibility: visible; }
 @media (prefers-color-scheme: dark) {
   .check-concrete > input:checked + .check-box { color: var(--color-neutral-900); }
+}
+
+/* One of a few is the bible's segmented pick: a native radio group (one tab
+   stop, arrow keys move the pick), each input clipped inside its label
+   under a secondary slab, in a carved well. The pick wears the primary.
+   App deviation: 44px faces at base size. */
+.seg-concrete {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1);
+  border-radius: 2px;
+  background: var(--color-surface-inset);
+  box-shadow: var(--inset-shadow-hairline);
+}
+.seg-concrete > label { position: relative; display: flex; }
+.seg-concrete span {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 var(--spacing-4);
+  border-radius: 2px;
+  background: var(--color-surface-raised);
+  color: var(--color-fg);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: -2px 2px 4px rgba(15, 23, 42, 0.28), inset 1px -1px 0 rgba(255, 255, 255, 0.10), inset -1px 1px 0 rgba(15, 23, 42, 0.10);
+}
+.seg-concrete input:checked + span {
+  background: var(--color-accent);
+  color: var(--color-neutral-50);
+  box-shadow: -2px 3px 5px rgba(15, 23, 42, 0.40), inset 1px -1px 0 rgba(255, 255, 255, 0.08), inset -1px 1px 0 rgba(0, 0, 0, 0.25);
+}
+.seg-concrete input:focus-visible + span {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+}
+@media (prefers-color-scheme: dark) {
+  .seg-concrete input:checked + span { color: var(--color-neutral-900); }
 }
 
 /* A raised slab over the scrim, shadow cast down-left like every surface */

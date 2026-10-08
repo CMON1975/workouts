@@ -224,8 +224,13 @@ test('controls are extruded slabs, panels are hairline cavities and fields are p
   assert.equal(primary.get('color'), 'var(--color-neutral-50)');
   assert.equal(primary.get('box-shadow'), PRIMARY);
   assert.equal(rule('button.danger').get('background'), 'var(--color-danger)');
+  // A segmented pick wears the primary (dark ink in dark)
+  const pick = rule('.seg-concrete input:checked + span');
+  assert.equal(pick.get('background'), 'var(--color-accent)');
+  assert.equal(pick.get('box-shadow'), PRIMARY);
+  assert.equal(ruleIn(DARK, '.seg-concrete input:checked + span').get('color'), 'var(--color-neutral-900)');
 
-  for (const sel of ['button.secondary', '.icon-btn', '.template-btn', '.history-row']) {
+  for (const sel of ['button.secondary', '.icon-btn', '.template-btn', '.history-row', '.seg-concrete span']) {
     const r = rule(sel);
     assert.equal(r.get('background'), 'var(--color-surface-raised)', `${sel} background`);
     assert.equal(r.get('box-shadow'), EXTRUDE, `${sel} shadow`);
@@ -240,7 +245,7 @@ test('controls are extruded slabs, panels are hairline cavities and fields are p
     assert.equal(rule(sel).get('box-shadow'), PRESS, `${sel} press`);
   }
 
-  for (const sel of ['.manage-row', '.banner', '.routine-card-targets', '.stopwatch-bar', '.confirm-bar', '.rt-row.selected']) {
+  for (const sel of ['.manage-row', '.banner', '.routine-card-targets', '.stopwatch-bar', '.confirm-bar', '.rt-row.selected', '.seg-concrete']) {
     const r = rule(sel);
     assert.equal(r.get('background'), 'var(--color-surface-inset)', `${sel} background`);
     assert.equal(r.get('box-shadow'), CAVITY, `${sel} shadow`);
@@ -281,7 +286,7 @@ test('the primary is the accent slab; in dark its ink and steps flip', () => {
 
 // The bible's forms: focus is the button's 2px fg outline, and a group of
 // choices is a borderless fieldset whose legend is the field's label.
-test('fields and checkboxes take the button focus ring; a fieldset is a field under its label', () => {
+test('fields, checkboxes and segments take the button focus ring; a fieldset is a field under its label', () => {
   for (const sel of ['button', "input[type='text']", "input[type='number']", "input[type='date']", 'select', 'textarea']) {
     const r = rule(`${sel}:focus-visible`);
     assert.equal(r.get('outline'), '2px solid var(--color-fg)', `${sel} ring`);
@@ -298,7 +303,9 @@ test('fields and checkboxes take the button focus ring; a fieldset is a field un
   assert.equal(box.get('box-shadow'), 'inset 0 0 0 1px var(--color-field-edge)');
   assert.equal(rule('.check-concrete > input:checked + .check-box').get('background'), 'var(--color-accent)');
   assert.equal(ruleIn(DARK, '.check-concrete > input:checked + .check-box').get('color'), 'var(--color-neutral-900)');
-  assert.equal(rule('.check-concrete > input:focus-visible + .check-box').get('outline'), '2px solid var(--color-fg)');
+  for (const sel of ['.check-concrete > input:focus-visible + .check-box', '.seg-concrete input:focus-visible + span']) {
+    assert.equal(rule(sel).get('outline'), '2px solid var(--color-fg)', `${sel} ring`);
+  }
   const legend = rule('.field > legend');
   const label = rule('.field > span');
   assert.equal(legend.get('padding'), '0');
