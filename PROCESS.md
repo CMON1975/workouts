@@ -497,3 +497,9 @@ Deployed 2026-10-04: prod at `513df7f` (static only, no restart); prod serves th
 - The scroll padding is a constant 8rem for a bar of 6.15rem, or 7.55rem with the interval label. iOS's own form-assistant scrolling wasn't checked.
 - Not deployed: static only (`git pull`, no restart). The tailnet dev server runs on `data/smoke.db`, a copy of the 10-06 prod snapshot.
 Deployed 2026-10-08: prod pulled from `b4d92b4` to `08221b5` (static only, no restart); prod serves `confirm.js` with `no-cache`, and a headless load boots with 7 routines and no console errors.
+
+---
+## 2026-10-08 — Hairline shadow token; boot race on an early routine pick
+**What:** Eleven cavity rules now read `var(--inset-shadow-hairline)` instead of repeating its literal (`2b27656`); the contract requires the token and resolves var() before its shadow-direction check (a wrong-way token fails both tests). A routine picked before boot's resume check finishes now waits for it (`44dad17`). 482/482, e2e 14/14 over four runs.
+**Why:** The bible's FYI (the token is stable since 10-07). The boot race surfaced as flakes in the new End and Finish scenarios: Home renders the routines, then `enterApp` awaits `tryResumeWorkout()`; a pick in that window started a run, the check found it open on the server and mounted it again, and the redraw dropped typed values.
+**Notes:** User chose "the pick waits" over "the check yields" (which would leave an older open workout open on the server). The check settles in a `finally`, so a throwing IDB read can't strand a tap. The new boot scenario delays `/api/workouts?` by 1.5 s and fails every time without the fix. The plank flake from earlier is likely the same race. Paper-field tokens (a visible restyle of every input) are still the user's call. Not deployed: static only.
