@@ -598,6 +598,26 @@ const scenarios = {
     } finally { await page.close(); }
   },
 
+  // New exercise asks for a Description only for a checkbox exercise; a
+  // standard one saves without it, so the field goes with the choice.
+  async 'new exercise: Description shows only for Checkbox'(server) {
+    const page = await openBrowser(server.base + '/');
+    const shown = () => page.evaluate(`document.getElementById('nt-description-field').checkVisibility()`);
+    const pick = (kind) => page.evaluate(`document.querySelector('input[name=nt-kind][value=${kind}]').click()`);
+    try {
+      await waitFor(page, `!document.getElementById('open-stats').hidden`, 'home');
+      await page.evaluate(`document.getElementById('new-template').click()`);
+      await waitFor(page, `document.getElementById('nt-name').checkVisibility()`, 'new exercise');
+      const seen = [await shown()];
+      await pick('checkbox');
+      seen.push(await shown());
+      await pick('standard');
+      seen.push(await shown());
+      assert.deepEqual(seen, [false, true, false]);
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // The stats view opens from its header button next to History; a fresh
   // DB says so, and a failed fetch offers a retry that recovers.
   async 'stats: header button opens it; empty, error and retry'(server) {
