@@ -157,15 +157,57 @@ async function startRoutine(server, opts) {
   return page;
 }
 
-function importWeek(server, exercise) {
+function importWeek(server, ...exercises) {
   return server.api('POST', '/api/prescriptions/import', {
     week_starts_on: '2026-09-28',
     week_ends_on: '2026-10-04',
     source: 'e2e',
     max_new_routines: 1,
-    max_new_templates: 1,
-    days: [{ routine_name: 'E2E', exercises: [exercise] }],
+    max_new_templates: exercises.length,
+    days: [{ routine_name: 'E2E', exercises }],
   });
+}
+
+// A plain lift with no targets, so Finish never asks about blank sets.
+const lift = (name) => ({
+  template_name: name,
+  kind: 'standard',
+  columns: [{ name: 'reps', unit: 'reps', value_type: 'number' }],
+  default_rows: 2,
+  rows_fixed: 0,
+  rest_seconds: 3,
+  targets: [],
+});
+
+const typeFirst = (page, value) => page.evaluate(`(() => {
+  const i = document.querySelector('#runner-root input');
+  i.value = ${JSON.stringify(value)};
+  i.dispatchEvent(new Event('input', { bubbles: true }));
+})()`);
+
+// The End confirm: which bar shows, the focused control's words, the
+// status line, and whether the box is waiting.
+const endBox = (page) => page.evaluate(`(() => {
+  const box = document.querySelector('#runner [data-confirm]');
+  const el = document.activeElement;
+  return {
+    bar: [...box.querySelectorAll('[data-confirm-bar]')].filter(b => getComputedStyle(b).display !== 'none').map(b => b.dataset.confirmBar).join(),
+    focus: el === document.body ? 'body' : el.id || el.textContent.trim(),
+    status: box.querySelector('[data-confirm-status]').textContent,
+    busy: box.getAttribute('aria-busy') === 'true',
+  };
+})()`);
+
+// The workout finalize request fails (after a beat) until restored.
+const FAIL_FINALIZE = `window.__fetch = window.fetch; window.fetch = (u, o) =>
+  String(u).startsWith('/api/workouts/') && String(u).endsWith('/finalize')
+    ? new Promise((_, rej) => setTimeout(() => rej(new TypeError('Failed to fetch')), 600))
+    : window.__fetch(u, o)`;
+
+async function onlyWorkout(server) {
+  const [w, ...rest] = await server.api('GET', '/api/workouts');
+  assert.equal(rest.length, 0, 'one workout');
+  return { finalized: w.finalized_at != null, sessions: w.sessions.filter(x => x.finalized_at).length };
 }
 
 // Dip progression's shape: a time column, three reps-only rows.
@@ -329,6 +371,84 @@ const scenarios = {
         }
       }
       assert.deepEqual(hidden, [], 'focused controls overlapping the bar');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
+  // HANDOFF 2026-10-08: End workout asks in the runner's action bar (the
+  // bible's confirm), not a modal; the done bar says what happened.
+  async 'end workout: asks in the bar; Escape and Keep going back out; End ends'(server) {
+    await importWeek(server, lift('Lift A'), lift('Lift B'));
+    const page = await startRoutine(server);
+    try {
+      assert.equal(await page.evaluate(`!!document.getElementById('end-early-dialog')`), false, 'no modal');
+      assert.deepEqual(await page.evaluate(`document.getElementById('runner-end').className`), 'secondary small');
+      await page.evaluate(`document.getElementById('runner-end').focus()`);
+      assert.deepEqual(await endBox(page), { bar: 'idle', focus: 'runner-end', status: '', busy: false });
+
+      await page.evaluate(`document.getElementById('runner-end').click()`);
+      assert.deepEqual(await endBox(page), { bar: 'ask', focus: 'Keep going', status: '', busy: false });
+      assert.equal(await page.evaluate(`document.querySelector('#runner [data-confirm-bar="ask"]').textContent.replace(/\\s+/g, ' ').trim()`),
+        'End this workout now? Past exercises are saved; remaining ones are skipped. Keep going End workout');
+      await page.key('Escape');
+      assert.deepEqual(await endBox(page), { bar: 'idle', focus: 'runner-end', status: '', busy: false });
+
+      await page.evaluate(`document.getElementById('runner-end').click()`);
+      await page.evaluate(`document.querySelector('#runner [data-confirm-keep]').click()`);
+      assert.deepEqual(await endBox(page), { bar: 'idle', focus: 'runner-end', status: '', busy: false });
+
+      await typeFirst(page, '5');
+      await page.evaluate(`document.getElementById('runner-end').click()`);
+      await page.evaluate(`document.querySelector('#runner [data-confirm-go]').click()`);
+      await waitFor(page, `!document.querySelector('#runner [data-confirm-bar="done"]').hidden`, 'the done bar');
+      assert.deepEqual(await endBox(page), { bar: 'done', focus: 'runner-home', status: '', busy: false });
+      assert.equal(await page.evaluate(`document.querySelector('#runner [data-confirm-bar="done"] p').textContent`),
+        'Workout ended: 1 of 2 exercises saved.');
+      assert.equal(await page.evaluate(`document.getElementById('stopwatch-bar').hidden`), true);
+      assert.equal(await page.evaluate(`document.querySelectorAll('#runner-root input').length`), 0, 'the form is gone');
+      assert.deepEqual(await onlyWorkout(server), { finalized: true, sessions: 1 });
+
+      await page.evaluate(`document.querySelector('#runner [data-confirm-bar="done"] button').click()`);
+      assert.equal(await page.evaluate(`document.getElementById('home').hidden`), false, 'Home goes home');
+      await page.evaluate(`document.querySelector('#routine-list button').click()`);
+      await waitFor(page, `document.querySelectorAll('#runner-root input').length > 0`, 'the next run');
+      assert.equal((await endBox(page)).bar, 'idle', 'the next run starts on the idle bar');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
+  // The end request can fail: the question holds with the reason, nothing
+  // is lost, and Enter on End workout tries again.
+  async 'end workout: a failed request stays on the question; Enter retries'(server) {
+    await importWeek(server, lift('Lift A'), lift('Lift B'));
+    const page = await startRoutine(server);
+    try {
+      await typeFirst(page, '5');
+      await page.evaluate(FAIL_FINALIZE);
+      await page.evaluate(`document.getElementById('runner-end').click()`);
+      await page.key('Tab'); // Keep going -> End workout
+      await page.key('Enter');
+      await sleep(100);
+      assert.deepEqual(await endBox(page), { bar: 'ask', focus: 'End workout', status: 'Ending the workout…', busy: true });
+      await page.evaluate(`document.querySelector('#runner [data-confirm-keep]').click()`);
+      await page.key('Escape');
+      assert.equal((await endBox(page)).bar, 'ask', 'clicks and Escape wait');
+
+      await waitFor(page, `document.querySelector('#runner [data-confirm]').getAttribute('aria-busy') !== 'true'`, 'the failure');
+      assert.deepEqual(await endBox(page), {
+        bar: 'ask', focus: 'End workout', busy: false,
+        status: "Couldn't end the workout: no connection. Try again, or keep going.",
+      });
+      assert.equal(await page.evaluate(`document.querySelector('#runner [data-confirm-status]').classList.contains('failed')`), true);
+      assert.equal(await page.evaluate(`document.getElementById('stopwatch-bar').hidden`), false, 'still running');
+      assert.deepEqual(await onlyWorkout(server), { finalized: false, sessions: 1 });
+
+      await page.evaluate(`window.fetch = window.__fetch`);
+      await page.key('Enter');
+      await waitFor(page, `!document.querySelector('#runner [data-confirm-bar="done"]').hidden`, 'the done bar');
+      assert.equal(await page.evaluate(`document.querySelector('#runner [data-confirm-bar="done"] p').textContent`),
+        'Workout ended: 1 of 2 exercises saved.');
+      assert.deepEqual(await onlyWorkout(server), { finalized: true, sessions: 1 });
       return page.errors;
     } finally { await page.close(); }
   },

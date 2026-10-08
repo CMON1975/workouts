@@ -632,6 +632,41 @@ button.danger:active:not(:disabled) {
 /* Far-left of the footer, opposite Next; don't stretch like other .small buttons */
 #runner-end { flex: 0 0 auto; }
 
+/* The bible's confirm (PATTERNS.md "Confirm", confirm.js): each bar is a
+   hairline cavity, words left and buttons right, words above buttons when
+   the width runs out. */
+.confirm { margin-top: var(--spacing-6); }
+.confirm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2);
+  background: var(--color-surface-inset);
+  box-shadow: inset 1px -1px 2px rgba(15, 23, 42, 0.18);
+  border-radius: 2px;
+}
+.confirm-bar[hidden] { display: none; }
+.confirm-bar > p {
+  margin: 0 auto 0 0;
+  padding: 0 var(--spacing-2);
+  font-size: var(--text-sm);
+}
+/* The runner's idle bar keeps End far left, opposite Next */
+.runner-bar { justify-content: space-between; }
+/* Never hidden, only collapsed when empty: a live region toggled in and out
+   of the tree announces unreliably. On the page, not the cavity, where
+   danger and muted text clear 4.5:1. */
+.confirm-status {
+  margin: 0;
+  padding: var(--spacing-2) var(--spacing-2) 0;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.confirm-status:empty { padding-top: 0; }
+.confirm-status.failed { color: var(--color-danger); }
+
 /* New-template form */
 
 #new-tpl-form {

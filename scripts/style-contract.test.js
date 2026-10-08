@@ -230,7 +230,7 @@ test('controls are extruded slabs and panels are hairline cavities', () => {
     assert.equal(rule(sel).get('box-shadow'), PRESS, `${sel} press`);
   }
 
-  for (const sel of ['.manage-row', '.banner', '.routine-card-targets', '.stopwatch-bar', '.col-row', '.rt-row.selected',
+  for (const sel of ['.manage-row', '.banner', '.routine-card-targets', '.stopwatch-bar', '.confirm-bar', '.col-row', '.rt-row.selected',
     "input[type='text']", 'select', 'textarea']) {
     const r = rule(sel);
     assert.equal(r.get('background'), 'var(--color-surface-inset)', `${sel} background`);

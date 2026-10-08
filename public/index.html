@@ -118,12 +118,26 @@
         </div>
       </div>
       <div id="runner-root"></div>
-      <div class="session-footer">
-        <button id="runner-end" type="button" class="danger small" aria-label="End early" title="End early"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></button>
-        <span id="runner-status" class="status">Ready</span>
-        <div class="runner-actions">
-          <button id="runner-next" type="button" aria-label="Next" title="Next"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+      <!-- The bible's confirm (confirm.js): End swaps the action bar, in place,
+           for the question, then for what happened. -->
+      <div id="runner-confirm" class="confirm" data-confirm>
+        <div class="confirm-bar runner-bar" data-confirm-bar="idle">
+          <button id="runner-end" type="button" class="secondary small" data-confirm-ask aria-controls="runner-end-ask" aria-label="End workout" title="End workout"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></button>
+          <span id="runner-status" class="status">Ready</span>
+          <div class="runner-actions">
+            <button id="runner-next" type="button" aria-label="Next" title="Next"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+          </div>
         </div>
+        <div id="runner-end-ask" class="confirm-bar" data-confirm-bar="ask" role="group" aria-labelledby="runner-end-question" hidden>
+          <p id="runner-end-question">End this workout now? Past exercises are saved; remaining ones are skipped.</p>
+          <button type="button" class="secondary" data-confirm-keep>Keep going</button>
+          <button type="button" class="danger" data-confirm-go data-pending="Ending the workout…">End workout</button>
+        </div>
+        <div class="confirm-bar" data-confirm-bar="done" role="group" aria-labelledby="runner-ended" hidden>
+          <p id="runner-ended">Workout ended.</p>
+          <button id="runner-home" type="button" class="secondary">Home</button>
+        </div>
+        <p class="confirm-status" data-confirm-status role="status"></p>
       </div>
     </section>
 
@@ -227,18 +241,6 @@
       <button id="detail-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
       <div id="detail-root"></div>
     </section>
-
-    <dialog id="end-early-dialog" class="modal-dialog">
-      <!-- method="dialog": buttons close the dialog with their value as returnValue -->
-      <form method="dialog">
-        <h3>End this workout now?</h3>
-        <p class="muted">Past exercises are saved; remaining ones are skipped.</p>
-        <div class="form-actions">
-          <button value="cancel" class="secondary">Keep going</button>
-          <button value="end" class="danger">End workout</button>
-        </div>
-      </form>
-    </dialog>
 
     <dialog id="tpl-edit-dialog" class="modal-dialog">
       <form id="tpl-edit-form">

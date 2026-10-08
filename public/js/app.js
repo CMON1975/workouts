@@ -28,6 +28,7 @@ import {
 import { saveBodyMetric, editingHint, previousReading, jumpWarning, needsJumpCheck } from './body-metrics.js';
 import { mergeHistoryPage } from './history-paging.js';
 import { renderStatsView, renderStatsLoading, renderStatsError } from './stats-view.js';
+import { installConfirm, resetConfirm } from './confirm.js';
 
 const els = {
   app: document.getElementById('app'),
@@ -107,8 +108,9 @@ const els = {
   runnerRoutineName: document.getElementById('runner-routine-name'),
   runnerStep: document.getElementById('runner-step'),
   runnerNext: document.getElementById('runner-next'),
-  runnerEnd: document.getElementById('runner-end'),
-  endEarlyDialog: document.getElementById('end-early-dialog'),
+  runnerConfirm: document.getElementById('runner-confirm'),
+  runnerEnded: document.getElementById('runner-ended'),
+  runnerHome: document.getElementById('runner-home'),
   resumeBanner: document.getElementById('resume-banner'),
   exercisesDisclosure: document.getElementById('exercises-disclosure'),
   tplEditDialog: document.getElementById('tpl-edit-dialog'),
@@ -359,7 +361,7 @@ async function reconcileWithServer(draft, rebind) {
 function startSession(template) {
   if (activeWorkout) {
     // Would rebind currentSession away from the runner's exercise.
-    alert('Finish or End early on the current workout first.');
+    alert('Finish or end the current workout first.');
     return;
   }
   bindSession(emptyDraft(template), template);
@@ -667,7 +669,7 @@ async function handleRoutinePick(routine) {
     return;
   }
   if (activeWorkout) {
-    alert('Finish or End early on the current workout first.');
+    alert('Finish or end the current workout first.');
     return;
   }
   const workoutId = uuidv7();
@@ -783,6 +785,7 @@ async function bindCurrentExercise() {
     formRoot: els.runnerRoot, statusEl: els.runnerStatus,
   });
   updateRunnerHeader();
+  resetConfirm(els.runnerConfirm); // a new run may follow an ended one's done bar
   showView('runner');
 
   // Reconcile in background if we restored a non-trivial local draft.
@@ -861,7 +864,11 @@ async function handleRunnerNext() {
   }
 
   if (isLast) {
-    await finalizeActiveWorkout();
+    try {
+      await finalizeActiveWorkout();
+    } catch (err) {
+      console.warn('finalize workout failed', err);
+    }
     await resetRunner();
     els.runnerNext.disabled = false;
     goHome();
@@ -872,19 +879,11 @@ async function handleRunnerNext() {
   els.runnerNext.disabled = false;
 }
 
-// Resolves true only on an explicit "End workout" — Esc/backdrop closes count as cancel.
-function confirmEndEarly() {
-  return new Promise(resolve => {
-    const dlg = els.endEarlyDialog;
-    dlg.addEventListener('close', () => resolve(dlg.returnValue === 'end'), { once: true });
-    dlg.returnValue = '';
-    dlg.showModal();
-  });
-}
-
-async function handleRunnerEnd() {
+// End workout's confirm:go: seal the current exercise if it has values,
+// then the workout. A failure rejects, so the confirm bar keeps the
+// question and says why; End workout tries again.
+async function endWorkout() {
   if (!activeWorkout) return;
-  if (!(await confirmEndEarly())) return;
   if (currentSession) {
     endChainAndRecord();
     const draft = currentSession.getDraft();
@@ -894,26 +893,37 @@ async function handleRunnerEnd() {
     if (hasValues) {
       try {
         await currentSession.finalize({ durationSeconds: stopwatch?.exerciseSeconds() ?? null });
-        stopwatch?.commitExercise();
-        beeper.cancel();
       } catch (err) {
-        console.warn('finalizing current exercise failed on end-early', err);
+        throw new Error(endFailure(err, 'Try again, or keep going.'));
       }
+      stopwatch?.commitExercise();
+      beeper.cancel();
     }
   }
-  await finalizeActiveWorkout();
+  try {
+    await finalizeActiveWorkout();
+  } catch (err) {
+    throw new Error(endFailure(err, 'Try again, or keep going.'));
+  }
+  const saved = activeWorkout.currentIndex + (currentSession?.getDraft().finalized_at ? 1 : 0);
+  const total = activeWorkout.routine.templates.length;
+  els.runnerEnded.textContent = `Workout ended: ${saved} of ${total} exercises saved.`;
   await resetRunner();
-  goHome();
+  // Nothing left to type into: the done bar is all the runner shows.
+  els.runnerRoot.replaceChildren();
+  els.runnerStep.textContent = '';
+  hide(els.runnerBack);
+}
+
+function endFailure(err, todo) {
+  const why = err?.status ? `the server answered ${err.status}` : 'no connection';
+  return `Couldn't end the workout: ${why}. ${todo}`;
 }
 
 async function finalizeActiveWorkout() {
   if (!activeWorkout) return;
-  try {
-    activeWorkout.workoutClientVersion += 1;
-    await api.finalizeWorkout(activeWorkout.workoutId, activeWorkout.workoutClientVersion);
-  } catch (err) {
-    console.warn('finalize workout failed', err);
-  }
+  activeWorkout.workoutClientVersion += 1;
+  await api.finalizeWorkout(activeWorkout.workoutId, activeWorkout.workoutClientVersion);
 }
 
 async function resetRunner() {
@@ -1952,7 +1962,9 @@ async function boot() {
   });
   els.runnerBack.addEventListener('click', handleRunnerBack);
   els.runnerNext.addEventListener('click', handleRunnerNext);
-  els.runnerEnd.addEventListener('click', handleRunnerEnd);
+  installConfirm();
+  els.runnerConfirm.addEventListener('confirm:go', (e) => e.detail.waitUntil(endWorkout()));
+  els.runnerHome.addEventListener('click', goHome);
   els.stopwatchBtn.addEventListener('click', handleStopwatchBtn);
   // Repaint immediately on wake so the first visible frame is correct rather
   // than one interval-tick stale after tab sleep / bfcache restore. If a
