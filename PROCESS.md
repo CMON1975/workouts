@@ -511,3 +511,9 @@ Deployed 2026-10-08: prod pulled from `08221b5` to `eab8e11` (static only, no re
 **Why:** The bible's forms (stable 2026-10-07). The user picked paper from a side-by-side artifact (three screens, light and dark, built from headless captures with the paper rule injected). Carved fields were 1.01:1 against the light page, 1.32:1 in dark; paper's edge is 4.34 / 3.75 on the page.
 **Notes:** Placeholders keep the browser grey; the bible's recipe makes them muted, which the user didn't take up. Field focus is still the browser's default ring (the bible uses a 2px fg outline); untouched. The "Type" fieldset in New exercise keeps its browser border, which reads bright in dark. Not deployed.
 Deployed 2026-10-08: prod pulled from `eab8e11` to `798cce4` (static only, no restart); prod serves the field tokens, a headless load boots with 7 routines and its first field computes the 1px slate edge.
+
+---
+## 2026-10-08 — Field focus ring, Type fieldset, hidden Description
+**What:** Fields take the button's 2px fg focus ring; New exercise's Type fieldset is a borderless field with its legend styled as the field label (`c58e3ea`). New exercise's Description now hides unless Checkbox is picked (`b9f3ed3`). Contract test plus two e2e scenarios, each seen red first. 483/483, e2e 17/17 twice.
+**Why:** Leftovers from the paper fields (browser ring; the UA grooved box, bright in dark). The Description bug turned up in the focus captures: `.field { display: flex }` beat the UA `[hidden]` rule, so the field showed for Standard, where saving drops what's typed.
+**Notes:** Proposed a hairline border for the fieldset, but the bible's `.field` fieldset has no box at all, so followed the bible. A walk of every `[hidden]` element on the live page found only this one still rendering. Not deployed.
