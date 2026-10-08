@@ -273,6 +273,13 @@ input[type='text'], input[type='number'], input[type='date'], select, textarea {
   border-radius: 2px;
 }
 
+/* Focus is the button's ring: 2px of fg, 2px out. */
+input[type='text']:focus-visible, input[type='number']:focus-visible, input[type='date']:focus-visible,
+select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+}
+
 input[type='text'], input[type='number'] {
   padding: var(--spacing-3);
   width: 100%;
@@ -693,9 +700,23 @@ button.danger:active:not(:disabled) {
   gap: var(--spacing-1);
 }
 
-.field > span {
+.field > span, .field > legend {
   font-size: var(--text-sm);
   color: var(--color-muted);
+}
+
+/* A group of choices is a field too: no box, its legend the label. Floated,
+   the legend is laid out as a flex item, so the gap applies to it. */
+fieldset.field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.field > legend {
+  float: left;
+  width: 100%;
+  padding: 0;
 }
 
 .err {

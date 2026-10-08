@@ -571,6 +571,33 @@ const scenarios = {
     } finally { await page.close(); }
   },
 
+  // Keyboard focus on a field draws the button's 2px ring in the text
+  // colour, and New exercise's Type group is a label over its choices,
+  // not the browser's grooved box.
+  async 'fields: focus ring and the Type label'(server) {
+    const page = await openBrowser(server.base + '/');
+    try {
+      await waitFor(page, `!document.getElementById('open-stats').hidden`, 'home');
+      await page.evaluate(`document.getElementById('new-template').click(); document.getElementById('nt-name').focus()`);
+      await waitFor(page, `document.activeElement?.id === 'nt-name'`, 'the name field');
+      await page.key('Tab');
+      await page.key('Tab', { shift: true });
+      assert.deepEqual(await page.evaluate(`(() => {
+        const f = document.activeElement, s = getComputedStyle(f);
+        return { id: f.id, visible: f.matches(':focus-visible'), ring: s.outlineStyle + ' ' + s.outlineWidth + ' ' + s.outlineOffset,
+          fg: s.outlineColor === getComputedStyle(document.body).color };
+      })()`), { id: 'nt-name', visible: true, ring: 'solid 2px 2px', fg: true });
+      assert.deepEqual(await page.evaluate(`(() => {
+        const set = document.querySelector('.nt-kind'), legend = set.querySelector('legend');
+        const label = getComputedStyle(document.querySelector('#nt-name').previousElementSibling);
+        const s = getComputedStyle(set), l = getComputedStyle(legend);
+        return { border: s.borderTopWidth + ' ' + s.borderLeftWidth, pad: s.paddingLeft,
+          size: l.fontSize === label.fontSize, color: l.color === label.color };
+      })()`), { border: '0px 0px', pad: '0px', size: true, color: true });
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // The stats view opens from its header button next to History; a fresh
   // DB says so, and a failed fetch offers a retry that recovers.
   async 'stats: header button opens it; empty, error and retry'(server) {

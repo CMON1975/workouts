@@ -57,6 +57,11 @@ const tokensIn = (inDark) => new Map(
 const LIGHT_TOKENS = tokensIn(false);
 const DARK_TOKENS = tokensIn(true);
 
+// Top-level rules whose selector list names `sel`; later declarations win.
+const rule = (sel) => new Map(DECLS
+  .filter((d) => d.context.length === 1 && d.context[0].split(',').map((x) => x.trim()).includes(sel))
+  .map((d) => [d.prop, d.value]));
+
 // Split a value on top-level whitespace and commas, keeping (...) groups whole.
 function parts(value) {
   const out = [];
@@ -208,10 +213,6 @@ test('shadows fall to the lower left (one light source)', () => {
 });
 
 test('controls are extruded slabs, panels are hairline cavities and fields are paper', () => {
-  // Top-level rules whose selector list names `sel`; later declarations win.
-  const rule = (sel) => new Map(DECLS
-    .filter((d) => d.context.length === 1 && d.context[0].split(',').map((x) => x.trim()).includes(sel))
-    .map((d) => [d.prop, d.value]));
   const EXTRUDE = '-2px 2px 4px rgba(15, 23, 42, 0.28), inset 1px -1px 0 rgba(255, 255, 255, 0.10), inset -1px 1px 0 rgba(15, 23, 42, 0.10)';
   const PRIMARY = '-2px 3px 5px rgba(15, 23, 42, 0.40), inset 1px -1px 0 rgba(255, 255, 255, 0.08), inset -1px 1px 0 rgba(0, 0, 0, 0.25)';
   const HAIRLINE = 'inset 1px -1px 2px rgba(15, 23, 42, 0.18)';
@@ -251,6 +252,26 @@ test('controls are extruded slabs, panels are hairline cavities and fields are p
   assert.equal(LIGHT_TOKENS.get('--inset-shadow-hairline'), HAIRLINE);
   for (const d of ruleDecls.filter((x) => x.prop === 'box-shadow')) {
     assert.notEqual(d.value, HAIRLINE, `hairline literal instead of the token in ${where(d)}`);
+  }
+});
+
+// The bible's forms: focus is the button's 2px fg outline, and a group of
+// choices is a borderless fieldset whose legend is the field's label.
+test('fields take the button focus ring; a fieldset is a field under its label', () => {
+  for (const sel of ['button', "input[type='text']", "input[type='number']", "input[type='date']", 'select', 'textarea']) {
+    const r = rule(`${sel}:focus-visible`);
+    assert.equal(r.get('outline'), '2px solid var(--color-fg)', `${sel} ring`);
+    assert.equal(r.get('outline-offset'), '2px', `${sel} ring offset`);
+  }
+  const set = rule('fieldset.field');
+  for (const prop of ['margin', 'padding', 'border', 'min-width']) {
+    assert.equal(set.get(prop), '0', `fieldset ${prop}`);
+  }
+  const legend = rule('.field > legend');
+  const label = rule('.field > span');
+  assert.equal(legend.get('padding'), '0');
+  for (const prop of ['font-size', 'color']) {
+    assert.equal(legend.get(prop), label.get(prop), `legend ${prop} is the label's`);
   }
 });
 
