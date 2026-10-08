@@ -88,7 +88,7 @@ test('light and dark both define the bible semantic, status and series tokens', 
 test('theme values are the bible light/dark steps', () => {
   const light = {
     '--color-bg': 'var(--color-neutral-100)', '--color-fg': 'var(--color-neutral-900)',
-    '--color-muted': 'var(--color-neutral-500)', '--color-accent': 'var(--color-neutral-800)',
+    '--color-muted': 'var(--color-neutral-600)', '--color-accent': 'var(--color-neutral-800)',
     '--color-danger': '#b91c1c', '--color-danger-fg': '#ffffff', '--color-work': '#15803d', '--color-rest': '#2563eb',
     '--color-series-1': '#2a78d6', '--color-series-2': '#d4581f', '--color-series-3': '#14946a',
   };

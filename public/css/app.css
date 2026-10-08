@@ -82,7 +82,7 @@
   /* Light theme (OS light) */
   --color-bg:             var(--color-neutral-100);
   --color-fg:             var(--color-neutral-900);
-  --color-muted:          var(--color-neutral-500);
+  --color-muted:          var(--color-neutral-600);
   --color-accent:         var(--color-neutral-800);
   --color-surface-inset:  color-mix(in srgb, var(--color-bg) 90%, white);
   --color-surface-raised: color-mix(in srgb, var(--color-bg) 78%, white);
