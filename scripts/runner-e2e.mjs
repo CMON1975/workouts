@@ -619,6 +619,40 @@ const scenarios = {
     } finally { await page.close(); }
   },
 
+  // Every select is the bible's: no native arrow, a muted Lucide chevron
+  // over its right end that lets taps through to the select.
+  async 'selects: the bible chevron on every select'(server) {
+    await importWeek(server, lift('Lift A'));
+    const page = await openBrowser(server.base + '/');
+    const check = () => page.evaluate(`[...document.querySelectorAll('select')].filter(s => s.checkVisibility()).map((s) => {
+      const wrap = s.parentElement, svg = wrap.querySelector(':scope > svg');
+      const r = s.getBoundingClientRect(), c = svg?.getBoundingClientRect();
+      return (s.id || s.closest('[id]').id) + ': ' + [getComputedStyle(s).appearance,
+        svg ? getComputedStyle(svg).pointerEvents : 'no chevron',
+        c && c.right <= r.right && c.left > r.left + r.width / 2 ? 'right end' : 'misplaced'].join(' ');
+    })`);
+    try {
+      await waitFor(page, `!!document.querySelector('#routine-list button')`, 'home');
+      const seen = await check();
+      await page.evaluate(`document.getElementById('new-template').click()`);
+      await waitFor(page, `document.querySelectorAll('#nt-col-builder select').length > 0`, 'the builder');
+      seen.push(...await check());
+      await page.evaluate(`document.getElementById('new-tpl-back').click(); document.getElementById('manage-templates').click()`);
+      await waitFor(page, `!!document.querySelector('#manage-list [aria-label="Edit"]')`, 'the exercise list');
+      await page.evaluate(`document.querySelector('#manage-list [aria-label="Edit"]').click()`);
+      await waitFor(page, `document.getElementById('tpl-edit-dialog').open`, 'the edit dialog');
+      await page.evaluate(`document.getElementById('te-add-col').click()`);
+      await waitFor(page, `document.querySelectorAll('#te-col-builder select').length > 0`, 'a new column');
+      seen.push(...await check());
+      assert.deepEqual(seen, [
+        'bm-metric: none none right end',
+        'nt-col-builder: none none right end',
+        'te-col-builder: none none right end',
+      ]);
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // Type is the bible's segmented pick: a native radio group under painted
   // faces, the pick a primary face and the rest secondary; a tap on a face
   // or an arrow key moves it, and keyboard focus rings the face.

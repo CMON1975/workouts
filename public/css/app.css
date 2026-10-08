@@ -280,6 +280,27 @@ select:focus-visible, textarea:focus-visible {
   outline-offset: 2px;
 }
 
+/* Selects are the bible's: no native arrow, a muted chevron over the right
+   end that taps pass through. span. outranks the containers' padding. */
+.select-concrete { position: relative; display: block; }
+span.select-concrete > select {
+  width: 100%;
+  padding-right: calc(var(--spacing-3) + var(--spacing-4) + var(--spacing-2));
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.select-concrete > svg.icon {
+  position: absolute;
+  top: 50%;
+  right: var(--spacing-3);
+  width: 1rem;
+  height: 1rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--color-muted);
+}
+
 input[type='text'], input[type='number'] {
   padding: var(--spacing-3);
   width: 100%;
@@ -371,7 +392,7 @@ button:disabled {
   align-items: stretch;
   margin: 0 0 var(--spacing-4);
 }
-.body-metrics-form select { grid-area: metric; }
+.body-metrics-form .select-concrete { grid-area: metric; min-width: 0; }
 .body-metrics-form input[type='date'] { grid-area: date; }
 .body-metrics-form input[type='text'] { grid-area: value; }
 .body-metrics-form button { grid-area: submit; }
@@ -1022,8 +1043,8 @@ button.small {
   min-width: 0;
 }
 
+.col-row .select-concrete { flex: 0 0 auto; }
 .col-row select {
-  flex: 0 0 auto;
   padding: var(--spacing-2) var(--spacing-3);
   font-size: var(--text-base);
   min-height: 44px;

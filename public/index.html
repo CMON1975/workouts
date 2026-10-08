@@ -46,13 +46,16 @@
 
     <section id="home" class="view">
       <form id="body-metrics-form" class="body-metrics-form" autocomplete="off">
-        <select id="bm-metric" aria-label="Metric">
-          <option value="body_weight">weight</option>
-          <option value="waist">waist</option>
-          <option value="food">food</option>
-          <option value="resting_hr">resting HR</option>
-          <option value="blood_pressure">blood pressure</option>
-        </select>
+        <span class="select-concrete">
+          <select id="bm-metric" aria-label="Metric">
+            <option value="body_weight">weight</option>
+            <option value="waist">waist</option>
+            <option value="food">food</option>
+            <option value="resting_hr">resting HR</option>
+            <option value="blood_pressure">blood pressure</option>
+          </select>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </span>
         <input id="bm-date" type="date" aria-label="Date" required>
         <input id="bm-value" type="text" inputmode="decimal" aria-label="Value" placeholder="value" required>
         <button id="bm-submit" type="submit" aria-label="Log metric" title="Log metric"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>

@@ -1233,6 +1233,15 @@ function applyKindVisibility() {
   els.ntDescriptionField.hidden = kind !== 'checkbox';
 }
 
+// The bible's select: the native select under a muted chevron.
+function selectConcrete(sel) {
+  const wrap = document.createElement('span');
+  wrap.className = 'select-concrete';
+  wrap.innerHTML = iconSvg('chevron-down');
+  wrap.prepend(sel);
+  return wrap;
+}
+
 function renderColBuilder() {
   els.ntColBuilder.innerHTML = '';
   rowColumns.forEach((col, i) => {
@@ -1258,7 +1267,7 @@ function renderColBuilder() {
       typeSel.appendChild(opt);
     }
     typeSel.addEventListener('change', () => { rowColumns[i].value_type = typeSel.value; });
-    row.appendChild(typeSel);
+    row.appendChild(selectConcrete(typeSel));
 
     const unitInput = document.createElement('input');
     unitInput.type = 'text';
@@ -1448,7 +1457,7 @@ function renderTeColBuilder() {
         typeSel.appendChild(opt);
       }
       typeSel.addEventListener('change', () => { tplEditColumns[i].value_type = typeSel.value; });
-      row.appendChild(typeSel);
+      row.appendChild(selectConcrete(typeSel));
     } else {
       const typeLabel = document.createElement('span');
       typeLabel.className = 'col-type-label muted';

@@ -306,6 +306,11 @@ test('fields, checkboxes and segments take the button focus ring; a fieldset is 
   for (const sel of ['.check-concrete > input:focus-visible + .check-box', '.seg-concrete input:focus-visible + span']) {
     assert.equal(rule(sel).get('outline'), '2px solid var(--color-fg)', `${sel} ring`);
   }
+  // A select is the bible's: no native arrow, a muted chevron taps pass through
+  assert.equal(rule('span.select-concrete > select').get('appearance'), 'none');
+  const chevron = rule('.select-concrete > svg.icon');
+  assert.equal(chevron.get('pointer-events'), 'none');
+  assert.equal(chevron.get('color'), 'var(--color-muted)');
   const legend = rule('.field > legend');
   const label = rule('.field > span');
   assert.equal(legend.get('padding'), '0');
