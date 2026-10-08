@@ -281,7 +281,7 @@ test('the primary is the accent slab; in dark its ink and steps flip', () => {
 
 // The bible's forms: focus is the button's 2px fg outline, and a group of
 // choices is a borderless fieldset whose legend is the field's label.
-test('fields take the button focus ring; a fieldset is a field under its label', () => {
+test('fields and checkboxes take the button focus ring; a fieldset is a field under its label', () => {
   for (const sel of ['button', "input[type='text']", "input[type='number']", "input[type='date']", 'select', 'textarea']) {
     const r = rule(`${sel}:focus-visible`);
     assert.equal(r.get('outline'), '2px solid var(--color-fg)', `${sel} ring`);
@@ -291,6 +291,14 @@ test('fields take the button focus ring; a fieldset is a field under its label',
   for (const prop of ['margin', 'padding', 'border', 'min-width']) {
     assert.equal(set.get(prop), '0', `fieldset ${prop}`);
   }
+  // A checkbox's painted box: field paper and edge; checked, the pick's
+  // accent (dark ink in dark); keyboard focus rings the box.
+  const box = rule('.check-box');
+  assert.equal(box.get('background'), 'var(--color-surface-field)');
+  assert.equal(box.get('box-shadow'), 'inset 0 0 0 1px var(--color-field-edge)');
+  assert.equal(rule('.check-concrete > input:checked + .check-box').get('background'), 'var(--color-accent)');
+  assert.equal(ruleIn(DARK, '.check-concrete > input:checked + .check-box').get('color'), 'var(--color-neutral-900)');
+  assert.equal(rule('.check-concrete > input:focus-visible + .check-box').get('outline'), '2px solid var(--color-fg)');
   const legend = rule('.field > legend');
   const label = rule('.field > span');
   assert.equal(legend.get('padding'), '0');

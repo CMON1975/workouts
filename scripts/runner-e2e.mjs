@@ -97,10 +97,11 @@ async function openBrowser(url, { init = null, viewport = null } = {}) {
   if (!arrived) throw new Error(`the page never left about:blank for ${url}`);
   // A real key press, default action included (Tab moves focus).
   const key = async (name, { shift = false } = {}) => {
-    const codes = { Tab: 9, Enter: 13, Escape: 27 };
-    const base = { key: name, code: name, windowsVirtualKeyCode: codes[name], modifiers: shift ? 8 : 0 };
+    const codes = { Tab: 9, Enter: 13, Escape: 27, Space: 32 };
+    const base = { key: name === 'Space' ? ' ' : name, code: name, windowsVirtualKeyCode: codes[name], modifiers: shift ? 8 : 0 };
     await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
     if (name === 'Enter') await send('Input.dispatchKeyEvent', { type: 'char', text: '\r', ...base });
+    if (name === 'Space') await send('Input.dispatchKeyEvent', { type: 'char', text: ' ', ...base });
     await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
   };
   return {
@@ -614,6 +615,57 @@ const scenarios = {
       await pick('standard');
       seen.push(await shown());
       assert.deepEqual(seen, [false, true, false]);
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
+  // Checkboxes are the bible's: a painted box (field paper, the accent with
+  // a tick when checked, the focus ring) after the native input, which
+  // stays the control: a tap on the label and Space both toggle it.
+  async 'checkboxes: a painted box, toggled by tap and Space'(server) {
+    await importWeek(server, { template_name: 'Hip 90/90', kind: 'checkbox', description: '1 min each side', targets: [] }, lift('Lift A'));
+    const page = await openBrowser(server.base + '/');
+    // Paper is a text field's fill, the pick a primary button's.
+    const state = (sel, paper, pick) => page.evaluate(`(() => {
+      const input = document.querySelector('${sel}'), box = input.nextElementSibling;
+      const fill = getComputedStyle(box).backgroundColor, ring = getComputedStyle(box);
+      const look = fill === getComputedStyle(document.querySelector('${paper}')).backgroundColor ? 'paper'
+        : fill === getComputedStyle(document.querySelector('${pick}')).backgroundColor ? 'pick' : fill;
+      const words = getComputedStyle(box.nextElementSibling).color === getComputedStyle(document.body).color ? 'fg' : 'not fg';
+      return { checked: input.checked, look, words, tick: getComputedStyle(box.querySelector('svg')).visibility,
+        ring: ring.outlineStyle === 'none' ? 'none' : ring.outlineStyle + ' ' + ring.outlineWidth };
+    })()`);
+    try {
+      await waitFor(page, `!!document.querySelector('#routine-list button')`, 'home');
+      await page.evaluate(`document.getElementById('manage-templates').click()`);
+      const liftRow = `[...document.querySelectorAll('#manage-list .manage-row')].find(r => r.textContent.includes('Lift A'))`;
+      await waitFor(page, `!!${liftRow}`, 'the exercise list');
+      await page.evaluate(`${liftRow}.querySelector('[aria-label="Edit"]').click()`);
+      await waitFor(page, `document.getElementById('tpl-edit-dialog').open`, 'the edit dialog');
+      const lock = ['#te-rows-fixed', '#te-name', '#te-save'];
+      const seen = [await state(...lock)];
+      await page.evaluate(`document.querySelector('#te-rows-fixed-field label span:last-child').click()`);
+      seen.push(await state(...lock));
+      await page.evaluate(`document.getElementById('te-cancel').click(); document.getElementById('manage-back').click()`);
+
+      await page.evaluate(`document.querySelector('#routine-list button').click()`);
+      await waitFor(page, `!!document.querySelector('#runner-root input[type=checkbox]')`, 'the checkbox exercise');
+      const done = ['#runner-root input[type=checkbox]', '#runner-root textarea', '#runner-next'];
+      seen.push(await state(...done));
+      await page.evaluate(`document.querySelector('#runner-root .check-concrete span:last-child').click()`);
+      seen.push(await state(...done));
+      await page.evaluate(`document.querySelector('#runner-root input[type=checkbox]').focus()`);
+      await page.key('Tab');
+      await page.key('Tab', { shift: true });
+      await page.key('Space');
+      seen.push(await state(...done));
+      assert.deepEqual(seen, [
+        { checked: false, look: 'paper', words: 'fg', tick: 'hidden', ring: 'none' },
+        { checked: true, look: 'pick', words: 'fg', tick: 'visible', ring: 'none' },
+        { checked: false, look: 'paper', words: 'fg', tick: 'hidden', ring: 'none' },
+        { checked: true, look: 'pick', words: 'fg', tick: 'visible', ring: 'none' },
+        { checked: false, look: 'paper', words: 'fg', tick: 'hidden', ring: 'solid 2px' },
+      ]);
       return page.errors;
     } finally { await page.close(); }
   },

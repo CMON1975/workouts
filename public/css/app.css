@@ -476,19 +476,18 @@ button:disabled {
 }
 
 .checkbox-row { padding: var(--spacing-3) 0; }
-.checkbox-field {
+/* The runner's checkbox spans its row, with a bigger box and words: it's
+   pressed mid-set. Scoped to the row to outrank .session-row label (the
+   set-label column: 64px, muted, small), which it isn't. */
+.session-row .checkbox-field {
   display: flex;
-  align-items: center;
+  flex: 1 1 auto;
   gap: var(--spacing-3);
-  font-size: var(--text-lg);
   color: var(--color-fg);
-  cursor: pointer;
+  font-size: var(--text-lg);
 }
-.checkbox-field input[type="checkbox"] {
-  width: 28px;
-  height: 28px;
-  accent-color: var(--color-neutral-800);
-}
+.checkbox-field .check-box { width: 28px; height: 28px; }
+.checkbox-field .check-box > svg.icon { width: 22px; height: 22px; }
 .checkbox-description {
   margin: var(--spacing-2) 0 var(--spacing-1) 0;
   white-space: pre-wrap;
@@ -742,12 +741,58 @@ fieldset.field {
 .form-actions { display: flex; flex-direction: column; gap: var(--spacing-3); }
 .form-actions button { width: 100%; }
 
-.field-inline {
-  flex-direction: row;
+/* Checkboxes are the bible's: the native input, clipped to nothing (no
+   paint, no hits) across its label, stays the control, and a painted box
+   follows it: a field's paper and edge, or checked, the pick's accent with
+   a tick. App deviation: a 44px tap row and base-size words. */
+.check-concrete {
+  position: relative;
+  display: inline-flex;
   align-items: center;
   gap: var(--spacing-2);
+  min-height: 44px;
+  color: var(--color-fg);
+  cursor: pointer;
 }
-.field-inline > span { font-size: var(--text-base); color: inherit; }
+.check-concrete > input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.check-concrete > input:focus-visible + .check-box {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+}
+.check-box {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 2px;
+  background: var(--color-surface-field);
+  box-shadow: inset 0 0 0 1px var(--color-field-edge);
+}
+.check-box > svg.icon { width: 1rem; height: 1rem; visibility: hidden; }
+.check-concrete > input:checked + .check-box {
+  color: var(--color-neutral-50);
+  background: var(--color-accent);
+  box-shadow: inset 1px -1px 2px rgba(0, 0, 0, 0.45), inset -1px 1px 0 rgba(255, 255, 255, 0.03);
+}
+.check-concrete > input:checked + .check-box > svg.icon { visibility: visible; }
+@media (prefers-color-scheme: dark) {
+  .check-concrete > input:checked + .check-box { color: var(--color-neutral-900); }
+}
 
 /* A raised slab over the scrim, shadow cast down-left like every surface */
 .modal-dialog {

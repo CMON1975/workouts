@@ -200,7 +200,7 @@ function renderCheckboxField(form, { template, draft, onInput }) {
   row.className = 'session-row checkbox-row';
 
   const label = document.createElement('label');
-  label.className = 'checkbox-field';
+  label.className = 'checkbox-field check-concrete';
 
   const input = document.createElement('input');
   input.type = 'checkbox';
@@ -222,7 +222,11 @@ function renderCheckboxField(form, { template, draft, onInput }) {
     });
   });
 
-  label.append(input, text);
+  const box = document.createElement('span');
+  box.className = 'check-box';
+  box.innerHTML = iconSvg('check');
+
+  label.append(input, box, text);
   row.appendChild(label);
   form.appendChild(row);
 
