@@ -112,7 +112,8 @@ async function openBrowser(url, { init = null, viewport = null } = {}) {
       ws.close();
       chrome.kill();
       await exited; // chromium writes to its profile until it exits
-      rmSync(prof, { recursive: true, force: true });
+      // ...and a helper it spawned can outlive it by a moment (ENOTEMPTY)
+      rmSync(prof, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     },
   };
 }
