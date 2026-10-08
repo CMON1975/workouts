@@ -287,8 +287,8 @@ input[aria-invalid='true'], select[aria-invalid='true'], textarea[aria-invalid='
 }
 
 /* Read-only drops the paper for a dashed edge: the value is set, not
-   editable (the notes of a session already finalized). */
-textarea[readonly] {
+   editable (a sealed session's fields). */
+input[readonly], textarea[readonly] {
   background: transparent;
   box-shadow: none;
   border: 1px dashed var(--color-field-edge);
@@ -829,6 +829,9 @@ fieldset.field {
 @media (prefers-color-scheme: dark) {
   .check-concrete > input:checked + .check-box { color: var(--color-neutral-900); }
 }
+/* Disabled keeps the paper and edge, faded: they're what make it a box */
+.check-concrete:has(> input:disabled) { color: var(--color-muted); cursor: not-allowed; }
+.check-concrete > input:disabled + .check-box { opacity: 0.6; }
 
 /* One of a few is the bible's segmented pick: a native radio group (one tab
    stop, arrow keys move the pick), each input clipped inside its label

@@ -42,6 +42,7 @@ export function renderSessionForm(root, { template, draft, onInput, prescribed =
   if (template.kind === 'checkbox') {
     renderCheckboxField(form, { template, draft, onInput });
     root.appendChild(form);
+    if (draft.finalized_at) lockSessionForm(form);
     return;
   }
 
@@ -152,6 +153,16 @@ export function renderSessionForm(root, { template, draft, onInput, prescribed =
 
   renderNotesField(form, { draft, onInput });
   root.appendChild(form);
+  if (draft.finalized_at) lockSessionForm(form);
+}
+
+// A sealed session takes no more edits (the server drops them), so its
+// fields go read-only and its checkbox disabled.
+export function lockSessionForm(root) {
+  for (const f of root.querySelectorAll('input, textarea')) {
+    if (f.type === 'checkbox') f.disabled = true;
+    else f.readOnly = true;
+  }
 }
 
 function renderNotesField(form, { draft, onInput }) {
@@ -171,7 +182,6 @@ function renderNotesField(form, { draft, onInput }) {
   ta.placeholder = 'Optional note for next time';
   ta.setAttribute('aria-label', 'Session notes');
   ta.value = draft.notes ?? '';
-  if (draft.finalized_at) ta.readOnly = true;
   ta.addEventListener('input', () => {
     onInput((d) => {
       const v = ta.value.trim();

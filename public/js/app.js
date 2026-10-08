@@ -20,7 +20,7 @@ import { pickOpenWorkout, rebuildActiveWorkout } from './resume.js';
 import { blankPrescribedRows } from './completeness.js';
 import { iconSvg, setButtonIcon } from './icons.js';
 import {
-  renderSessionForm, renderStatus,
+  renderSessionForm, renderStatus, lockSessionForm,
   renderHistoryList, renderLogList, logDeletePrompt, renderSessionDetail, renderWorkoutDetail,
   renderManageList, applyPreviousHints, formColumns,
   renderRoutineList, renderRoutineBuilder, renderRoutineManageList,
@@ -752,14 +752,16 @@ async function bindCurrentExercise() {
   let draft = null;
   if (sid) {
     // Resume path: this index already has a sid; try to recover its in-progress draft.
+    // A sealed one (a lost Finish; the page's own flush can write it back
+    // locally) draws read-only rather than as a blank exercise.
     const local = await loadLocalDraft(sid);
-    if (local && !local.finalized_at) {
+    if (local) {
       draft = local;
-    } else if (!local) {
-      // No local copy at all: the server may still hold the in-progress draft.
+    } else {
+      // No local copy at all: the server may still hold the draft.
       try {
         const server = await api.getSession(sid);
-        if (server && !server.finalized_at) draft = server;
+        if (server) draft = server;
       } catch (err) {
         if (err.status !== 404) console.warn('session fetch failed', err);
       }
@@ -863,6 +865,7 @@ async function handleRunnerNext() {
     els.runnerNext.disabled = false;
     return;
   }
+  lockSessionForm(els.runnerRoot);
 
   if (stopwatch) {
     stopwatch.commitExercise();
@@ -910,6 +913,7 @@ async function endWorkout() {
       } catch (err) {
         throw new Error(endFailure(err, 'Try again, or keep going.'));
       }
+      lockSessionForm(els.runnerRoot);
       stopwatch?.commitExercise();
       beeper.cancel();
     }

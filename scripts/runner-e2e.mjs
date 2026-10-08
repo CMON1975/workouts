@@ -187,6 +187,42 @@ const typeFirst = (page, value) => page.evaluate(`(() => {
   i.dispatchEvent(new Event('input', { bubbles: true }));
 })()`);
 
+// Which of the runner's fields still take edits (a sealed session's don't:
+// the server drops them, so they're read-only).
+const editable = (page) => page.evaluate(`[...document.querySelectorAll('#runner-root input, #runner-root textarea')]
+  .filter(f => !(f.readOnly || f.disabled)).map(f => f.getAttribute('aria-label'))`);
+
+// On the next document, the tab's local drafts are gone (no shadow, an
+// empty drafts store), as when IndexedDB lost them.
+const DROP_LOCAL_DRAFTS = `if (sessionStorage.getItem('dropLocalDrafts')) {
+  for (const k of Object.keys(localStorage)) if (k.startsWith('draft:')) localStorage.removeItem(k);
+  const get = IDBObjectStore.prototype.get;
+  IDBObjectStore.prototype.get = function (key) { return get.call(this, this.name === 'drafts' ? 'dropped' : key); };
+}`;
+
+async function sealedResume(server, { dropLocal }) {
+  await importWeek(server, lift('Lift A'));
+  const page = await startRoutine(server, { init: DROP_LOCAL_DRAFTS });
+  try {
+    await page.evaluate(`window.__alerts = []; window.alert = (m) => window.__alerts.push(m)`);
+    await typeFirst(page, '5');
+    await page.evaluate(FAIL_FINALIZE);
+    await page.evaluate(`document.getElementById('runner-next').click()`);
+    await waitFor(page, `window.__alerts.length > 0`, 'the alert');
+    if (dropLocal) await page.evaluate(`sessionStorage.setItem('dropLocalDrafts', '1')`);
+    await page.evaluate(`location.reload()`);
+    await sleep(500);
+    await waitFor(page, `document.readyState === 'complete' && !document.getElementById('runner').hidden
+      && document.querySelectorAll('#runner-root input').length > 0`, 'the resumed run');
+    assert.equal(await page.evaluate(`document.querySelector('#runner-root input').value`), '5');
+    assert.deepEqual(await editable(page), []);
+    await page.evaluate(`document.getElementById('runner-next').click()`);
+    await waitFor(page, `!document.getElementById('home').hidden`, 'home');
+    assert.deepEqual(await onlyWorkout(server), { finalized: true, sessions: 1 });
+    return page.errors;
+  } finally { await page.close(); }
+}
+
 // The End confirm: which bar shows, the focused control's words, the
 // status line, and whether the box is waiting.
 const endBox = (page) => page.evaluate(`(() => {
@@ -471,12 +507,25 @@ const scenarios = {
       await waitFor(page, `document.querySelector('#runner [data-confirm-status]').textContent.startsWith("Couldn't")`, 'the failure');
       assert.deepEqual(await onlyWorkout(server), { finalized: false, sessions: 1 }, 'Lift A sealed, workout open');
       await page.evaluate(`document.querySelector('#runner [data-confirm-keep]').click()`);
+      assert.deepEqual(await editable(page), [], 'sealed Lift A takes no edits');
       await page.evaluate(`window.fetch = window.__fetch; document.getElementById('runner-next').click()`);
       await waitFor(page, `document.getElementById('runner-step').textContent.startsWith('2 / 2')`, 'Lift B');
+      assert.deepEqual(await editable(page), ['reps (reps)', 'reps (reps)', 'Session notes'], 'Lift B does');
       assert.deepEqual(await onlyWorkout(server), { finalized: false, sessions: 1 });
       assert.deepEqual(await page.evaluate(`window.__alerts`), []);
       return page.errors;
     } finally { await page.close(); }
+  },
+
+  // A Finish whose workout finalize failed, then a reload: every exercise
+  // is sealed, so the run comes back on the last one, read-only with its
+  // values, and Finish ends it. Twice: the draft found locally (the page's
+  // own flush writes it back), and only on the server.
+  async 'resume: every exercise sealed comes back read-only (local draft)'(server) {
+    return sealedResume(server, { dropLocal: false });
+  },
+  async 'resume: every exercise sealed comes back read-only (server draft)'(server) {
+    return sealedResume(server, { dropLocal: true });
   },
 
   // Finish used to swallow a failed workout finalize and go home, leaving
@@ -496,6 +545,7 @@ const scenarios = {
       assert.deepEqual(await page.evaluate(`window.__alerts`), ["Couldn't end the workout: no connection. Press Finish to try again."]);
       assert.equal(await page.evaluate(`document.getElementById('runner').hidden`), false, 'still on the runner');
       assert.equal(await page.evaluate(`document.getElementById('runner-next').disabled`), false, 'Finish can be pressed again');
+      assert.deepEqual(await editable(page), [], 'the sealed exercise takes no edits');
       assert.deepEqual(await onlyWorkout(server), { finalized: false, sessions: 1 });
 
       await page.evaluate(`window.fetch = window.__fetch; document.getElementById('runner-next').click()`);
