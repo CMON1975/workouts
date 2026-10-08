@@ -527,6 +527,50 @@ const scenarios = {
     } finally { await page.close(); }
   },
 
+  // The bible's forms: fields are paper and sit on the page, never on a
+  // cavity floor (in dark the field edge is 2.84:1 there). Walks every
+  // visible field on the screens that have them.
+  async 'fields: none sits on a cavity floor'(server) {
+    await importWeek(server, lift('Lift A'));
+    const page = await openBrowser(server.base + '/');
+    const onCavity = () => page.evaluate(`(() => {
+      const out = [];
+      for (const f of document.querySelectorAll('input:not([type=checkbox]):not([type=radio]), select, textarea')) {
+        if (!f.checkVisibility()) continue;
+        for (let a = f.parentElement; a; a = a.parentElement) {
+          if (getComputedStyle(a).boxShadow.includes('1px -1px 2px 0px inset')) {
+            out.push((f.id || f.placeholder || f.tagName) + ' in .' + a.className);
+            break;
+          }
+        }
+      }
+      return out;
+    })()`);
+    try {
+      await waitFor(page, `!!document.querySelector('#routine-list button')`, 'home');
+      const found = await onCavity();
+
+      await page.evaluate(`document.getElementById('new-template').click(); document.getElementById('nt-add-col').click()`);
+      await waitFor(page, `document.querySelectorAll('#nt-col-builder input').length > 2`, 'two builder columns');
+      found.push(...await onCavity());
+      await page.evaluate(`document.getElementById('new-tpl-back').click()`);
+
+      await page.evaluate(`document.getElementById('manage-templates').click()`);
+      await waitFor(page, `!!document.querySelector('#manage-list [aria-label="Edit"]')`, 'the exercise list');
+      await page.evaluate(`document.querySelector('#manage-list [aria-label="Edit"]').click()`);
+      await waitFor(page, `document.getElementById('tpl-edit-dialog').open && document.querySelectorAll('#te-col-builder input').length > 0`, 'the edit dialog');
+      found.push(...await onCavity());
+      await page.evaluate(`document.getElementById('te-cancel').click(); document.getElementById('manage-back').click()`);
+
+      await page.evaluate(`document.querySelector('#routine-list button').click()`);
+      await waitFor(page, `document.querySelectorAll('#runner-root input').length > 0`, 'the runner');
+      found.push(...await onCavity());
+
+      assert.deepEqual(found, []);
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // The stats view opens from its header button next to History; a fresh
   // DB says so, and a failed fetch offers a retry that recovers.
   async 'stats: header button opens it; empty, error and retry'(server) {

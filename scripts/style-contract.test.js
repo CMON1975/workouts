@@ -91,12 +91,14 @@ test('theme values are the bible light/dark steps', () => {
     '--color-muted': 'var(--color-neutral-600)', '--color-accent': 'var(--color-neutral-800)',
     '--color-danger': '#b91c1c', '--color-danger-fg': '#ffffff', '--color-work': '#15803d', '--color-rest': '#2563eb',
     '--color-series-1': '#2a78d6', '--color-series-2': '#d4581f', '--color-series-3': '#14946a',
+    '--color-surface-field': '#ffffff', '--color-field-edge': 'var(--color-neutral-500)',
   };
   const dark = {
     '--color-bg': 'var(--color-neutral-900)', '--color-fg': 'var(--color-neutral-50)',
     '--color-muted': 'var(--color-neutral-400)', '--color-accent': 'var(--color-neutral-200)',
     '--color-danger': '#f87171', '--color-danger-fg': 'var(--color-neutral-900)', '--color-work': '#4ade80', '--color-rest': '#60a5fa',
     '--color-series-1': '#3987e5', '--color-series-2': '#d95926', '--color-series-3': '#199e70',
+    '--color-surface-field': 'var(--color-neutral-950)', '--color-field-edge': 'var(--color-neutral-500)',
   };
   for (const [k, v] of Object.entries(light)) assert.equal(LIGHT_TOKENS.get(k), v, `light ${k}`);
   for (const [k, v] of Object.entries(dark)) assert.equal(DARK_TOKENS.get(k), v, `dark ${k}`);
@@ -205,7 +207,7 @@ test('shadows fall to the lower left (one light source)', () => {
   }
 });
 
-test('controls are extruded slabs and panels are hairline cavities', () => {
+test('controls are extruded slabs, panels are hairline cavities and fields are paper', () => {
   // Top-level rules whose selector list names `sel`; later declarations win.
   const rule = (sel) => new Map(DECLS
     .filter((d) => d.context.length === 1 && d.context[0].split(',').map((x) => x.trim()).includes(sel))
@@ -233,11 +235,17 @@ test('controls are extruded slabs and panels are hairline cavities', () => {
     assert.equal(rule(sel).get('box-shadow'), PRESS, `${sel} press`);
   }
 
-  for (const sel of ['.manage-row', '.banner', '.routine-card-targets', '.stopwatch-bar', '.confirm-bar', '.col-row', '.rt-row.selected',
-    "input[type='text']", 'select', 'textarea']) {
+  for (const sel of ['.manage-row', '.banner', '.routine-card-targets', '.stopwatch-bar', '.confirm-bar', '.rt-row.selected']) {
     const r = rule(sel);
     assert.equal(r.get('background'), 'var(--color-surface-inset)', `${sel} background`);
     assert.equal(r.get('box-shadow'), CAVITY, `${sel} shadow`);
+  }
+  // Fields are flat paper inside a 1px edge, with no light-source shadow
+  // (the bible's forms, 2026-10-07): the carve means a container.
+  for (const sel of ["input[type='text']", "input[type='number']", "input[type='date']", 'select', 'textarea']) {
+    const r = rule(sel);
+    assert.equal(r.get('background'), 'var(--color-surface-field)', `${sel} background`);
+    assert.equal(r.get('box-shadow'), 'inset 0 0 0 1px var(--color-field-edge)', `${sel} edge`);
   }
   // The bible's cavity depth is one token, never a repeated literal.
   assert.equal(LIGHT_TOKENS.get('--inset-shadow-hairline'), HAIRLINE);

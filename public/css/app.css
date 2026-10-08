@@ -91,6 +91,9 @@
   --color-accent:         var(--color-neutral-800);
   --color-surface-inset:  color-mix(in srgb, var(--color-bg) 90%, white);
   --color-surface-raised: color-mix(in srgb, var(--color-bg) 78%, white);
+  /* A field's paper and its 1px edge (>= 3:1 on bg and on the paper) */
+  --color-surface-field:  #ffffff;
+  --color-field-edge:     var(--color-neutral-500);
   /* Status (draft): meaning only, always beside a label or icon */
   --color-danger:    #b91c1c;
   --color-danger-fg: #ffffff;
@@ -116,6 +119,8 @@
     --color-accent:         var(--color-neutral-200);
     --color-surface-inset:  color-mix(in srgb, var(--color-bg) 90%, white);
     --color-surface-raised: color-mix(in srgb, var(--color-bg) 78%, white);
+    --color-surface-field:  var(--color-neutral-950);
+    --color-field-edge:     var(--color-neutral-500);
     --color-danger:    #f87171;
     --color-danger-fg: var(--color-neutral-900);
     --color-work:      #4ade80;
@@ -257,10 +262,12 @@ input, button {
   font-family: inherit;
 }
 
-/* Fields are carved into the surface: the bible's hairline cavity. */
+/* Fields are flat paper inside a 1px edge (the bible's forms): the carve
+   means a container, so a field never sits on a cavity floor, where
+   dark's edge drops to 2.84:1. */
 input[type='text'], input[type='number'], input[type='date'], select, textarea {
-  background: var(--color-surface-inset);
-  box-shadow: var(--inset-shadow-hairline);
+  background: var(--color-surface-field);
+  box-shadow: inset 0 0 0 1px var(--color-field-edge);
   color: var(--color-fg);
   border: 0;
   border-radius: 2px;
@@ -872,7 +879,6 @@ button.small {
 #te-col-builder {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
 }
 
 .col-type-label {
@@ -881,16 +887,15 @@ button.small {
   padding: 0 var(--spacing-1);
 }
 
+/* Rows of fields: a hairline between them, not a cavity under them */
 .col-row {
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-2);
   align-items: center;
-  padding: var(--spacing-2);
-  background: var(--color-surface-inset);
-  box-shadow: var(--inset-shadow-hairline);
-  border-radius: 2px;
+  padding: var(--spacing-2) 0;
 }
+.col-row + .col-row { border-top: 1px solid var(--color-rule); }
 
 .col-row .col-name {
   flex: 1 1 160px;
