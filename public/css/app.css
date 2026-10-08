@@ -280,6 +280,14 @@ select:focus-visible, textarea:focus-visible {
   outline-offset: 2px;
 }
 
+/* Read-only drops the paper for a dashed edge: the value is set, not
+   editable (the notes of a session already finalized). */
+textarea[readonly] {
+  background: transparent;
+  box-shadow: none;
+  border: 1px dashed var(--color-field-edge);
+}
+
 /* Selects are the bible's: no native arrow, a muted chevron over the right
    end that taps pass through. span. outranks the containers' padding. */
 .select-concrete { position: relative; display: block; }

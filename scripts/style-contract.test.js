@@ -306,6 +306,11 @@ test('fields, checkboxes and segments take the button focus ring; a fieldset is 
   for (const sel of ['.check-concrete > input:focus-visible + .check-box', '.seg-concrete input:focus-visible + span']) {
     assert.equal(rule(sel).get('outline'), '2px solid var(--color-fg)', `${sel} ring`);
   }
+  // Read-only drops the paper for a dashed edge: the value is set, not editable
+  const fixed = rule('textarea[readonly]');
+  assert.equal(fixed.get('background'), 'transparent');
+  assert.equal(fixed.get('box-shadow'), 'none');
+  assert.equal(fixed.get('border'), '1px dashed var(--color-field-edge)');
   // A select is the bible's: no native arrow, a muted chevron taps pass through
   assert.equal(rule('span.select-concrete > select').get('appearance'), 'none');
   const chevron = rule('.select-concrete > svg.icon');
