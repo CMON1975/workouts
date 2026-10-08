@@ -485,3 +485,14 @@ Deployed 2026-10-04: prod at `513df7f` (static only, no restart); prod serves th
 ---
 ## 2026-10-06 — Deployed stats fixes to prod
 **What:** Droplet pulled from `95843cd` to `b4d92b4` (the Other bar fix and the interval costing fix), and the user restarted `workouts`. Prod's `/api/stats` now shows today's Intervals session at 271 kcal / 3.83 km, down from 592.
+
+---
+## 2026-10-08 — HANDOFF (design bible): muted contrast, focus under the bar, End workout confirm
+**What:** Light muted text to neutral-600 (`4835e5c`). `scroll-padding-top` on `<html>` while the sticky stopwatch bar shows (`3a88e6a`). End workout moved from the modal to the bible's confirm bar, `public/js/confirm.js` porting `_confirm_script.html` (`640cc49`). Finish no longer swallows a failed workout finalize (`f1d20ed`). The e2e harness waits for the page to leave about:blank (`17af15b`). 482/482, e2e 13/13.
+**Why:** The bible session's drift check: muted text at 4.34:1, Shift+Tab landing fields under the sticky bar (WCAG 2.4.11), and the bible's bar-only confirm decision. Ending could fail silently and leave the workout open on the server.
+**Notes:**
+- User calls: the done bar says what happened, with Home (no RESUME; there's no un-finalize route); fix Finish too.
+- End seals the current exercise before the workout, because the server totals workout duration from sealed sessions at finalize. A failure between the two leaves that exercise sealed: Keep going works, but edits to it won't save (finalized drafts ignore PATCHes). Rare. Finish's retry guard is pinned to the last exercise, so Next on such an exercise moves on instead of ending the run.
+- All five stats e2e scenarios failed on the committed code (checks ran in about:blank) until `17af15b`. Plank flaked once (bar read `Lap 0:00`: the prescription fetch failed and only warned); 12 reruns green.
+- The scroll padding is a constant 8rem for a bar of 6.15rem, or 7.55rem with the interval label. iOS's own form-assistant scrolling wasn't checked.
+- Not deployed: static only (`git pull`, no restart). The tailnet dev server runs on `data/smoke.db`, a copy of the 10-06 prod snapshot.
