@@ -505,6 +505,28 @@ const scenarios = {
     } finally { await page.close(); }
   },
 
+  // Boot shows the routines before it checks for an open workout to
+  // resume. A routine picked in that window must not be mounted twice:
+  // the check finding the run just started would redraw its form and
+  // drop what was typed.
+  async 'boot: a routine picked before the resume check keeps its run'(server) {
+    await importWeek(server, lift('Lift A'));
+    const slowOpenList = `const f = window.fetch; window.fetch = (u, o) => String(u).startsWith('/api/workouts?')
+      ? new Promise(r => setTimeout(r, 1500)).then(() => f(u, o)) : f(u, o);`;
+    const page = await openBrowser(server.base + '/', { init: slowOpenList });
+    try {
+      await waitFor(page, `!!document.querySelector('#routine-list button')`, 'the routine list');
+      await page.evaluate(`document.querySelector('#routine-list button').click()`);
+      await waitFor(page, `document.querySelectorAll('#runner-root input').length > 0`, 'the runner');
+      await typeFirst(page, '5');
+      await sleep(2500);
+      assert.equal(await page.evaluate(`document.querySelector('#runner-root input').value`), '5', 'typed value kept');
+      assert.equal(await page.evaluate(`document.getElementById('resume-banner').hidden`), true, 'no resume banner');
+      assert.equal((await server.api('GET', '/api/workouts')).length, 1, 'one workout');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // The stats view opens from its header button next to History; a fresh
   // DB says so, and a failed fetch offers a retry that recovers.
   async 'stats: header button opens it; empty, error and retry'(server) {

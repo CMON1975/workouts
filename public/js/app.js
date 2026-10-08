@@ -152,6 +152,11 @@ let activeWorkout = null;       // { routine, workoutId, workoutClientVersion, s
 let detailOrigin = 'history';   // 'history' | 'runner'
 let stopwatch = null;           // created on workout start/resume, null otherwise
 let stopwatchTick = null;
+// Settles once boot has looked for a run to resume. Home's routines show
+// before that, and a pick in between waits: otherwise the check finds the
+// just-started run on the server and mounts it again, redrawing its form.
+let markResumeChecked;
+const resumeChecked = new Promise(r => { markResumeChecked = r; });
 const beeper = createBeeper();  // inert until the first button gesture arms it
 // Held for the length of a routine run. A lost lock (refused re-request:
 // low power mode, battery) is said out loud — the screen going dark mid-walk
@@ -668,6 +673,7 @@ async function handleRoutinePick(routine) {
     alert('This routine has no exercises.');
     return;
   }
+  await resumeChecked;
   if (activeWorkout) {
     alert('Finish or end the current workout first.');
     return;
@@ -1822,16 +1828,20 @@ async function enterApp() {
   show(els.openHistory);
   show(els.openStats);
 
-  const workoutResumed = await tryResumeWorkout();
-  if (!workoutResumed) {
-    const restored = await tryAutoRestore();
-    if (restored) {
-      const template = templates.find(t => t.id === restored.template_id);
-      if (template) {
-        showBanner(`Resumed draft for ${template.name}`);
-        resumeSession(restored);
+  try {
+    const workoutResumed = await tryResumeWorkout();
+    if (!workoutResumed) {
+      const restored = await tryAutoRestore();
+      if (restored) {
+        const template = templates.find(t => t.id === restored.template_id);
+        if (template) {
+          showBanner(`Resumed draft for ${template.name}`);
+          resumeSession(restored);
+        }
       }
     }
+  } finally {
+    markResumeChecked();
   }
 
   drainOutbox();
