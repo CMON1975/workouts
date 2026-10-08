@@ -169,6 +169,13 @@ header h1 {
   outline-offset: 2px;
 }
 
+/* While the bar shows, focus and anchor scrolling stop below it: Shift+Tab
+   would otherwise scroll a field in under it (WCAG 2.4.11). The bar is
+   6.15rem tall, 7.55rem with the interval label; 8rem clears both. */
+html:has(.stopwatch-bar:not([hidden])) {
+  scroll-padding-top: calc(env(safe-area-inset-top, 0px) + var(--spacing-32));
+}
+
 /* Persistent stopwatch bar (routine runs). Sticky keeps it in flow — nothing
    gets covered — while pinning it below the notch once the page scrolls. */
 .stopwatch-bar {

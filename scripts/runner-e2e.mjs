@@ -41,7 +41,8 @@ async function startServer() {
 }
 
 // init: a script run before the page's own (e.g. to slow a fetch down).
-async function openBrowser(url, { init = null } = {}) {
+// viewport: { width, height } emulates a phone screen (touch, 3x).
+async function openBrowser(url, { init = null, viewport = null } = {}) {
   const port = 9333 + Math.floor(Math.random() * 500);
   const prof = mkdtempSync(join(tmpdir(), 'workouts-e2e-cdp-'));
   const chrome = spawn(process.env.CHROMIUM || 'chromium', [
@@ -76,6 +77,9 @@ async function openBrowser(url, { init = null } = {}) {
   await send('Runtime.enable');
   await send('Page.enable');
   if (init) await send('Page.addScriptToEvaluateOnNewDocument', { source: init });
+  if (viewport) {
+    await send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 3, mobile: true });
+  }
   await send('Page.navigate', { url });
 
   const evaluate = async (expression) => {
@@ -83,8 +87,17 @@ async function openBrowser(url, { init = null } = {}) {
     if (r.result?.exceptionDetails) throw new Error(`page: ${r.result.exceptionDetails.text} in ${expression}`);
     return r.result?.result?.value;
   };
+  // A real key press, default action included (Tab moves focus).
+  const key = async (name, { shift = false } = {}) => {
+    const codes = { Tab: 9, Enter: 13, Escape: 27 };
+    const base = { key: name, code: name, windowsVirtualKeyCode: codes[name], modifiers: shift ? 8 : 0 };
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
+    if (name === 'Enter') await send('Input.dispatchKeyEvent', { type: 'char', text: '\r', ...base });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+  };
   return {
     evaluate,
+    key,
     errors,
     async close() {
       ws.close();
@@ -127,8 +140,8 @@ const inputValue = (page, row, name) => page.evaluate(`(() => {
   return i ? i.value : null;
 })()`);
 
-async function startRoutine(server) {
-  const page = await openBrowser(server.base + '/');
+async function startRoutine(server, opts) {
+  const page = await openBrowser(server.base + '/', opts);
   await waitFor(page, `!!document.querySelector('#routine-list button')`, 'the routine list');
   await page.evaluate(`document.querySelector('#routine-list button').click()`);
   await waitFor(page, `!document.getElementById('stopwatch-bar').hidden
@@ -268,6 +281,46 @@ const scenarios = {
       assert.equal((await bar(page)).state, 'idle');
       await press(page);
       assert.equal((await bar(page)).state, 'resting', 'the next set gets its rest too');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
+  // WCAG 2.4.11: Shift+Tab back up a long exercise at phone width scrolls
+  // each field in at the top of the viewport; none may land under the
+  // sticky stopwatch bar.
+  async 'focus: Shift+Tab never puts a field under the stopwatch bar'(server) {
+    await importWeek(server, {
+      template_name: 'Long lift',
+      kind: 'standard',
+      columns: [
+        { name: 'reps', unit: 'reps', value_type: 'number' },
+        { name: 'weight', unit: 'lb', value_type: 'number' },
+      ],
+      default_rows: 10,
+      rows_fixed: 0,
+      rest_seconds: 3,
+      targets: [],
+    });
+    const page = await startRoutine(server, { viewport: { width: 390, height: 664 } });
+    try {
+      assert.ok(await page.evaluate(`document.documentElement.scrollHeight > innerHeight * 1.5`), 'the form scrolls');
+      await page.evaluate(`[...document.querySelectorAll('#runner-root input')].at(-1).focus(); scrollTo(0, document.documentElement.scrollHeight)`);
+      const hidden = [];
+      for (let i = 0; i < 24; i += 1) {
+        await page.key('Tab', { shift: true });
+        const at = await page.evaluate(`(() => {
+          const el = document.activeElement;
+          const bar = document.getElementById('stopwatch-bar');
+          if (!el || el === document.body || bar.contains(el)) return null;
+          const r = el.getBoundingClientRect();
+          const b = bar.getBoundingClientRect();
+          return { what: el.placeholder || el.getAttribute('aria-label') || el.id || el.tagName, top: r.top, bottom: r.bottom, barTop: b.top, barBottom: b.bottom };
+        })()`);
+        if (at && at.top < at.barBottom && at.bottom > at.barTop) {
+          hidden.push(`${at.what} at ${Math.round(at.top)}..${Math.round(at.bottom)}, bar ${Math.round(at.barTop)}..${Math.round(at.barBottom)}`);
+        }
+      }
+      assert.deepEqual(hidden, [], 'focused controls overlapping the bar');
       return page.errors;
     } finally { await page.close(); }
   },
