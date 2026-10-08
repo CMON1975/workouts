@@ -1214,6 +1214,7 @@ let rowColumns = [];
 function openNewTemplate() {
   els.newTplForm.reset();
   els.ntErr.textContent = '';
+  clearInvalidIn(els.newTplForm);
   rowColumns = [{ name: '', value_type: 'number', unit: '' }];
   renderColBuilder();
   applyKindVisibility();
@@ -1295,15 +1296,45 @@ function renderColBuilder() {
   });
 }
 
+// The bible's invalid field: aria-invalid draws its danger edge, the
+// form's message is tied to it, and it takes the focus. The next edit or
+// submit clears it.
+function flagInvalid(field, err) {
+  field.setAttribute('aria-invalid', 'true');
+  field.setAttribute('aria-describedby', err.id);
+  field.focus();
+}
+function clearInvalid(field) {
+  field.removeAttribute('aria-invalid');
+  field.removeAttribute('aria-describedby');
+}
+function clearInvalidIn(form) {
+  form.querySelectorAll('[aria-invalid]').forEach(clearInvalid);
+}
+
+// Index of the first non-blank name that repeats an earlier one (any
+// case), or -1.
+function firstRepeat(names) {
+  const seen = new Set();
+  return names.findIndex((n) => {
+    const key = n.trim().toLowerCase();
+    if (!key) return false;
+    if (seen.has(key)) return true;
+    seen.add(key);
+    return false;
+  });
+}
+
 function buildTemplateBody() {
   const name = els.ntName.value.trim();
-  if (!name) return { error: 'Exercise name is required.' };
+  if (!name) return { error: 'Exercise name is required.', field: els.ntName };
   const kind = selectedKind();
   if (kind === 'checkbox') {
     const description = els.ntDescription.value.trim();
-    if (!description) return { error: 'Description is required.' };
+    if (!description) return { error: 'Description is required.', field: els.ntDescription };
     return { body: { name, kind: 'checkbox', description } };
   }
+  const colNames = els.ntColBuilder.querySelectorAll('.col-name');
   const cols = rowColumns
     .map(c => ({
       name: c.name.trim(),
@@ -1311,15 +1342,13 @@ function buildTemplateBody() {
       unit: (c.unit || '').trim() || null,
     }))
     .filter(c => c.name);
-  if (!cols.length) return { error: 'At least one column is required.' };
+  if (!cols.length) return { error: 'At least one column is required.', field: colNames[0] };
   if (cols.length > 16) return { error: 'At most 16 columns.' };
-  const lower = cols.map(c => c.name.toLowerCase());
-  if (new Set(lower).size !== lower.length) {
-    return { error: 'Column names must be unique.' };
-  }
+  const repeat = firstRepeat(rowColumns.map(c => c.name));
+  if (repeat >= 0) return { error: 'Column names must be unique.', field: colNames[repeat] };
   const count = Number(els.ntSetsCount.value);
   if (!Number.isInteger(count) || count < 1 || count > 100) {
-    return { error: 'Sets must be between 1 and 100.' };
+    return { error: 'Sets must be between 1 and 100.', field: els.ntSetsCount };
   }
   return {
     body: {
@@ -1334,8 +1363,13 @@ function buildTemplateBody() {
 async function handleNewTemplateSubmit(e) {
   e.preventDefault();
   els.ntErr.textContent = '';
-  const { error, body } = buildTemplateBody();
-  if (error) { els.ntErr.textContent = error; return; }
+  clearInvalidIn(e.target);
+  const { error, field, body } = buildTemplateBody();
+  if (error) {
+    els.ntErr.textContent = error;
+    if (field) flagInvalid(field, els.ntErr);
+    return;
+  }
 
   els.ntSubmit.disabled = true;
   try {
@@ -1347,6 +1381,7 @@ async function handleNewTemplateSubmit(e) {
   } catch (err) {
     if (err.status === 409) {
       els.ntErr.textContent = 'An exercise with that name already exists.';
+      flagInvalid(els.ntName, els.ntErr);
     } else if (err.status === 400) {
       els.ntErr.textContent = err.body?.error || 'Invalid exercise.';
     } else {
@@ -1385,6 +1420,7 @@ let tplEditColumns = []; // { id?, name, unit, value_type, isNew, origName?, ori
 function openTemplateEdit(tpl) {
   tplEditing = tpl;
   els.teErr.textContent = '';
+  clearInvalidIn(els.tplEditForm);
   els.teName.value = tpl.name;
   els.teDescription.value = tpl.description || '';
   const isCheckbox = tpl.kind === 'checkbox';
@@ -1505,10 +1541,12 @@ async function handleTemplateEditSubmit(evt) {
   const tpl = tplEditing;
   const isCheckbox = tpl.kind === 'checkbox';
 
+  clearInvalidIn(evt.target);
+  const fail = (message, field) => { els.teErr.textContent = message; if (field) flagInvalid(field, els.teErr); };
   const name = els.teName.value.trim();
-  if (!name) { els.teErr.textContent = 'Name is required.'; return; }
+  if (!name) return fail('Name is required.', els.teName);
   const description = els.teDescription.value.trim();
-  if (isCheckbox && !description) { els.teErr.textContent = 'Description is required for checkbox exercises.'; return; }
+  if (isCheckbox && !description) return fail('Description is required for checkbox exercises.', els.teDescription);
 
   const patch = {};
   if (name !== tpl.name) patch.name = name;
@@ -1516,15 +1554,14 @@ async function handleTemplateEditSubmit(evt) {
   if (!isCheckbox) {
     const defaultRows = Number(els.teDefaultRows.value);
     if (!Number.isInteger(defaultRows) || defaultRows < 1 || defaultRows > 100) {
-      els.teErr.textContent = 'Sets must be a whole number between 1 and 100.';
-      return;
+      return fail('Sets must be a whole number between 1 and 100.', els.teDefaultRows);
     }
     if (defaultRows !== tpl.default_rows) patch.default_rows = defaultRows;
     const rowsFixed = els.teRowsFixed.checked;
     if (rowsFixed !== !!tpl.rows_fixed) patch.rows_fixed = rowsFixed;
 
     const colsResult = buildEditColumnsPatch(tpl);
-    if (colsResult.error) { els.teErr.textContent = colsResult.error; return; }
+    if (colsResult.error) return fail(colsResult.error, els.teColBuilder.querySelectorAll('.col-name')[colsResult.index]);
     if (colsResult.unitChanges.length > 0) {
       const lines = colsResult.unitChanges.map(c =>
         `${c.name}: ${c.from || '(none)'} → ${c.to || '(none)'}`
@@ -1558,6 +1595,7 @@ async function handleTemplateEditSubmit(evt) {
         : msg.startsWith('column name')
           ? `That column name is taken by a column that was removed from this list (its data is kept).`
           : 'An exercise with that name already exists.';
+      if (!msg.includes('workout') && !msg.startsWith('column name')) flagInvalid(els.teName, els.teErr);
     } else if (err.status === 400) {
       els.teErr.textContent = err.body?.error || 'Some fields are invalid.';
     } else {
@@ -1574,13 +1612,10 @@ function buildEditColumnsPatch(tpl) {
     name: c.name.trim(),
     unit: (c.unit || '').trim(),
   }));
-  for (const c of cleaned) {
-    if (!c.name) return { error: 'Column names cannot be blank.' };
-  }
-  const lowerNames = cleaned.map(c => c.name.toLowerCase());
-  if (new Set(lowerNames).size !== lowerNames.length) {
-    return { error: 'Column names must be unique.' };
-  }
+  const blank = cleaned.findIndex(c => !c.name);
+  if (blank >= 0) return { error: 'Column names cannot be blank.', index: blank };
+  const repeat = firstRepeat(cleaned.map(c => c.name));
+  if (repeat >= 0) return { error: 'Column names must be unique.', index: repeat };
 
   const origIds = formColumns(tpl).map(c => c.id);
   const sameOrder = cleaned.length === origIds.length
@@ -1610,6 +1645,7 @@ function openNewRoutine() {
   rtEditingId = null;
   els.newRtForm.reset();
   els.nrErr.textContent = '';
+  clearInvalidIn(els.newRtForm);
   els.nrEditBanner.hidden = true;
   rtSelectedIds = [];
   els.newRtHeading.textContent = 'New routine';
@@ -1645,6 +1681,7 @@ async function openEditRoutine(routine) {
   rtSelectedIds = full.templates.map(t => t.id);
   els.newRtForm.reset();
   els.nrErr.textContent = '';
+  clearInvalidIn(els.newRtForm);
   els.nrEditBanner.hidden = false;
   els.nrName.value = full.name;
   els.newRtHeading.textContent = 'Edit routine';
@@ -1681,8 +1718,9 @@ function renderBuilder() {
 async function handleRoutineFormSubmit(e) {
   e.preventDefault();
   els.nrErr.textContent = '';
+  clearInvalidIn(e.target);
   const name = els.nrName.value.trim();
-  if (!name) { els.nrErr.textContent = 'Name is required.'; return; }
+  if (!name) { els.nrErr.textContent = 'Name is required.'; flagInvalid(els.nrName, els.nrErr); return; }
   if (!rtSelectedIds.length) { els.nrErr.textContent = 'Pick at least one exercise.'; return; }
 
   els.nrSubmit.disabled = true;
@@ -1710,6 +1748,7 @@ async function handleRoutineFormSubmit(e) {
         els.nrErr.textContent = 'A workout was started on this routine. Finish or end it, then try again.';
       } else {
         els.nrErr.textContent = 'A routine with that name already exists.';
+        flagInvalid(els.nrName, els.nrErr);
       }
     } else if (err.status === 400) {
       els.nrErr.textContent = err.body?.error || 'Invalid routine.';
@@ -2025,6 +2064,7 @@ async function boot() {
   els.newTemplateBtn.addEventListener('click', openNewTemplate);
   els.newTplBack.addEventListener('click', goHome);
   els.newTplForm.addEventListener('submit', handleNewTemplateSubmit);
+  document.addEventListener('input', (e) => { if (e.target.hasAttribute?.('aria-invalid')) clearInvalid(e.target); });
   els.ntAddCol.addEventListener('click', () => {
     if (rowColumns.length >= 16) return;
     rowColumns.push({ name: '', value_type: 'number', unit: '' });

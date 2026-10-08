@@ -280,6 +280,12 @@ select:focus-visible, textarea:focus-visible {
   outline-offset: 2px;
 }
 
+/* Invalid swaps the edge for 2px of danger; the form's message is tied to
+   the field (aria-describedby), so colour is never the only cue. */
+input[aria-invalid='true'], select[aria-invalid='true'], textarea[aria-invalid='true'] {
+  box-shadow: inset 0 0 0 2px var(--color-danger);
+}
+
 /* Read-only drops the paper for a dashed edge: the value is set, not
    editable (the notes of a session already finalized). */
 textarea[readonly] {

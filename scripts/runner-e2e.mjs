@@ -619,6 +619,65 @@ const scenarios = {
     } finally { await page.close(); }
   },
 
+  // The bible's invalid field: the field at fault gets a 2px danger edge
+  // and the focus, with the form's message tied to it; the next edit
+  // clears the flag.
+  async 'invalid: the field at fault takes the danger edge and the message'(server) {
+    await importWeek(server, lift('Lift A'));
+    const page = await openBrowser(server.base + '/');
+    const type = (sel, v) => page.evaluate(`(() => { const i = ${sel}; i.value = ${JSON.stringify(v)}; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    const flagged = () => page.evaluate(`[...document.querySelectorAll('[aria-invalid="true"]')].filter(f => f.checkVisibility()).map((f) => {
+      const err = document.getElementById(f.getAttribute('aria-describedby'));
+      const edge = getComputedStyle(f).boxShadow;
+      return (f.id || f.className) + ' | ' + (err?.textContent || 'no message')
+        + (edge.startsWith(getComputedStyle(err ?? f).color) && edge.includes('2px inset') ? ' | danger edge' : ' | ' + edge)
+        + (document.activeElement === f ? ' | focused' : '');
+    })`);
+    try {
+      await waitFor(page, `!!document.querySelector('#routine-list button')`, 'home');
+      await page.evaluate(`document.getElementById('new-template').click()`);
+      await waitFor(page, `document.getElementById('nt-name').checkVisibility()`, 'new exercise');
+      await type(`document.getElementById('nt-name')`, 'Lift A');
+      await type(`document.querySelector('#nt-col-builder .col-name')`, 'reps');
+      await page.evaluate(`document.getElementById('nt-submit').click()`);
+      await waitFor(page, `!!document.getElementById('nt-err').textContent`, 'the name error');
+      const seen = [await flagged()];
+      await type(`document.getElementById('nt-name')`, 'Lift B');
+      seen.push(await flagged());
+      // A form opened again starts clean
+      await type(`document.getElementById('nt-name')`, 'Lift A');
+      await page.evaluate(`document.getElementById('nt-err').textContent = ''; document.getElementById('nt-submit').click()`);
+      await waitFor(page, `document.getElementById('nt-name').getAttribute('aria-invalid') === 'true'`, 'the name flagged again');
+      await page.evaluate(`document.getElementById('new-tpl-back').click(); document.getElementById('new-template').click()`);
+      await waitFor(page, `document.getElementById('nt-name').checkVisibility()`, 'new exercise again');
+      seen.push(await flagged());
+
+      await type(`document.getElementById('nt-name')`, 'Lift B');
+      await type(`document.querySelector('#nt-col-builder .col-name')`, 'reps');
+      await page.evaluate(`document.getElementById('nt-add-col').click()`);
+      await type(`document.querySelectorAll('#nt-col-builder .col-name')[1]`, 'Reps');
+      await page.evaluate(`document.getElementById('nt-submit').click()`);
+      seen.push(await flagged());
+      await page.evaluate(`document.getElementById('new-tpl-back').click()`);
+
+      await page.evaluate(`document.getElementById('new-routine').click()`);
+      await waitFor(page, `!!document.querySelector('#nr-available .template-btn')`, 'new routine');
+      await type(`document.getElementById('nr-name')`, 'E2E');
+      await page.evaluate(`document.querySelector('#nr-available .template-btn').click()`);
+      await page.evaluate(`document.getElementById('nr-submit').click()`);
+      await waitFor(page, `!!document.getElementById('nr-err').textContent`, 'the routine error');
+      seen.push(await flagged());
+      assert.deepEqual(seen, [
+        ['nt-name | An exercise with that name already exists. | danger edge | focused'],
+        [],
+        [],
+        ['col-name | Column names must be unique. | danger edge | focused'],
+        ['nr-name | A routine with that name already exists. | danger edge | focused'],
+      ]);
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // Every select is the bible's: no native arrow, a muted Lucide chevron
   // over its right end that lets taps through to the select, and the app's
   // face like every other field.
