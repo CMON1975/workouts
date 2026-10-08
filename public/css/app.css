@@ -257,7 +257,7 @@ h2 { margin-top: 0; font-size: var(--text-sm); color: var(--color-muted); font-w
 
 /* Inputs */
 
-input, button {
+input, button, select {
   font-size: var(--text-base);
   font-family: inherit;
 }

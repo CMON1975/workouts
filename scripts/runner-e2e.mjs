@@ -620,7 +620,8 @@ const scenarios = {
   },
 
   // Every select is the bible's: no native arrow, a muted Lucide chevron
-  // over its right end that lets taps through to the select.
+  // over its right end that lets taps through to the select, and the app's
+  // face like every other field.
   async 'selects: the bible chevron on every select'(server) {
     await importWeek(server, lift('Lift A'));
     const page = await openBrowser(server.base + '/');
@@ -629,7 +630,8 @@ const scenarios = {
       const r = s.getBoundingClientRect(), c = svg?.getBoundingClientRect();
       return (s.id || s.closest('[id]').id) + ': ' + [getComputedStyle(s).appearance,
         svg ? getComputedStyle(svg).pointerEvents : 'no chevron',
-        c && c.right <= r.right && c.left > r.left + r.width / 2 ? 'right end' : 'misplaced'].join(' ');
+        c && c.right <= r.right && c.left > r.left + r.width / 2 ? 'right end' : 'misplaced',
+        getComputedStyle(s).fontFamily === getComputedStyle(document.body).fontFamily ? 'app face' : getComputedStyle(s).fontFamily].join(' ');
     })`);
     try {
       await waitFor(page, `!!document.querySelector('#routine-list button')`, 'home');
@@ -645,9 +647,9 @@ const scenarios = {
       await waitFor(page, `document.querySelectorAll('#te-col-builder select').length > 0`, 'a new column');
       seen.push(...await check());
       assert.deepEqual(seen, [
-        'bm-metric: none none right end',
-        'nt-col-builder: none none right end',
-        'te-col-builder: none none right end',
+        'bm-metric: none none right end app face',
+        'nt-col-builder: none none right end app face',
+        'te-col-builder: none none right end app face',
       ]);
       return page.errors;
     } finally { await page.close(); }
