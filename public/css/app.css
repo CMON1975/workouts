@@ -335,8 +335,9 @@ button.secondary:active:not(:disabled), .icon-btn:active:not(:disabled), .templa
   }
 }
 
+/* Flat ink tint: shows on the page and on a cavity floor alike. */
 button:disabled {
-  background: color-mix(in srgb, var(--color-bg) 96%, white);
+  background: color-mix(in srgb, var(--color-fg) 12%, transparent);
   color: var(--color-muted);
   box-shadow: none;
   cursor: not-allowed;

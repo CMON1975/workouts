@@ -230,6 +230,10 @@ test('controls are extruded slabs, panels are hairline cavities and fields are p
     assert.equal(r.get('background'), 'var(--color-surface-raised)', `${sel} background`);
     assert.equal(r.get('box-shadow'), EXTRUDE, `${sel} shadow`);
   }
+  // Disabled is flat ink tint, so it shows on the page and on a cavity
+  // floor alike (bible AUDIT A17: a bg-with-white fill was the page itself).
+  assert.equal(rule('button:disabled').get('background'), 'color-mix(in srgb, var(--color-fg) 12%, transparent)');
+  assert.equal(rule('button:disabled').get('box-shadow'), 'none');
   assert.equal(rule('button:active:not(:disabled)').get('box-shadow'),
     'inset 1px -1px 2px rgba(0, 0, 0, 0.45), inset -1px 1px 0 rgba(255, 255, 255, 0.03)');
   for (const sel of ['button.secondary:active:not(:disabled)', '.template-btn:active:not(:disabled)']) {
