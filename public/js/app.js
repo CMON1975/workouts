@@ -820,6 +820,9 @@ async function handleRunnerNext() {
   const savedIndex = activeWorkout.currentIndex;
   const nextIndex = savedIndex + 1;
   const isLast = nextIndex >= activeWorkout.routine.templates.length;
+  // A Finish whose workout finalize failed sealed the exercise already;
+  // only the workout is left to try again.
+  if (isLast && currentSession.getDraft().finalized_at) return finishWorkout();
 
   // Finish seals the exercise with no edit path: confirm when a prescribed
   // set was never entered (a Finish tapped instead of typing the last set).
@@ -863,20 +866,25 @@ async function handleRunnerNext() {
     renderStopwatchDisplay();
   }
 
-  if (isLast) {
-    try {
-      await finalizeActiveWorkout();
-    } catch (err) {
-      console.warn('finalize workout failed', err);
-    }
-    await resetRunner();
-    els.runnerNext.disabled = false;
-    goHome();
-    return;
-  }
+  if (isLast) return finishWorkout();
   await bindCurrentExercise();
   maybeAutoStartStopwatch();
   els.runnerNext.disabled = false;
+}
+
+// Finish's last step. A failure stays on the runner with the exercise
+// sealed, so the next Finish press retries only this.
+async function finishWorkout() {
+  try {
+    await finalizeActiveWorkout();
+  } catch (err) {
+    alert(endFailure(err, 'Press Finish to try again.'));
+    els.runnerNext.disabled = false;
+    return;
+  }
+  await resetRunner();
+  els.runnerNext.disabled = false;
+  goHome();
 }
 
 // End workout's confirm:go: seal the current exercise if it has values,

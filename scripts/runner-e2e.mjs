@@ -453,6 +453,58 @@ const scenarios = {
     } finally { await page.close(); }
   },
 
+  // A failed end can leave the current exercise sealed (its finalize went
+  // through, the workout's didn't). Keep going, then Next moves on to the
+  // next exercise; only Finish's retry skips straight to the workout.
+  async 'end workout: Keep going after a failed end; Next still moves on'(server) {
+    await importWeek(server, lift('Lift A'), lift('Lift B'));
+    const page = await startRoutine(server);
+    try {
+      await page.evaluate(`window.__alerts = []; window.alert = (m) => window.__alerts.push(m)`);
+      await typeFirst(page, '5');
+      await page.evaluate(FAIL_FINALIZE);
+      await page.evaluate(`document.getElementById('runner-end').click()`);
+      await page.key('Tab');
+      await page.key('Enter');
+      await waitFor(page, `document.querySelector('#runner [data-confirm-status]').textContent.startsWith("Couldn't")`, 'the failure');
+      assert.deepEqual(await onlyWorkout(server), { finalized: false, sessions: 1 }, 'Lift A sealed, workout open');
+      await page.evaluate(`document.querySelector('#runner [data-confirm-keep]').click()`);
+      await page.evaluate(`window.fetch = window.__fetch; document.getElementById('runner-next').click()`);
+      await waitFor(page, `document.getElementById('runner-step').textContent.startsWith('2 / 2')`, 'Lift B');
+      assert.deepEqual(await onlyWorkout(server), { finalized: false, sessions: 1 });
+      assert.deepEqual(await page.evaluate(`window.__alerts`), []);
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
+  // Finish used to swallow a failed workout finalize and go home, leaving
+  // the workout open on the server; now it stays put and says so. The
+  // retry only retries that: set 2 is blank, and it asks about it once.
+  async 'finish: a failed workout finalize stays on the exercise; Finish retries'(server) {
+    await importWeek(server, { ...lift('Lift A'), targets: [0, 1].map(r => ({ row_index: r, column: 'reps', target_num: 5 })) });
+    const page = await startRoutine(server);
+    try {
+      await page.evaluate(`window.__alerts = []; window.alert = (m) => window.__alerts.push(m);
+        window.__confirms = []; window.confirm = (m) => (window.__confirms.push(m), true)`);
+      await typeFirst(page, '5');
+      await page.evaluate(FAIL_FINALIZE);
+      await page.evaluate(`document.getElementById('runner-next').click()`);
+      await waitFor(page, `window.__alerts.length > 0`, 'the alert');
+      assert.deepEqual(await page.evaluate(`window.__confirms`), ['Set 2 of this exercise is still blank. Finish anyway?']);
+      assert.deepEqual(await page.evaluate(`window.__alerts`), ["Couldn't end the workout: no connection. Press Finish to try again."]);
+      assert.equal(await page.evaluate(`document.getElementById('runner').hidden`), false, 'still on the runner');
+      assert.equal(await page.evaluate(`document.getElementById('runner-next').disabled`), false, 'Finish can be pressed again');
+      assert.deepEqual(await onlyWorkout(server), { finalized: false, sessions: 1 });
+
+      await page.evaluate(`window.fetch = window.__fetch; document.getElementById('runner-next').click()`);
+      await waitFor(page, `!document.getElementById('home').hidden`, 'home');
+      assert.deepEqual(await onlyWorkout(server), { finalized: true, sessions: 1 });
+      assert.equal(await page.evaluate(`window.__alerts.length`), 1);
+      assert.equal(await page.evaluate(`window.__confirms.length`), 1, 'the retry does not ask again');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // The stats view opens from its header button next to History; a fresh
   // DB says so, and a failed fetch offers a retry that recovers.
   async 'stats: header button opens it; empty, error and retry'(server) {
