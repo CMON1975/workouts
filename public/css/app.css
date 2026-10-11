@@ -537,7 +537,7 @@ button:disabled {
   margin: 0 0 var(--spacing-1) 0;
   white-space: pre-wrap;
 }
-#nt-description { width: 100%; min-height: 60px; resize: vertical; padding: var(--spacing-2); font-family: inherit; font-size: var(--text-base); }
+#nt-description, #te-description { width: 100%; min-height: 60px; resize: vertical; padding: var(--spacing-2); font-family: inherit; font-size: var(--text-base); }
 .detail-checkbox {
   font-size: var(--text-lg);
   margin: 0 0 var(--spacing-2) 0;

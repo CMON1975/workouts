@@ -805,6 +805,27 @@ const scenarios = {
   // Every select is the bible's: no native arrow, a muted Lucide chevron
   // over its right end that lets taps through to the select, and the app's
   // face like every other field.
+  // Edit exercise's Description is the same field as New exercise's: the
+  // app face (a bare textarea falls back to monospace) and the same padding.
+  async 'edit exercise: Description is the same field as New exercise\'s'(server) {
+    const page = await openBrowser(server.base + '/');
+    const look = (id) => page.evaluate(`(() => {
+      const s = getComputedStyle(document.getElementById('${id}'));
+      return [s.fontFamily === getComputedStyle(document.body).fontFamily ? 'app face' : s.fontFamily,
+        s.fontSize, s.paddingLeft, s.minHeight].join(' ');
+    })()`);
+    try {
+      await waitFor(page, `!document.getElementById('open-stats').hidden`, 'home');
+      await page.evaluate(`document.getElementById('manage-templates').click()`);
+      await waitFor(page, `!!document.querySelector('#manage-list [aria-label="Edit"]')`, 'the exercise list');
+      await page.evaluate(`document.querySelector('#manage-list [aria-label="Edit"]').click()`);
+      await waitFor(page, `document.getElementById('tpl-edit-dialog').open`, 'the edit dialog');
+      assert.match(await look('te-description'), /^app face /);
+      assert.equal(await look('te-description'), await look('nt-description'));
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // An existing column's type is a pick in Edit exercise, like a new one's,
   // and only a change is sent (the server applies value_type when sent).
   async 'edit exercise: an existing column takes a new type'(server) {
