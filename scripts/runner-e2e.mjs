@@ -843,6 +843,8 @@ const scenarios = {
       await waitFor(page, `document.getElementById('tpl-edit-dialog').open`, 'the edit dialog');
       assert.deepEqual(await page.evaluate(`[...document.querySelectorAll('#te-col-builder select')].map(s => s.value)`),
         ['text', 'text'], 'each column shows its type');
+      assert.doesNotMatch(await page.evaluate(`document.querySelector('#te-columns-field > p').textContent`),
+        /type.{0,20}not supported|not supported.*type/, 'the hint no longer rules types out');
       await page.evaluate(`(() => {
         const s = document.querySelector('#te-col-builder select');
         s.value = 'number';
