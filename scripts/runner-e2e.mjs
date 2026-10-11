@@ -805,6 +805,39 @@ const scenarios = {
   // Every select is the bible's: no native arrow, a muted Lucide chevron
   // over its right end that lets taps through to the select, and the app's
   // face like every other field.
+  // An existing column's type is a pick in Edit exercise, like a new one's,
+  // and only a change is sent (the server applies value_type when sent).
+  async 'edit exercise: an existing column takes a new type'(server) {
+    const tpl = await server.api('POST', '/api/templates', {
+      name: 'Typed', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'reps', value_type: 'text' }, { name: 'note', value_type: 'text' }],
+    });
+    const page = await openBrowser(server.base + '/');
+    try {
+      await waitFor(page, `!document.getElementById('open-stats').hidden`, 'home');
+      await page.evaluate(`document.getElementById('manage-templates').click()`);
+      await waitFor(page, `!!document.querySelector('#manage-list [aria-label="Edit"]')`, 'the exercise list');
+      await page.evaluate(`[...document.querySelectorAll('#manage-list .manage-row')]
+        .find(r => r.querySelector('.manage-name').textContent === 'Typed').querySelector('[aria-label="Edit"]').click()`);
+      await waitFor(page, `document.getElementById('tpl-edit-dialog').open`, 'the edit dialog');
+      assert.deepEqual(await page.evaluate(`[...document.querySelectorAll('#te-col-builder select')].map(s => s.value)`),
+        ['text', 'text'], 'each column shows its type');
+      await page.evaluate(`(() => {
+        const s = document.querySelector('#te-col-builder select');
+        s.value = 'number';
+        s.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await page.evaluate(`document.getElementById('te-save').click()`);
+      await waitFor(page, `!document.getElementById('tpl-edit-dialog').open`, 'the save');
+      const after = (await server.api('GET', '/api/templates')).find(t => t.id === tpl.id);
+      assert.deepEqual(after.columns.map(c => [c.id, c.name, c.value_type, c.retired_at]), [
+        [tpl.columns[0].id, 'reps', 'number', null],
+        [tpl.columns[1].id, 'note', 'text', null],
+      ]);
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   async 'selects: the bible chevron on every select'(server) {
     await importWeek(server, lift('Lift A'));
     const page = await openBrowser(server.base + '/');
@@ -832,7 +865,8 @@ const scenarios = {
       assert.deepEqual(seen, [
         'bm-metric: none none right end app face',
         'nt-col-builder: none none right end app face',
-        'te-col-builder: none none right end app face',
+        'te-col-builder: none none right end app face', // the existing column's type
+        'te-col-builder: none none right end app face', // the added column's
       ]);
       return page.errors;
     } finally { await page.close(); }

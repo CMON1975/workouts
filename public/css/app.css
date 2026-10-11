@@ -1039,12 +1039,6 @@ button.small {
   flex-direction: column;
 }
 
-.col-type-label {
-  flex: 0 0 auto;
-  font-size: var(--text-sm);
-  padding: 0 var(--spacing-1);
-}
-
 /* Rows of fields: a hairline between them, not a cavity under them */
 .col-row {
   display: flex;

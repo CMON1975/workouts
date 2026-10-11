@@ -1459,6 +1459,7 @@ function openTemplateEdit(tpl) {
       isNew: false,
       origName: c.name,
       origUnit: c.unit || '',
+      origType: c.value_type || 'number',
     }));
     renderTeColBuilder();
   } else {
@@ -1504,22 +1505,19 @@ function renderTeColBuilder() {
     nameInput.addEventListener('input', () => { tplEditColumns[i].name = nameInput.value; });
     row.appendChild(nameInput);
 
-    if (col.isNew) {
-      const typeSel = document.createElement('select');
-      for (const t of ['number', 'text']) {
-        const opt = document.createElement('option');
-        opt.value = t; opt.textContent = t;
-        if (col.value_type === t) opt.selected = true;
-        typeSel.appendChild(opt);
-      }
-      typeSel.addEventListener('change', () => { tplEditColumns[i].value_type = typeSel.value; });
-      row.appendChild(selectConcrete(typeSel));
-    } else {
-      const typeLabel = document.createElement('span');
-      typeLabel.className = 'col-type-label muted';
-      typeLabel.textContent = col.value_type;
-      row.appendChild(typeLabel);
+    // Existing columns too: a flip converts nothing (past entries stay as
+    // logged and every reader takes either side), so it can be undone.
+    const typeSel = document.createElement('select');
+    const types = ['number', 'text'];
+    if (!types.includes(col.value_type)) types.push(col.value_type); // legacy 'duration'
+    for (const t of types) {
+      const opt = document.createElement('option');
+      opt.value = t; opt.textContent = t;
+      if (col.value_type === t) opt.selected = true;
+      typeSel.appendChild(opt);
     }
+    typeSel.addEventListener('change', () => { tplEditColumns[i].value_type = typeSel.value; });
+    row.appendChild(selectConcrete(typeSel));
 
     const unitInput = document.createElement('input');
     unitInput.type = 'text';
@@ -1642,8 +1640,9 @@ function buildEditColumnsPatch(tpl) {
     && cleaned.every((c, i) => c.id === origIds[i] && !c.isNew);
   const renamed = cleaned.some(c => !c.isNew && c.name !== c.origName);
   const unitChanged = cleaned.some(c => !c.isNew && c.unit !== c.origUnit);
+  const typeChanged = cleaned.some(c => !c.isNew && c.value_type !== c.origType);
   const added = cleaned.some(c => c.isNew);
-  if (sameOrder && !renamed && !unitChanged && !added) {
+  if (sameOrder && !renamed && !unitChanged && !typeChanged && !added) {
     return { unitChanges: [] };
   }
 
@@ -1654,7 +1653,7 @@ function buildEditColumnsPatch(tpl) {
   const columns = cleaned.map(c => {
     const out = { name: c.name, unit: c.unit || null };
     if (c.id !== undefined) out.id = c.id;
-    else out.value_type = c.value_type;
+    if (c.isNew || c.value_type !== c.origType) out.value_type = c.value_type;
     return out;
   });
 
