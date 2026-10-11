@@ -157,7 +157,7 @@ let stopwatchTick = null;
 // just-started run on the server and mounts it again, redrawing its form.
 let markResumeChecked;
 const resumeChecked = new Promise(r => { markResumeChecked = r; });
-const beeper = createBeeper();  // inert until the first button gesture arms it
+const beeper = createBeeper();  // inert until the first gesture in a run arms it
 // Held for the length of a routine run. A lost lock (refused re-request:
 // low power mode, battery) is said out loud — the screen going dark mid-walk
 // with no word is the failure the 2026-09-20 handoff names.
@@ -275,6 +275,7 @@ async function mountResumedWorkout(banner) {
   await bindCurrentExercise();
   showStopwatchBar();
   maybeAutoStartStopwatch(); // idled-out restore (crash after finalize) or a pre-auto-start run
+  replanBeeps();
   wakeLock.acquire(); // no gesture here — a refusal is retried on the next press
   return true;
 }
@@ -656,6 +657,20 @@ function handleStopwatchBtn() {
   }
   saveStopwatchState(activeWorkout.workoutId, stopwatch);
   renderStopwatchDisplay();
+}
+
+// Hand the beeper what the countdown in flight still owes, after a wake or
+// a reload. It plays once a context runs: at once after a wake, from the
+// first tap after a reload (no context exists until a gesture).
+function replanBeeps() {
+  const snap = stopwatch.chainSnapshot();
+  if (snap) {
+    beeper.schedule(chainBeepPlan(snap.phases, snap.elapsedMs));
+  } else {
+    const rest = currentRestSeconds();
+    const ms = rest != null ? stopwatch.restRemainingMs(rest) : null;
+    if (ms != null) beeper.schedule(beepOffsets(ms));
+  }
 }
 
 // Every exercise's clock starts the moment it is bound, so the workout is
@@ -2044,24 +2059,18 @@ async function boot() {
   const wakeStopwatch = () => {
     wakeLock.reacquireIfWanted(); // the OS drops the lock whenever the page hides
     if (!stopwatch) return;
-    if (beeper.isArmed()) {
-      // Not a gesture, but once a press has unlocked audio WebKit allows a
-      // resume from here — without it a chain that was frozen mid-countdown
-      // stays interrupted (silent) until the next press, which chains never
-      // get. The beeper re-arms its plan whenever the context actually
-      // returns to running, and replaces a context whose resume never takes.
-      beeper.ensureContext();
-      const snap = stopwatch.chainSnapshot();
-      if (snap) {
-        beeper.schedule(chainBeepPlan(snap.phases, snap.elapsedMs));
-      } else {
-        const rest = currentRestSeconds();
-        const ms = rest != null ? stopwatch.restRemainingMs(rest) : null;
-        if (ms != null) beeper.schedule(beepOffsets(ms));
-      }
-    }
+    // Not a gesture: resumes the held context (a chain gets no press until
+    // the next exercise) and leaves its replacement to the next tap.
+    beeper.wake();
+    replanBeeps();
     renderStopwatchDisplay();
   };
+  // Any tap or key in a run is a gesture the beeper can use, not only the
+  // timer: after an app switch or a reload the countdown in flight gets its
+  // beeps back on the first touch (logging the set will do), where a timer
+  // press mid-rest would restart the rest.
+  const unlockAudio = () => { if (activeWorkout && stopwatch) beeper.ensureContext(); };
+  for (const type of ['touchend', 'click', 'keydown']) document.addEventListener(type, unlockAudio, true);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') wakeStopwatch();
   });

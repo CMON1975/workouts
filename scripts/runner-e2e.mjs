@@ -104,9 +104,23 @@ async function openBrowser(url, { init = null, viewport = null } = {}) {
     if (name === 'Space') await send('Input.dispatchKeyEvent', { type: 'char', text: ' ', ...base });
     await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
   };
+  // A real left click at an element's centre: trusted, so it carries the
+  // user activation that unlocks audio (an evaluated .click() does not).
+  const tap = async (selector) => {
+    const { x, y } = await evaluate(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      el.scrollIntoView({ block: 'center' });
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    })()`);
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+    }
+  };
   return {
     evaluate,
     key,
+    tap,
     errors,
     async close() {
       ws.close();
@@ -223,6 +237,17 @@ async function sealedResume(server, { dropLocal }) {
   } finally { await page.close(); }
 }
 
+// Every oscillator started, as its audio-clock start time: one per beep put
+// on a clock. Fresh on every document.
+const COUNT_BEEPS = `window.__beeps = [];
+  const createOscillator = AudioContext.prototype.createOscillator;
+  AudioContext.prototype.createOscillator = function () {
+    const osc = createOscillator.call(this);
+    const start = osc.start.bind(osc);
+    osc.start = (at) => { window.__beeps.push(at); start(at); };
+    return osc;
+  };`;
+
 // The End confirm: which bar shows, the focused control's words, the
 // status line, and whether the box is waiting.
 const endBox = (page) => page.evaluate(`(() => {
@@ -307,6 +332,28 @@ const chip = (page, attr, value) => page.evaluate(`document.querySelector('#stat
 // ---- scenarios -----------------------------------------------------------
 
 const scenarios = {
+  // HANDOFF 2026-10-11: after a reload mid-rest the countdown ran silent; only
+  // a timer press made a context, and a press mid-rest restarts the rest. The
+  // first tap anywhere (here the reps field, to log the set) brings it back.
+  async 'beeps: after a reload mid-rest, the first tap anywhere arms the countdown'(server) {
+    await importWeek(server, { ...lift('Lift A'), rest_seconds: 30 });
+    const page = await startRoutine(server, { init: COUNT_BEEPS });
+    try {
+      await press(page); // set 1 done: the rest starts
+      assert.equal((await bar(page)).state, 'resting');
+      await page.evaluate(`location.reload()`);
+      await sleep(500);
+      await waitFor(page, `document.readyState === 'complete' && !document.getElementById('runner').hidden
+        && document.querySelectorAll('#runner-root input').length > 0`, 'the resumed run');
+      assert.equal((await bar(page)).state, 'resting', 'the rest survives the reload');
+      assert.deepEqual(await page.evaluate(`window.__beeps`), [], 'nothing before a gesture');
+      await page.tap('#runner-root input');
+      await waitFor(page, `window.__beeps.length === 4`, 'three shorts and the done tone');
+      assert.equal((await bar(page)).state, 'resting', 'the tap left the rest running');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // HANDOFF 2026-09-27 (12f25e2): "Start set" mid-rest must start the next
   // reps-only set, not mark it done and restart the rest.
   async 'dips: Start set mid-rest starts the set; Done starts the rest'(server) {

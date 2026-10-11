@@ -48,7 +48,9 @@ const TONES = {
 };
 
 // A resume that has not taken effect after this long is treated as refused
-// and the context is replaced (iOS can leave an 'interrupted' context stuck).
+// and the next gesture replaces the context (iOS can leave an 'interrupted'
+// context stuck). Never from a timer: a context made outside a gesture stays
+// locked until the next one.
 export const RECREATE_AFTER_MS = 1500;
 
 // While beeps are still owed and the context is not running, the resume is
@@ -67,14 +69,18 @@ export const RESUME_RETRY_MS = 1000;
 // interrupted (screen lock, app switch), so anything scheduled before the
 // freeze plays late by the away time — or never, if WebKit refuses the
 // resume. The last plan is kept anchored to the wall clock and re-armed on
-// every return to 'running', whenever that turns out to be; a resume that
-// does not take within RECREATE_AFTER_MS gets a fresh context instead.
+// every return to 'running', whenever that turns out to be. WebKit can also
+// hand a context back from the background locked, or silent while it reports
+// 'running', and a reload does not clear that; so the first gesture after the
+// page was hidden, or after a resume refused for RECREATE_AFTER_MS, replaces
+// the context with one made inside that gesture.
 export function createBeeper({ now = Date.now, setTimeout = globalThis.setTimeout } = {}) {
   let ctx = null;
   let pending = [];
   let plan = null;        // { at: wall ms, offsets } — the beeps still wanted
   let wasRunning = false; // last observed ctx state, for edge detection
-  let recreateTimer = null;
+  let resumeAskedAt = null; // wall ms of the first resume() not yet taken
+  let stale = false;      // the page was hidden since ctx was made
   let retryTimer = null;
 
   function AC() { return globalThis.AudioContext || globalThis.webkitAudioContext; }
@@ -88,7 +94,7 @@ export function createBeeper({ now = Date.now, setTimeout = globalThis.setTimeou
 
   // Keep resuming a non-running context while beeps are owed. Never
   // recreate from here: a context made outside a gesture stays locked until
-  // the next press, and the one held now was unlocked by an earlier press.
+  // the next gesture, and the one held now was unlocked by an earlier one.
   function retryResume() {
     if (retryTimer != null) return;
     retryTimer = setTimeout(() => {
@@ -138,6 +144,7 @@ export function createBeeper({ now = Date.now, setTimeout = globalThis.setTimeou
   // keep trying to get back to it while beeps are owed.
   function noteState() {
     const running = ctx?.state === 'running';
+    if (running) resumeAskedAt = null;
     if (running && !wasRunning) arm();
     else if (!running && owed()) retryResume();
     wasRunning = running;
@@ -146,22 +153,38 @@ export function createBeeper({ now = Date.now, setTimeout = globalThis.setTimeou
   function attach(c) {
     ctx = c;
     wasRunning = false;
+    resumeAskedAt = null;
+    stale = false;
     try { c.onstatechange = noteState; } catch (_) {}
   }
 
   function resume() {
     if (!ctx || ctx.state === 'running') return;
+    resumeAskedAt ??= now();
     try {
       const p = ctx.resume();
       if (p?.then) p.then(noteState, () => {});
     } catch (_) {}
   }
 
-  function recreate() {
+  function refused() {
+    return resumeAskedAt != null && now() - resumeAskedAt >= RECREATE_AFTER_MS;
+  }
+
+  function replace() {
     const old = ctx;
-    try { old?.close?.(); } catch (_) {}
+    try { old.onstatechange = null; old.close?.(); } catch (_) {}
+    attach(new (AC())());
+  }
+
+  // Must run synchronously in a user-gesture handler (iOS unlock): every
+  // press, and any tap in a run, so the context is warm one gesture before
+  // the first countdown and a locked one is swapped where that can work.
+  function ensureContext() {
     try {
-      attach(new (AC())());
+      if (!AC()) return;
+      if (!ctx) attach(new (AC())());
+      else if (stale || refused()) replace();
       resume();
       noteState();
     } catch (_) {
@@ -169,25 +192,14 @@ export function createBeeper({ now = Date.now, setTimeout = globalThis.setTimeou
     }
   }
 
-  // Must run synchronously in a user-gesture handler (iOS unlock). Called on
-  // every press so the context is warm one gesture before the first countdown.
-  function ensureContext() {
-    try {
-      if (!AC()) return;
-      if (!ctx) attach(new (AC())());
-      if (ctx.state !== 'running') {
-        resume();
-        if (recreateTimer == null) {
-          recreateTimer = setTimeout(() => {
-            recreateTimer = null;
-            if (ctx && ctx.state !== 'running') recreate();
-          }, RECREATE_AFTER_MS);
-        }
-      }
-      noteState();
-    } catch (_) {
-      ctx = null;
-    }
+  // The page is back (tab wake, no gesture). Once a gesture has unlocked a
+  // context WebKit allows resuming it from here, which a chain needs: it gets
+  // no press until the next exercise. The replacement waits for a gesture.
+  function wake() {
+    if (!ctx) return;
+    stale = true;
+    resume();
+    noteState();
   }
 
   function cancel() {
@@ -202,5 +214,5 @@ export function createBeeper({ now = Date.now, setTimeout = globalThis.setTimeou
 
   function isArmed() { return ctx != null; }
 
-  return { ensureContext, schedule, cancel, isArmed };
+  return { ensureContext, wake, schedule, cancel, isArmed };
 }

@@ -226,7 +226,13 @@ test('a context that comes back to running re-arms the plan shifted by the wall 
   assert.deepEqual(ctx.starts, [11.5]);
 });
 
-test('ensureContext recreates the context when a resume does not take within the grace period', (t) => {
+// ---- App switch (HANDOFF 2026-10-11) ----
+// A context made outside a gesture stays locked until the next one, so a
+// fresh context is only ever made inside a gesture. WebKit can also hand a
+// context back from the background locked or silent while it reports
+// 'running', so the first gesture after the page was hidden replaces it.
+
+test('a wake never swaps in a fresh context, however long its resume is refused', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const instances = installFakeAudioContext(t, { resumeWorks: false });
   const c = clock();
@@ -237,25 +243,61 @@ test('ensureContext recreates the context when a resume does not take within the
   beeper.schedule([{ atMs: 30_000, kind: 'done' }]);
   first.setState('interrupted'); // app switch
   c.advance(10_000);
-  beeper.ensureContext();        // wake: resume() is refused, state stays interrupted
-  assert.equal(instances.length, 1);
-  t.mock.timers.tick(RECREATE_AFTER_MS);
-  assert.equal(instances.length, 2, 'a fresh context replaces the stuck one');
-  assert.equal(first.closed, true);
-  const second = instances[1];
-  second.setState('running');
-  assert.deepEqual(second.starts, [20], 'the plan is re-armed on the new context, shifted by the away time');
-  assert.equal(beeper.isArmed(), true);
+  beeper.wake();                 // back in the app: resume() is refused
+  c.advance(RECREATE_AFTER_MS * 4);
+  t.mock.timers.tick(RECREATE_AFTER_MS * 4);
+  assert.equal(instances.length, 1, 'made here, outside a gesture, it would stay locked');
+  assert.equal(first.closed, false);
+  assert.ok(first.resumeCalls > 2, 'the held context keeps being asked to resume');
 });
 
-test('ensureContext on a running context starts no recreate timer', (t) => {
+test('the first gesture after a wake replaces the context inside that gesture', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const instances = installFakeAudioContext(t);
-  const beeper = createBeeper();
+  const c = clock();
+  const beeper = createBeeper({ now: c.now });
   beeper.ensureContext();
+  const first = instances[0];
+  beeper.schedule([{ atMs: 30_000, kind: 'done' }]);
+  first.setState('interrupted'); // app switch
+  c.advance(10_000);
+  beeper.wake();                 // reports running again, which may not be true
+  assert.equal(first.state, 'running');
+  beeper.ensureContext();        // a tap
+  assert.equal(instances.length, 2);
+  assert.equal(first.closed, true);
+  assert.deepEqual(instances[1].starts, [20], 'the plan re-armed, shifted by the away time');
+  beeper.ensureContext();        // the same tap's click, then later taps
+  assert.equal(instances.length, 2);
+});
+
+test('a gesture replaces a context whose resume is still refused after the grace period', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const instances = installFakeAudioContext(t);
+  const c = clock();
+  const beeper = createBeeper({ now: c.now });
   beeper.ensureContext();
-  t.mock.timers.tick(RECREATE_AFTER_MS * 2);
+  const first = instances[0];
+  beeper.schedule([{ atMs: 60_000, kind: 'done' }]);
+  first.resumeWorks = false;     // Siri holds the session, the page stays visible
+  first.setState('interrupted');
+  beeper.ensureContext();        // a tap at once: resume, no new context yet
   assert.equal(instances.length, 1);
+  c.advance(RECREATE_AFTER_MS);
+  t.mock.timers.tick(RECREATE_AFTER_MS);
+  assert.equal(instances.length, 1, 'not from a timer: outside a gesture it would stay locked');
+  beeper.ensureContext();        // still refused: this tap makes a fresh one
+  assert.equal(instances.length, 2);
+  assert.equal(first.closed, true);
+});
+
+test('a plan scheduled before any context exists is armed by the first gesture', (t) => {
+  const instances = installFakeAudioContext(t);
+  const beeper = createBeeper({ now: clock().now });
+  beeper.schedule([{ atMs: 5000, kind: 'short' }, { atMs: 8000, kind: 'done' }]); // reload mid-rest
+  assert.equal(beeper.isArmed(), false);
+  beeper.ensureContext();
+  assert.deepEqual(instances[0].starts, [5, 8]);
 });
 
 test('cancel forgets the plan so a later return to running plays nothing', (t) => {
