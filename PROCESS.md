@@ -541,3 +541,4 @@ Deployed 2026-10-11: prod pulled to `0978ba0`, user restarted, then ran `flip-nu
 **Why:** The numeric-columns flip needed a one-off API script; next time it's a pick in the dialog.
 **Notes:** No confirm: a flip converts nothing, so it is undoable. A legacy `duration` type keeps its own option. Layout checked at 390/320px on a prod copy: rows wrap like New exercise's builder, no overflow. Spotted, not touched: the Description textarea renders in a monospace face.
 Follow-up 2026-10-11: Edit exercise's Description shares New exercise's rule (`fa8c9d0`); the shared font rule skips textarea, so it had the browser's 13px monospace and 2px padding. The dialog's hint still said types can't change there; corrected (`1771fcf`). e2e 27/27.
+Deployed 2026-10-11: prod pulled to `10ff7c7` (static only, no restart); the type picker, the Description styling and the corrected hint are all served.
