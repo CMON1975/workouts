@@ -318,9 +318,13 @@ export default async function templatesRoutes(app) {
           );
           for (const colId of sentIds) park.run(colId, id);
 
+          // value_type only when sent: the edit dialog never sends it for an
+          // existing column. Logged values are left as they are; readers fall
+          // back across value_num and value_text.
           const updateExisting = db.prepare(`
             UPDATE template_columns
-               SET name = ?, unit = ?, position = ?, retired_at = NULL
+               SET name = ?, unit = ?, position = ?, value_type = COALESCE(?, value_type),
+                   retired_at = NULL
              WHERE id = ? AND template_id = ?
           `);
           // Left out = retired: off the runner's form, values kept.
@@ -342,7 +346,7 @@ export default async function templatesRoutes(app) {
             if (!name) throw new Error('BLANK_COLUMN_NAME');
             const unit = c.unit == null ? null : String(c.unit).trim() || null;
             if (c.id !== undefined) {
-              updateExisting.run(name, unit, i, c.id, id);
+              updateExisting.run(name, unit, i, c.value_type ?? null, c.id, id);
             } else {
               insertNew.run(id, name, unit, i, c.value_type || 'text');
             }

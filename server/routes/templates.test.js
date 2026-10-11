@@ -316,6 +316,43 @@ test('PATCH columns changes unit on an existing column', async () => {
   assert.equal(res.json().columns[0].unit, 'lb');
 });
 
+test('PATCH columns flips value_type on an existing column; its logged values stay as they were', async () => {
+  const create = await app.inject({
+    method: 'POST', url: '/api/templates',
+    payload: {
+      name: 'TypeFlip', default_rows: 1, rows_fixed: 0,
+      columns: [{ name: 'reps', value_type: 'text' }, { name: 'note', value_type: 'text' }],
+    },
+  });
+  const tpl = create.json();
+  const [reps, note] = tpl.columns;
+  const sid = '019dbaf6-6425-79fc-874e-df11ade615b1';
+  await app.inject({
+    method: 'PATCH', url: `/api/drafts/${sid}`,
+    payload: {
+      id: sid, template_id: tpl.id,
+      started_at: Date.now(), updated_at: Date.now(), client_version: 1,
+      values: [{ row_index: 0, column_id: reps.id, value_text: '8' }],
+    },
+  });
+
+  const res = await app.inject({
+    method: 'PATCH', url: `/api/templates/${tpl.id}`,
+    payload: {
+      columns: [
+        { id: reps.id, name: 'reps', unit: null, value_type: 'number' },
+        { id: note.id, name: 'note', unit: null },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json().columns.map(c => c.value_type), ['number', 'text'],
+    'a sent value_type flips; one left out (the edit dialog never sends it) stays');
+  const vals = (await app.inject({ method: 'GET', url: `/api/sessions/${sid}` })).json().values;
+  assert.deepEqual(vals.map(v => [v.value_num, v.value_text]), [[null, '8']],
+    'old entries keep their text; readers fall back across both sides');
+});
+
 test('PATCH columns adds a new column at the end', async () => {
   const create = await app.inject({
     method: 'POST', url: '/api/templates',
