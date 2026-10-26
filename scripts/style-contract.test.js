@@ -148,7 +148,10 @@ test('outside the token blocks, colour comes only from tokens', () => {
   for (const d of ruleDecls) {
     assert.doesNotMatch(d.value, /#[0-9a-f]{3,8}\b/i, `hex literal in ${where(d)}`);
     if (d.prop !== 'box-shadow') {
-      assert.doesNotMatch(d.value, /\brgba?\(/i, `rgb() outside a shadow recipe in ${where(d)}`);
+      // A material's sheen, glow and shade are white, slate or black at an
+      // alpha, never a hue.
+      const value = isMaterial(d) ? d.value.replace(/rgba\((255, 255, 255|15, 23, 42|0, 0, 0), [\d.]+\)/g, '') : d.value;
+      assert.doesNotMatch(value, /\brgba?\(/i, `rgb() outside a shadow recipe in ${where(d)}`);
     }
     if (/^(color|background(-color)?|border(-\w+)?(-color)?|outline(-color)?|fill|stroke)$/.test(d.prop)) {
       for (const p of parts(d.value)) {
@@ -158,15 +161,15 @@ test('outside the token blocks, colour comes only from tokens', () => {
   }
 });
 
-// A material key (the bible's rubber) is round, or its corners scale with
-// its height, --d.
-const isMaterial = (d) => /\.(btn-rubber|rubber-)/.test(d.context.at(-1));
+// A material key (the bible's rubber and gel) is round, or its corners
+// scale with its height (--d) or follow its radius (--r).
+const isMaterial = (d) => /\.(btn-rubber|rubber-|btn-gel|gel-)/.test(d.context.at(-1));
 
 test('radii are the bible 2px (or 0)', () => {
   for (const d of ruleDecls.filter((x) => /^border(-\w+)*-radius$/.test(x.prop))) {
     for (const p of parts(d.value)) {
-      const ok = p === '0' || p === '2px' || (isMaterial(d) && (p === '50%' || /^calc\(var\(--d\) \* [\d.() -]+\)$/.test(p)));
-      assert.ok(ok, `radius ${p} in ${where(d)}`);
+      const scaled = p === '50%' || p === 'inherit' || /var\(--[dr]\)/.test(p);
+      assert.ok(p === '0' || p === '2px' || (isMaterial(d) && scaled), `radius ${p} in ${where(d)}`);
     }
   }
 });
@@ -265,10 +268,10 @@ test('controls are extruded slabs, panels are hairline cavities and fields are p
   }
   // Disabled is flat ink tint, so it shows on the page and on a cavity
   // floor alike (bible AUDIT A17: a bg-with-white fill was the page itself).
-  // (A rubber key's states are its own.)
-  assert.equal(rule('button:disabled:where(:not(.btn-rubber))').get('background'), 'color-mix(in srgb, var(--color-fg) 12%, transparent)');
-  assert.equal(rule('button:disabled:where(:not(.btn-rubber))').get('box-shadow'), 'none');
-  assert.equal(rule('button:active:not(:disabled, .btn-rubber)').get('box-shadow'),
+  // (A rubber or gel key's states are its own.)
+  assert.equal(rule('button:disabled:where(:not(.btn-rubber, .btn-gel))').get('background'), 'color-mix(in srgb, var(--color-fg) 12%, transparent)');
+  assert.equal(rule('button:disabled:where(:not(.btn-rubber, .btn-gel))').get('box-shadow'), 'none');
+  assert.equal(rule('button:active:not(:disabled, .btn-rubber, .btn-gel)').get('box-shadow'),
     'inset 1px -1px 2px rgba(0, 0, 0, 0.45), inset -1px 1px 0 rgba(255, 255, 255, 0.03)');
   for (const sel of ['button.secondary:active:not(:disabled)', '.template-btn:active:not(:disabled)']) {
     assert.equal(rule(sel).get('box-shadow'), PRESS, `${sel} press`);
@@ -309,8 +312,8 @@ test('the primary is the accent slab; in dark its ink and steps flip', () => {
   assert.equal(rule('button').get('background'), 'var(--color-accent)');
   assert.equal(ruleIn(DARK, 'button').get('color'), 'var(--color-neutral-900)');
   assert.equal(rule("button.chip[aria-pressed='true']").size, 0, 'pressed chip override');
-  assert.equal(ruleIn(DARK, 'button:active:not(:disabled, .btn-rubber)').get('background'), 'var(--color-neutral-300)');
-  assert.equal(ruleIn(`${DARK} and (hover: hover)`, 'button:hover:not(:disabled, .btn-rubber)').get('background'), 'var(--color-neutral-100)');
+  assert.equal(ruleIn(DARK, 'button:active:not(:disabled, .btn-rubber, .btn-gel)').get('background'), 'var(--color-neutral-300)');
+  assert.equal(ruleIn(`${DARK} and (hover: hover)`, 'button:hover:not(:disabled, .btn-rubber, .btn-gel)').get('background'), 'var(--color-neutral-100)');
 });
 
 // The bible's forms: focus is the button's 2px fg outline, and a group of
@@ -382,14 +385,43 @@ test('rubber: the bible materials, the bezel from the raised face, roles that sw
   assert.deepEqual(roles(DARK_TOKENS), [...dark, ...pale], 'dark: everyday dark, primary pale');
 });
 
-// A rubber key draws its own bezel and dome, so no hover, press or disabled
-// of the bare button (the concrete primary) reaches it. The e2e sees press
-// and disabled; headless Chromium never hovers, so this is hover's check.
-test("the bare button's states stay off rubber keys", () => {
+// A rubber or gel key draws its own bezel and face, so no hover, press or
+// disabled of the bare button (the concrete primary) reaches it. The e2e
+// sees press and disabled; headless Chromium never hovers, so this is
+// hover's check.
+test("the bare button's states stay off rubber and gel keys", () => {
   const states = new Set(DECLS.flatMap((d) => d.context.slice(-1).flatMap(selectors))
     .filter((s) => /^button:(hover|active|disabled)/.test(s)));
   assert.ok(states.size >= 3, [...states].join(' | '));
-  for (const s of states) assert.match(s, /\.btn-rubber\b/, s);
+  for (const s of states) {
+    assert.match(s, /\.btn-rubber\b/, s);
+    assert.match(s, /\.btn-gel\b/, s);
+  }
+});
+
+// The bible's gel (2026-10-14): glass caps held in every theme, as
+// materials; their hues are neutral's status steps (light's drew the etch
+// at 2.9 to 3.6:1).
+test('gel: the bible cap materials, held in every theme', () => {
+  const materials = {
+    '--color-gel-graphite': 'var(--color-neutral-700)', '--color-gel-blue': '#0033a8',
+    '--color-gel-green': '#034b20', '--color-gel-ink': '#eef0f3',
+  };
+  for (const [k, v] of Object.entries(materials)) {
+    assert.equal(LIGHT_TOKENS.get(k), v, k);
+    assert.ok(!DARK_TOKENS.has(k), `${k} holds in every theme`);
+  }
+});
+
+// The user's pick (2026-10-26): the stopwatch key is a gel cap, its glyph
+// carved in; graphite until a phase colours it.
+test('gel: the stopwatch key is a carved glass cap', () => {
+  const key = buttonWith('id="stopwatch-btn"');
+  assert.equal(classesOf(key), 'btn-gel gel-round gel-md gel-carved gel-graphite');
+  assert.ok(key.includes('><span class="gel-cap"><svg class="gel-glyph" '), 'the glyph sits in the cap');
+  for (const id of ['gel-etch-md', 'gel-etch-md-dark']) {
+    assert.equal(HTML.match(new RegExp(`<filter id="${id}"`, 'g'))?.length, 1, `${id}, once`);
+  }
 });
 
 // A <button> in index.html by one of its attributes, opening tag to close.

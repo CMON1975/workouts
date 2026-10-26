@@ -38,10 +38,11 @@ export function iconSvg(name, cls = 'icon') {
 
 // Icon-only button: swaps content for the icon and keeps the accessible
 // name on the button itself (needed where the icon changes with state,
-// e.g. stopwatch Start/Lap/Rest, runner Next/Finish). A rubber key keeps its
-// dome: the glyph swaps inside it, wearing the class the old one wore.
+// e.g. stopwatch Start/Lap/Rest, runner Next/Finish). A rubber or gel key
+// keeps its dome or cap: the glyph swaps inside it, wearing the class the
+// old one wore.
 export function setButtonIcon(btn, name, label) {
-  const face = btn.querySelector('.rubber-dome') ?? btn;
+  const face = btn.querySelector('.rubber-dome, .gel-cap') ?? btn;
   face.innerHTML = iconSvg(name, face.querySelector('svg')?.getAttribute('class') ?? 'icon');
   btn.setAttribute('aria-label', label);
   btn.title = label;

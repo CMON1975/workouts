@@ -425,6 +425,51 @@ const scenarios = {
     } finally { await page.close(); }
   },
 
+  // The user's pick from the side-by-side (2026-10-26): the stopwatch key
+  // is the bible's gel, a glass cap whose colour says the phase as the
+  // readout's does: graphite armed, blue resting, green working. The
+  // concrete's press stays off it, and it fits a 375px phone beside the
+  // widest time.
+  async 'stopwatch key: a gel cap whose glass follows the phase'(server) {
+    await importWeek(server, DIPS);
+    const page = await startRoutine(server, { viewport: { width: 375, height: 812 } });
+    const key = () => page.evaluate(`(() => {
+      const k = document.getElementById('stopwatch-btn'), s = getComputedStyle(k), r = k.getBoundingClientRect();
+      return {
+        cap: ['gel-graphite', 'gel-blue', 'gel-green'].filter(c => k.classList.contains(c)).join(),
+        bezel: s.backgroundImage.startsWith('linear-gradient') && s.transform === 'none',
+        round: Math.abs(r.width - r.height) < 0.5,
+        glyph: !!k.querySelector(':scope > .gel-cap > svg.gel-glyph'),
+      };
+    })()`);
+    const glass = (cap) => ({ cap, bezel: true, round: true, glyph: true });
+    try {
+      assert.deepEqual(await key(), glass('gel-graphite'), 'armed');
+      await press(page); // set 1 done
+      assert.deepEqual(await key(), glass('gel-blue'), 'resting');
+      await sleep(500);
+      await press(page); // Start set, mid-rest
+      assert.deepEqual(await key(), glass('gel-green'), 'working');
+      await sleep(500);
+      await page.mouse('mousePressed', '#stopwatch-btn');
+      await sleep(200); // the sink eases in
+      assert.deepEqual(await key(), glass('gel-green'), 'held: the bezel stays, unmoved');
+      await page.mouse('mouseReleased', '#stopwatch-btn'); // set 2 done
+      assert.deepEqual(await key(), glass('gel-blue'), 'resting again');
+      // The widest time, laid out at once, before a tick redraws it: its
+      // text ends before the key starts (the readout squashes, so text
+      // that doesn't fit runs under the key).
+      assert.equal(await page.evaluate(`(() => {
+        const t = document.getElementById('stopwatch-time');
+        t.textContent = '61:01';
+        const words = document.createRange();
+        words.selectNodeContents(t);
+        return words.getBoundingClientRect().right <= document.getElementById('stopwatch-btn').getBoundingClientRect().left;
+      })()`), true, '61:01 fits beside the key');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // A timed hold counts down its target and writes the time into the cell.
   async 'plank: a timed hold records its time into the time cell'(server) {
     await importWeek(server, {
@@ -1140,8 +1185,8 @@ const scenarios = {
     } finally { await page.close(); }
   },
 
-  // The bible's rubber under forced colors: the bezel and dome are
-  // gradients and shadows, so each key draws its edge (the primary's
+  // The bible's rubber and gel under forced colors: bezel, dome and cap
+  // are gradients and shadows, so each key draws its edge (the primary's
   // thicker), and the etch is off, as its walls drew as stray lines.
   async "forced colors: the runner's keys keep their edges; the etch is off"(server) {
     await importWeek(server, lift('Lift A'));
@@ -1154,6 +1199,9 @@ const scenarios = {
     try {
       assert.equal(await look('#runner-end'), 'solid 1px');
       assert.equal(await look('#runner-next'), 'solid 3px', 'the primary');
+      assert.equal(await look('#stopwatch-btn'), 'solid 1px', 'the stopwatch key');
+      await press(page); // the rest: a blue cap, carved by its own rule
+      assert.equal(await look('#stopwatch-btn.gel-blue'), 'solid 1px', 'the stopwatch key, resting');
       await page.evaluate(`document.getElementById('runner-end').click()`);
       assert.equal(await look('#runner [data-confirm-keep]'), 'solid 1px');
       return page.errors;

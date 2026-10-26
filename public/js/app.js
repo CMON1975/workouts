@@ -518,6 +518,20 @@ function setStopwatchLabel(text) {
 }
 
 function renderStopwatchDisplay() {
+  renderStopwatchReadout();
+  setStopwatchCap();
+}
+
+// The key's glass says the phase as the readout's colour does: green while
+// working, blue while resting, graphite otherwise.
+const CAPS = ['gel-graphite', 'gel-green', 'gel-blue'];
+function setStopwatchCap() {
+  const t = els.stopwatchTime.classList;
+  const cap = t.contains('working') ? 'gel-green' : t.contains('resting') ? 'gel-blue' : 'gel-graphite';
+  for (const c of CAPS) els.stopwatchBtn.classList.toggle(c, c === cap);
+}
+
+function renderStopwatchReadout() {
   const cls = els.stopwatchTime.classList;
   const program = currentProgramPhases();
   if (program) {

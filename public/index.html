@@ -37,7 +37,7 @@
         <!-- Interval phase (warmup / intense 3/8 / easy / cooldown 2/5 / done); hidden otherwise -->
         <span id="stopwatch-label" class="stopwatch-label" hidden></span>
       </div>
-      <button id="stopwatch-btn" type="button" aria-label="Start" title="Start"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg></button>
+      <button id="stopwatch-btn" type="button" class="btn-gel gel-round gel-md gel-carved gel-graphite" aria-label="Start" title="Start"><span class="gel-cap"><svg class="gel-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg></span></button>
     </div>
   </div>
 
@@ -290,7 +290,12 @@
   <!-- Rubber's etch (the bible's _rubber_etch.html): a .rubber-glyph or
        .rubber-label is cut into its dome, its own colour at 0.92 the floor,
        the wall nearer the light shaded and the far wall lit. Whole-pixel
-       offsets, no blur: half-pixel edges smeared small glyphs. -->
+       offsets, no blur: half-pixel edges smeared small glyphs.
+       Gel's etch at the md depth (the bible's _gel_carve.html), for the
+       stopwatch key: the floor frosted white, the near wall in shade, the
+       far wall lit and the lip beyond it catching the light. The dark
+       cap's takes a lighter wall and no lip, which read as blur and a
+       fringe on a dark face. -->
   <svg aria-hidden="true" focusable="false" style="position: absolute; width: 0; height: 0">
     <defs>
       <filter id="rubber-etch" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
@@ -303,6 +308,51 @@
         <feOffset in="SourceAlpha" dx="1" dy="-1" result="toward" />
         <feComposite in="SourceAlpha" in2="toward" operator="out" result="lit-band" />
         <feFlood flood-color="#fff" flood-opacity="0.30" />
+        <feComposite in2="lit-band" operator="in" result="lit" />
+        <feMerge>
+          <feMergeNode in="floor" />
+          <feMergeNode in="shade" />
+          <feMergeNode in="lit" />
+        </feMerge>
+      </filter>
+      <filter id="gel-etch-md" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="grain" />
+        <feColorMatrix in="grain" type="matrix"
+                       values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0 0.92" result="frost-grain" />
+        <feComposite in="frost-grain" in2="SourceAlpha" operator="in" result="floor" />
+        <feOffset in="SourceAlpha" dx="-1" dy="1" result="away" />
+        <feGaussianBlur in="away" stdDeviation="0" result="away-soft" />
+        <feComposite in="SourceAlpha" in2="away-soft" operator="out" result="shade-band" />
+        <feFlood flood-color="#000" flood-opacity="0.45" />
+        <feComposite in2="shade-band" operator="in" result="shade" />
+        <feOffset in="SourceAlpha" dx="1" dy="-1" result="toward" />
+        <feComposite in="SourceAlpha" in2="toward" operator="out" result="lit-band" />
+        <feFlood flood-color="#fff" flood-opacity="0.4" />
+        <feComposite in2="lit-band" operator="in" result="lit" />
+        <feOffset in="SourceAlpha" dx="-1" dy="1" result="lip-shift" />
+        <feComposite in="lip-shift" in2="SourceAlpha" operator="out" result="lip-band" />
+        <feFlood flood-color="#fff" flood-opacity="0.3" />
+        <feComposite in2="lip-band" operator="in" result="lip" />
+        <feMerge>
+          <feMergeNode in="floor" />
+          <feMergeNode in="shade" />
+          <feMergeNode in="lit" />
+          <feMergeNode in="lip" />
+        </feMerge>
+      </filter>
+      <filter id="gel-etch-md-dark" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="grain" />
+        <feColorMatrix in="grain" type="matrix"
+                       values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0 0.92" result="frost-grain" />
+        <feComposite in="frost-grain" in2="SourceAlpha" operator="in" result="floor" />
+        <feOffset in="SourceAlpha" dx="-1" dy="1" result="away" />
+        <feGaussianBlur in="away" stdDeviation="0" result="away-soft" />
+        <feComposite in="SourceAlpha" in2="away-soft" operator="out" result="shade-band" />
+        <feFlood flood-color="#000" flood-opacity="0.25" />
+        <feComposite in2="shade-band" operator="in" result="shade" />
+        <feOffset in="SourceAlpha" dx="1" dy="-1" result="toward" />
+        <feComposite in="SourceAlpha" in2="toward" operator="out" result="lit-band" />
+        <feFlood flood-color="#fff" flood-opacity="0.4" />
         <feComposite in2="lit-band" operator="in" result="lit" />
         <feMerge>
           <feMergeNode in="floor" />
