@@ -603,6 +603,8 @@ const scenarios = {
     const WIDE = { bezel: true, shape: 'wide', holds: 'rubber-label' };
     const domeScale = () => page.evaluate(`getComputedStyle(document.querySelector('#runner-next .rubber-dome')).transform`);
     try {
+      assert.equal(await page.evaluate(`document.getElementById('runner-back').checkVisibility()`), false,
+        'no Back on the first exercise');
       assert.deepEqual(await look('#runner-end'), ROUND);
       assert.deepEqual(await look('#runner-next'), ROUND);
       await page.mouse('mousePressed', '#runner-next');

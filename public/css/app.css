@@ -1261,6 +1261,9 @@ button.small {
     inset -1px 1px 2px rgba(15, 23, 42, 0.18);
   transition: box-shadow 120ms ease-out;
 }
+/* Its display outranks the browser's [hidden]: Back hides on the first
+   exercise. */
+.btn-rubber[hidden] { display: none; }
 /* As wide as it is tall: sized round its glyph, WebKit stretched it. */
 .rubber-round {
   width: var(--d);
