@@ -117,6 +117,8 @@ export function createStopwatch({ now = Date.now, exerciseIndex = 0, initial = n
     };
     if (p.kind === 'work') out.row = p.row;
     if (p.label != null) out.label = p.label;
+    // A cue's own words for its last seconds (the interval incline lead).
+    if (p.cue && out.remaining != null && out.remaining <= p.cue.seconds) out.label = p.cue.label;
     return out;
   }
 
@@ -321,8 +323,11 @@ export function workChainFor({ prescribed, template, completedRows = 0, pressEnd
 // cooldown — split into equal steps when cooldown_step_seconds is shorter
 // than the cooldown, so each treadmill speed drop gets its own countdown and
 // beep. Every phase is timed, so the chain runs itself end to end from one
-// press. Labels are what the bar shows under the readout. Null = not an
-// interval exercise (or an unusable program).
+// press. Labels are what the bar shows under the readout. lead_seconds puts
+// an "incline up" cue that long before the end of every phase that runs into
+// a hard bout: the warm-up and easy 1 … N−1 (HANDOFF 2026-10-26, the belt
+// takes ~20 s to climb). Null = not an interval exercise (or an unusable
+// program).
 export function intervalPhasesFor(prescribed, templateId) {
   const entry = prescribed?.exercises?.find(e => e.template_id === templateId);
   const cfg = entry?.intervals;
@@ -336,11 +341,15 @@ export function intervalPhasesFor(prescribed, templateId) {
   const phases = [];
   const leadIn = leadInSecondsOf(entry);
   if (leadIn) phases.push(leadInPhase(leadIn));
+  const lead = secs(cfg.lead_seconds);
+  const leading = (phase) => (lead ? { ...phase, cue: { seconds: lead, label: 'incline up' } } : phase);
   const warmup = secs(cfg.warmup_seconds);
-  if (warmup > 0) phases.push({ kind: 'warmup', seconds: warmup, label: 'warmup' });
+  if (warmup > 0) phases.push(leading({ kind: 'warmup', seconds: warmup, label: 'warmup' }));
   for (let r = 1; r <= rounds; r++) {
     phases.push({ kind: 'intense', seconds: work, label: `intense ${r}/${rounds}` });
-    if (easy > 0) phases.push({ kind: 'easy', seconds: easy, label: `easy ${r}/${rounds}` });
+    if (easy === 0) continue;
+    const phase = { kind: 'easy', seconds: easy, label: `easy ${r}/${rounds}` };
+    phases.push(r < rounds ? leading(phase) : phase);
   }
   const cooldown = secs(cfg.cooldown_seconds);
   const step = secs(cfg.cooldown_step_seconds);

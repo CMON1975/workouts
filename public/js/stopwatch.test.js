@@ -609,6 +609,72 @@ test('intervalPhasesFor: null for every absent or unusable shape', () => {
   assert.equal(intervalPhasesFor({ exercises: [{ template_id: 1, intervals: { work_seconds: 60, easy_seconds: 60, rounds: 0 } }] }, 1), null, 'no rounds');
 });
 
+// HANDOFF 2026-10-26: the belt takes ~20 s to reach 10%, so lead_seconds
+// cues the incline that long before each hard bout: on the warm-up and
+// easy 1 … N−1, never easy N (the cooldown follows) or the cooldown.
+test('intervalPhasesFor: lead_seconds cues the incline before every hard bout, not before the cooldown', () => {
+  const build = (intervals) => intervalPhasesFor({ exercises: [{ template_id: 1, intervals }] }, 1);
+  const cue = { seconds: 20, label: 'incline up' };
+  assert.deepEqual(build({
+    warmup_seconds: 300, work_seconds: 60, easy_seconds: 60, rounds: 3,
+    cooldown_seconds: 120, cooldown_step_seconds: 60, lead_seconds: 20,
+  }), [
+    { kind: 'warmup', seconds: 300, label: 'warmup', cue },
+    { kind: 'intense', seconds: 60, label: 'intense 1/3' },
+    { kind: 'easy', seconds: 60, label: 'easy 1/3', cue },
+    { kind: 'intense', seconds: 60, label: 'intense 2/3' },
+    { kind: 'easy', seconds: 60, label: 'easy 2/3', cue },
+    { kind: 'intense', seconds: 60, label: 'intense 3/3' },
+    { kind: 'easy', seconds: 60, label: 'easy 3/3' },
+    { kind: 'cooldown', seconds: 60, label: 'cooldown 1/2' },
+    { kind: 'cooldown', seconds: 60, label: 'cooldown 2/2' },
+  ]);
+  // No easy phases: only the warm-up leads into a bout.
+  assert.deepEqual(build({ warmup_seconds: 60, work_seconds: 30, easy_seconds: 0, rounds: 2, lead_seconds: 20 }), [
+    { kind: 'warmup', seconds: 60, label: 'warmup', cue },
+    { kind: 'intense', seconds: 30, label: 'intense 1/2' },
+    { kind: 'intense', seconds: 30, label: 'intense 2/2' },
+  ]);
+  // No warm-up: the get-set leads into bout 1 and carries no cue.
+  assert.deepEqual(intervalPhasesFor({ exercises: [{
+    template_id: 1, lead_in_seconds: 3, intervals: { work_seconds: 30, easy_seconds: 30, rounds: 1, lead_seconds: 20 },
+  }] }, 1), [
+    { kind: 'lead_in', seconds: 3, label: 'get set' },
+    { kind: 'intense', seconds: 30, label: 'intense 1/1' },
+    { kind: 'easy', seconds: 30, label: 'easy 1/1' },
+  ]);
+  // Absent, 0 or junk: today's program, no cue anywhere.
+  for (const lead_seconds of [undefined, 0, -5, 2.5, '20']) {
+    const phases = build({ warmup_seconds: 60, work_seconds: 30, easy_seconds: 30, rounds: 2, lead_seconds });
+    assert.ok(phases.every(p => !('cue' in p)), `lead_seconds ${lead_seconds}`);
+  }
+});
+
+test('chain: the bar reads "incline up" for a cue\'s last seconds of its phase, then the bout', () => {
+  const clock = fakeClock();
+  const sw = createStopwatch({ now: clock.now });
+  sw.startChain(intervalPhasesFor({
+    exercises: [{ template_id: 1, intervals: { warmup_seconds: 30, work_seconds: 10, easy_seconds: 30, rounds: 2, lead_seconds: 20 } }],
+  }, 1));
+  clock.advance(9_999);
+  assert.equal(sw.chainPhase().label, 'warmup', 'until the cue');
+  clock.advance(1);
+  assert.deepEqual(sw.chainPhase(), { kind: 'warmup', seconds: 30, elapsed: 10, remaining: 20, label: 'incline up' });
+  clock.advance(20_000);
+  assert.equal(sw.chainPhase().label, 'intense 1/2', 'the bout drops the cue');
+  clock.advance(19_999);
+  assert.equal(sw.chainPhase().label, 'easy 1/2');
+  clock.advance(1);
+  assert.equal(sw.chainPhase().label, 'incline up');
+  clock.advance(59_999); // through intense 2 to easy 2's last moment
+  assert.deepEqual(sw.chainPhase(), { kind: 'easy', seconds: 30, elapsed: 29, remaining: 1, label: 'easy 2/2' });
+
+  // A cue at least as long as its phase holds the whole phase.
+  const short = createStopwatch({ now: clock.now });
+  short.startChain([{ kind: 'easy', seconds: 15, label: 'easy 1/2', cue: { seconds: 20, label: 'incline up' } }]);
+  assert.equal(short.chainPhase().label, 'incline up');
+});
+
 test('chain: interval phases run continuously, carry labels, and end completed', () => {
   const clock = fakeClock();
   const sw = createStopwatch({ now: clock.now });

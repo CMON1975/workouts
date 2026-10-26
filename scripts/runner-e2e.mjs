@@ -237,14 +237,14 @@ async function sealedResume(server, { dropLocal }) {
   } finally { await page.close(); }
 }
 
-// Every oscillator started, as its audio-clock start time: one per beep put
-// on a clock. Fresh on every document.
+// Every oscillator started, as its audio-clock start time and pitch: one per
+// beep put on a clock. Fresh on every document.
 const COUNT_BEEPS = `window.__beeps = [];
   const createOscillator = AudioContext.prototype.createOscillator;
   AudioContext.prototype.createOscillator = function () {
     const osc = createOscillator.call(this);
     const start = osc.start.bind(osc);
-    osc.start = (at) => { window.__beeps.push(at); start(at); };
+    osc.start = (at) => { window.__beeps.push({ at, hz: osc.frequency.value }); start(at); };
     return osc;
   };`;
 
@@ -350,6 +350,35 @@ const scenarios = {
       await page.tap('#runner-root input');
       await waitFor(page, `window.__beeps.length === 4`, 'three shorts and the done tone');
       assert.equal((await bar(page)).state, 'resting', 'the tap left the rest running');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
+  // HANDOFF 2026-10-26: lead_seconds cues the treadmill incline before each
+  // hard bout, as a double blip at its own pitch and "incline up" on the bar;
+  // the last easy (the cooldown follows) gets none.
+  async 'intervals: the incline cue blips and labels the lead before each bout'(server) {
+    await importWeek(server, {
+      ...lift('Intervals'),
+      rest_seconds: undefined,
+      intervals: { warmup_seconds: 6, work_seconds: 2, easy_seconds: 6, rounds: 2, lead_seconds: 4 },
+    });
+    const page = await startRoutine(server, { init: COUNT_BEEPS });
+    const label = () => page.evaluate(`document.getElementById('stopwatch-label').textContent`);
+    try {
+      assert.equal(await label(), 'warmup', 'armed');
+      await page.tap('#stopwatch-btn');
+      await waitFor(page, `window.__beeps.length > 0`, 'the program armed on the audio clock');
+      // Grouped by pitch: 15 countdown shorts, 5 done tones, and the cue.
+      const tones = new Map();
+      for (const { at, hz } of await page.evaluate(`window.__beeps`)) tones.set(hz, [...(tones.get(hz) ?? []), at]);
+      const [cue, done] = [...tones.values()].sort((a, b) => a.length - b.length);
+      assert.deepEqual([...tones.values()].map(t => t.length).sort((a, b) => a - b), [4, 5, 15]);
+      assert.deepEqual(cue.map(at => Math.round((at - done[0]) * 10) / 10), [-4, -3.8, 4, 4.2],
+        '4 s before the warm-up ends and before easy 1 ends, none in easy 2');
+      await waitFor(page, `document.getElementById('stopwatch-label').textContent === 'incline up'`, 'the cue on the bar', 4000);
+      assert.equal((await bar(page)).time, '0:04');
+      await waitFor(page, `document.getElementById('stopwatch-label').textContent === 'intense 1/2'`, 'the bout', 6000);
       return page.errors;
     } finally { await page.close(); }
   },

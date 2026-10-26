@@ -21,30 +21,41 @@ export function beepOffsets(remainingMs) {
   return plan;
 }
 
+// A cue is two blips this far apart.
+export const CUE_GAP_MS = 200;
+
 // Plan the beeps for a whole work/rest chain from its phase list: every phase
 // boundary gets the T-3..T-1 shorts plus the done tone (the same language
 // everywhere — before a carry hand-switch they prime the exchange, before the
 // rest end they prime the next set). elapsedMs shifts the plan for a wake-time
 // reschedule mid-chain; already-past offsets drop out. Planning stops at an
 // open-ended (null seconds) phase — boundaries beyond it are unknowable until
-// the press that ends it, which reschedules.
+// the press that ends it, which reschedules. A phase with a cue (the interval
+// program's incline lead) also gets a double blip cue.seconds before its end,
+// or at its start when it is shorter than that.
 export function chainBeepPlan(phases, elapsedMs = 0) {
   if (!Array.isArray(phases)) return [];
   const plan = [];
   let cumMs = 0;
   for (const p of phases) {
     if (typeof p?.seconds !== 'number' || p.seconds < 0) break; // 0 = untimed set, passes through
+    if (p.cue?.seconds > 0) {
+      const atMs = cumMs + Math.max(0, p.seconds - p.cue.seconds) * 1000 - elapsedMs;
+      if (atMs > 0) plan.push({ atMs, kind: 'cue' }, { atMs: atMs + CUE_GAP_MS, kind: 'cue' });
+    }
     cumMs += p.seconds * 1000;
     plan.push(...beepOffsets(cumMs - elapsedMs));
   }
-  return plan;
+  return plan.sort((a, b) => a.atMs - b.atMs);
 }
 
 // Tone shapes, tuned on-device: short marks at T-3..T-1, a longer higher
-// done tone at zero so the end is unambiguous without looking.
+// done tone at zero so the end is unambiguous without looking. The cue's
+// blips sit lower than both.
 const TONES = {
   short: { freq: 880, durMs: 120, gain: 0.25 },
   done: { freq: 1318, durMs: 450, gain: 0.3 },
+  cue: { freq: 660, durMs: 120, gain: 0.3 },
 };
 
 // A resume that has not taken effect after this long is treated as refused

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { beepOffsets, chainBeepPlan, createBeeper, RECREATE_AFTER_MS, RESUME_RETRY_MS } from './beeper.js';
+import { beepOffsets, chainBeepPlan, createBeeper, CUE_GAP_MS, RECREATE_AFTER_MS, RESUME_RETRY_MS } from './beeper.js';
 
 test('beepOffsets plans three shorts and a done tone', () => {
   assert.deepEqual(beepOffsets(90_000), [
@@ -81,6 +81,29 @@ test('chainBeepPlan stops at an open-ended phase — boundaries beyond it are un
   ], 0);
   assert.deepEqual(plan.filter(b => b.kind === 'done').map(b => b.atMs), [45_000],
     'only the first boundary is schedulable');
+});
+
+// HANDOFF 2026-10-26: a phase's cue (the incline lead) is its own sound, a
+// double blip, so it can't be taken for the start of a T-3 countdown.
+test('chainBeepPlan plays a cue as a double blip that long before its phase ends', () => {
+  const cue = { seconds: 20, label: 'incline up' };
+  const plan = chainBeepPlan([
+    { kind: 'warmup', seconds: 60, cue },
+    { kind: 'intense', seconds: 60 },
+    { kind: 'easy', seconds: 15, cue }, // shorter than the cue: at its start
+    { kind: 'intense', seconds: 60 },
+  ], 0);
+  assert.deepEqual(plan.filter(b => b.kind === 'cue').map(b => b.atMs), [
+    40_000, 40_000 + CUE_GAP_MS,
+    120_000, 120_000 + CUE_GAP_MS,
+  ]);
+  assert.equal(plan.filter(b => b.kind === 'done').length, 4, 'every boundary keeps its countdown');
+  assert.deepEqual(plan, [...plan].sort((a, b) => a.atMs - b.atMs), 'offsets come out schedule-ready');
+  // A wake mid-phase drops a cue already past and keeps the rest.
+  assert.deepEqual(chainBeepPlan([{ kind: 'easy', seconds: 60, cue }, { kind: 'intense', seconds: 60 }], 45_000)
+    .filter(b => b.kind === 'cue'), []);
+  assert.deepEqual(chainBeepPlan([{ kind: 'easy', seconds: 60, cue }], 30_000)
+    .filter(b => b.kind === 'cue').map(b => b.atMs), [10_000, 10_000 + CUE_GAP_MS]);
 });
 
 test('chainBeepPlan on garbage input yields no beeps', () => {
