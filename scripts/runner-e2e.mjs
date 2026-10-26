@@ -1250,6 +1250,42 @@ const scenarios = {
       return page.errors;
     } finally { await page.close(); }
   },
+
+  // HANDOFF 2026-10-14 (bible A19, A20): forced colors turn backgrounds
+  // into the page, so the legend keys and the per-exercise bars vanished
+  // while Chromium drew the SVG chart in its own colours, and the active
+  // chip looked like the rest. The keys and bars keep their colours too,
+  // so the legend still reads the chart; the active chip fills with
+  // Highlight.
+  async 'forced colors: chart keys and bars keep their colours; the active chip is lit'(server) {
+    await seedStats(server);
+    const page = await openBrowser(server.base + '/');
+    const paint = () => page.evaluate(`(() => {
+      const sys = ${SYSTEM_COLOR}, highlight = sys('Highlight');
+      const all = (sel, prop) => [...document.querySelectorAll(sel)].map(e => getComputedStyle(e)[prop]);
+      return {
+        series: all('.chart .seg-1, .chart .seg-2, .chart .seg-3', 'fill'),
+        keys: all('.swatch', 'backgroundColor'),
+        bars: all('.bar-fill', 'backgroundColor'),
+        unlit: [...document.querySelectorAll('#stats-root button.chip')]
+          .filter(b => (b.getAttribute('aria-pressed') === 'true') !== (getComputedStyle(b).backgroundColor === highlight))
+          .map(b => b.textContent),
+      };
+    })()`);
+    try {
+      await openStatsView(page);
+      const plain = await paint();
+      assert.ok(plain.series.length > 0 && plain.keys.length >= 3 && plain.bars.length >= 2, JSON.stringify(plain));
+      await page.media(FORCED_COLORS);
+      await sleep(100);
+      const forced = await paint();
+      assert.deepEqual(forced.series, plain.series, 'Chromium draws the SVG as is');
+      assert.deepEqual(forced.keys, plain.keys, 'the legend keys match it');
+      assert.deepEqual(forced.bars, plain.bars, 'so do the per-exercise bars');
+      assert.deepEqual(forced.unlit, [], 'lit exactly when pressed');
+      return page.errors;
+    } finally { await page.close(); }
+  },
 };
 
 // ---- runner --------------------------------------------------------------

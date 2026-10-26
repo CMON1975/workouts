@@ -1432,6 +1432,17 @@ button.chip {
   padding: var(--spacing-1) var(--spacing-3);
   font-size: var(--text-sm);
 }
+/* Forced colors flatten primary and secondary alike, so the active chip
+   fills with Highlight, as the bible's toggles do (AUDIT A20). */
+@media (forced-colors: active) {
+  button.chip[aria-pressed='true'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
+    box-shadow: none;
+  }
+}
 
 /* KPI tiles: hairline cavities; big numbers keep proportional figures */
 .kpis {
@@ -1541,6 +1552,14 @@ button.chip {
 .bar-value { font-variant-numeric: tabular-nums; color: var(--color-muted); }
 .bar-track { grid-column: 1 / -1; display: block; height: 8px; }
 .bar-fill { display: block; height: 100%; background: var(--color-series-1); border-radius: 0 2px 2px 0; }
+/* Forced colors turn a background into the page, so the legend keys and
+   these bars vanished, while Chromium draws the SVG charts in their own
+   colours. Keys and bars keep theirs too, so a key still names its marks.
+   (The bible's hatched series are for marks drawn as backgrounds; ours
+   are SVG.) */
+@media (forced-colors: active) {
+  .swatch, .bar-fill { forced-color-adjust: none; }
+}
 
 .stats-details { margin-top: var(--spacing-2); }
 .stats-note { font-size: var(--text-sm); color: var(--color-muted); margin: 0 0 var(--spacing-3); }
