@@ -748,6 +748,15 @@ const scenarios = {
         return { border: s.borderTopWidth + ' ' + s.borderLeftWidth, pad: s.paddingLeft,
           size: l.fontSize === label.fontSize, color: l.color === label.color };
       })()`), { border: '0px 0px', pad: '0px', size: true, color: true });
+      // HANDOFF 2026-10-17 (bible df14a4d): WebKit never lays a legend out as
+      // a flex item, floated or not, so the fieldset's gap never follows it
+      // there. Unfloated, both engines keep it out of the flex layout and the
+      // legend carries the gap itself.
+      assert.deepEqual(await page.evaluate(`[...document.querySelectorAll('fieldset > legend')].map(l => {
+        const gap = parseFloat(getComputedStyle(l.parentElement).rowGap);
+        const below = l.nextElementSibling.getBoundingClientRect().top - l.getBoundingClientRect().bottom;
+        return { float: getComputedStyle(l).float, gap: Math.abs(below - gap) <= 0.5 };
+      })`), [{ float: 'none', gap: true }]);
       return page.errors;
     } finally { await page.close(); }
   },

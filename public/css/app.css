@@ -751,8 +751,10 @@ button.danger:active:not(:disabled) {
   color: var(--color-muted);
 }
 
-/* A group of choices is a field too: no box, its legend the label. Floated,
-   the legend is laid out as a flex item, so the gap applies to it. */
+/* A group of choices is a field too: no box, its legend the label. WebKit
+   (every iOS browser) never lays a legend out as a flex item, floated or
+   not, so the field's gap never follows it there; unfloated, both engines
+   keep it out of the flex layout and its margin carries the gap. */
 fieldset.field {
   margin: 0;
   padding: 0;
@@ -760,9 +762,9 @@ fieldset.field {
   min-width: 0;
 }
 .field > legend {
-  float: left;
   width: 100%;
   padding: 0;
+  margin-bottom: var(--spacing-1);
 }
 
 .err {
