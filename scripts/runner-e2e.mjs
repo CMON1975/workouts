@@ -42,7 +42,8 @@ async function startServer() {
 
 // init: a script run before the page's own (e.g. to slow a fetch down).
 // viewport: { width, height } emulates a phone screen (touch, 3x).
-async function openBrowser(url, { init = null, viewport = null } = {}) {
+// media: CSS media features to emulate, e.g. FORCED_COLORS.
+async function openBrowser(url, { init = null, viewport = null, media = null } = {}) {
   const port = 9333 + Math.floor(Math.random() * 500);
   const prof = mkdtempSync(join(tmpdir(), 'workouts-e2e-cdp-'));
   const chrome = spawn(process.env.CHROMIUM || 'chromium', [
@@ -80,6 +81,7 @@ async function openBrowser(url, { init = null, viewport = null } = {}) {
   if (viewport) {
     await send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 3, mobile: true });
   }
+  if (media) await send('Emulation.setEmulatedMedia', { features: media });
   await send('Page.navigate', { url });
 
   const evaluate = async (expression) => {
@@ -122,6 +124,7 @@ async function openBrowser(url, { init = null, viewport = null } = {}) {
     key,
     tap,
     errors,
+    media: (features) => send('Emulation.setEmulatedMedia', { features }),
     async close() {
       ws.close();
       chrome.kill();
@@ -247,6 +250,21 @@ const COUNT_BEEPS = `window.__beeps = [];
     osc.start = (at) => { window.__beeps.push({ at, hz: osc.frequency.value }); start(at); };
     return osc;
   };`;
+
+// A Windows contrast theme, as a low-vision user might run: the browser
+// drops every shadow and paints text, backgrounds and borders in the
+// user's system colours (HANDOFF 2026-10-14).
+const FORCED_COLORS = [{ name: 'forced-colors', value: 'active' }];
+
+// In-page: a system colour (Highlight, GrayText, ...) as this browser
+// resolves it.
+const SYSTEM_COLOR = `(name) => {
+  const probe = document.body.appendChild(document.createElement('i'));
+  probe.style.cssText = 'forced-color-adjust: none; color: ' + name;
+  const c = getComputedStyle(probe).color;
+  probe.remove();
+  return c;
+}`;
 
 // The End confirm: which bar shows, the focused control's words, the
 // status line, and whether the box is waiting.
@@ -1020,6 +1038,58 @@ const scenarios = {
 
   // The stats view opens from its header button next to History; a fresh
   // DB says so, and a failed fetch offers a retry that recovers.
+  // HANDOFF 2026-10-14 (bible f7cef87, f9f7280): forced colors drop every
+  // shadow, and a field's edge, a checkbox's box, the Type pick and a
+  // dialog's edge were shadows or fills: fields were floating text, a box a
+  // bare label, the pick like the rest. In system colours each draws a
+  // border (3px when invalid, GrayText when disabled, still dashed when
+  // read-only); a checked box and the pick fill with Highlight.
+  async 'forced colors: fields, checkboxes, the Type pick and dialogs keep their edges'(server) {
+    await importWeek(server, lift('Lift A'));
+    const page = await openBrowser(server.base + '/', { media: FORCED_COLORS });
+    // Each visible match: 'highlight' when filled with it, else its top edge.
+    const look = (sel) => page.evaluate(`(() => {
+      const sys = ${SYSTEM_COLOR}, highlight = sys('Highlight'), gray = sys('GrayText');
+      return [...document.querySelectorAll(${JSON.stringify(sel)})].filter(e => e.checkVisibility()).map(e => {
+        const s = getComputedStyle(e);
+        if (s.backgroundColor === highlight) return 'highlight';
+        return s.borderTopStyle + ' ' + s.borderTopWidth + (s.borderTopColor === gray ? ' gray' : '');
+      });
+    })()`);
+    const FIELDS = 'input:not([type=checkbox]):not([type=radio]), select, textarea';
+    const type = (sel, v) => page.evaluate(`(() => {
+      const i = document.querySelector(${JSON.stringify(sel)});
+      i.value = ${JSON.stringify(v)};
+      i.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    try {
+      await waitFor(page, `!document.getElementById('open-stats').hidden`, 'home');
+      await page.evaluate(`document.getElementById('new-template').click()`);
+      await waitFor(page, `document.getElementById('nt-name').checkVisibility()`, 'new exercise');
+      // Name; the column's name, type and unit; number of sets.
+      assert.deepEqual(await look(FIELDS), Array(5).fill('solid 1px'));
+      assert.deepEqual(await look('.nt-kind input + span'), ['highlight', 'solid 1px'], 'Standard is the pick');
+      await type('#nt-name', 'Lift A'); // taken, so the name is at fault
+      await type('#nt-col-builder .col-name', 'reps');
+      await page.evaluate(`document.getElementById('nt-submit').click()`);
+      await waitFor(page, `document.getElementById('nt-name').getAttribute('aria-invalid') === 'true'`, 'the name flagged');
+      await page.evaluate(`document.querySelector('#nt-col-builder .col-name').readOnly = true;
+        document.getElementById('nt-sets-count').disabled = true`);
+      assert.deepEqual(await look(FIELDS), ['solid 3px', 'dashed 1px', 'solid 1px', 'solid 1px', 'solid 1px gray']);
+
+      await page.evaluate(`document.getElementById('new-tpl-back').click(); document.getElementById('manage-templates').click()`);
+      await waitFor(page, `!!document.querySelector('#manage-list [aria-label="Edit"]')`, 'the exercise list');
+      await page.evaluate(`document.querySelector('#manage-list [aria-label="Edit"]').click()`);
+      await waitFor(page, `document.getElementById('tpl-edit-dialog').open`, 'the edit dialog');
+      assert.deepEqual(await look('#tpl-edit-dialog'), ['solid 1px'], 'the dialog has an edge');
+      await page.evaluate(`(() => { const c = document.getElementById('te-rows-fixed'); if (c.checked) c.click(); })()`);
+      assert.deepEqual(await look('#te-rows-fixed + .check-box'), ['solid 1px'], 'unchecked: an empty box');
+      await page.evaluate(`document.getElementById('te-rows-fixed').click()`);
+      assert.deepEqual(await look('#te-rows-fixed + .check-box'), ['highlight'], 'checked');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   async 'stats: header button opens it; empty, error and retry'(server) {
     const page = await openBrowser(server.base + '/');
     try {

@@ -876,6 +876,39 @@ fieldset.field {
   .seg-concrete input:checked + span { color: var(--color-neutral-900); }
 }
 
+/* Forced colors (a Windows contrast theme; the bible's AUDIT A18): the
+   browser drops every shadow, and a field's edge, a checkbox's box and a
+   segment's face are shadows, so a field was text floating on the page, a
+   box a bare label and the pick looked like the rest. In the user's system
+   colours each draws a border: a field's FieldText (3px when invalid, its
+   message still saying why; GrayText when disabled; read-only keeps its
+   dashes). A checked box and the pick fill with Highlight, shadows off,
+   since forced-color-adjust: none lets them back in. After the dark rules
+   above, which would set the ink. Unlike the bible's, fields keep their
+   padding: they grow the border's 2px, as a read-only one already does. */
+@media (forced-colors: active) {
+  input[type='text'], input[type='number'], input[type='date'], select, textarea {
+    border: 1px solid FieldText;
+  }
+  input[aria-invalid='true'], select[aria-invalid='true'], textarea[aria-invalid='true'] {
+    border-width: 3px;
+  }
+  input:disabled, select:disabled, textarea:disabled { border-color: GrayText; }
+  input[readonly], textarea[readonly] { border-style: dashed; }
+  .check-box,
+  .seg-concrete span {
+    border: 1px solid FieldText;
+  }
+  .check-concrete > input:checked + .check-box,
+  .seg-concrete input:checked + span {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
+    box-shadow: none;
+  }
+}
+
 /* A raised slab over the scrim, shadow cast down-left like every surface */
 .modal-dialog {
   border: 0;
@@ -888,6 +921,11 @@ fieldset.field {
   box-shadow: -4px 6px 16px rgba(15, 23, 42, 0.35), inset 1px -1px 0 rgba(255, 255, 255, 0.10), inset -1px 1px 0 rgba(15, 23, 42, 0.10);
 }
 .modal-dialog::backdrop { background: var(--color-scrim); }
+/* Forced colors drop the slab's shadow, and with it the dialog's edge over
+   the page behind; it draws one in the user's text colour. */
+@media (forced-colors: active) {
+  .modal-dialog { border: 1px solid CanvasText; }
+}
 .modal-dialog > form {
   display: flex;
   flex-direction: column;
