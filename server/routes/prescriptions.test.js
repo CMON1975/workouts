@@ -1385,7 +1385,7 @@ test('POST /api/prescriptions/import — invalid rows_per_rest rejected with 400
 // client turns into a continuous warmup / work-easy x rounds / cooldown timer.
 const INTERVALS = {
   warmup_seconds: 480, work_seconds: 60, easy_seconds: 120, rounds: 8,
-  cooldown_seconds: 300, cooldown_step_seconds: 60,
+  cooldown_seconds: 300, cooldown_step_seconds: 60, lead_seconds: 20,
 };
 
 test('POST /api/prescriptions/import — intervals stored as JSON in prescription_exercises', async () => {
@@ -1446,6 +1446,9 @@ test('POST /api/prescriptions/import — invalid intervals rejected with 400', a
     { work_seconds: 0, easy_seconds: 60, rounds: 4 },
     { work_seconds: 'sixty', easy_seconds: 60, rounds: 4 }, // '60' coerces, like rest_seconds
     { work_seconds: 60, easy_seconds: 60, rounds: 4, cooldown_step_seconds: 0 },
+    { work_seconds: 60, easy_seconds: 60, rounds: 4, lead_seconds: -1 },
+    { work_seconds: 60, easy_seconds: 60, rounds: 4, lead_seconds: 2.5 },
+    { work_seconds: 60, easy_seconds: 60, rounds: 4, lead_seconds: 'twenty' },
     'warmup 8 work 1 easy 2 x8',
   ];
   for (const bad of bads) {

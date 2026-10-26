@@ -29,7 +29,9 @@ const targetSchema = {
 
 // Cardio interval program: warmup -> (work, easy) x rounds -> cooldown, the
 // cooldown optionally split into equal steps (one countdown per treadmill
-// speed drop). Seconds throughout; the client builds the phase list.
+// speed drop). lead_seconds cues the incline that long before each hard bout
+// (the belt takes ~20 s to climb). Seconds throughout; the client builds the
+// phase list.
 const intervalsSchema = {
   type: 'object',
   required: ['work_seconds', 'easy_seconds', 'rounds'],
@@ -40,6 +42,7 @@ const intervalsSchema = {
     rounds: { type: 'integer', minimum: 1, maximum: 50 },
     cooldown_seconds: { type: 'integer', minimum: 0, maximum: 3600 },
     cooldown_step_seconds: { type: 'integer', minimum: 1, maximum: 3600 },
+    lead_seconds: { type: 'integer', minimum: 0, maximum: 3600 },
   },
 };
 
