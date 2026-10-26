@@ -30,17 +30,19 @@ const ICONS = {
 
 export const ICON_NAMES = Object.keys(ICONS);
 
-export function iconSvg(name) {
+export function iconSvg(name, cls = 'icon') {
   const body = ICONS[name];
   if (!body) throw new Error(`unknown icon: ${name}`);
-  return `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 }
 
 // Icon-only button: swaps content for the icon and keeps the accessible
 // name on the button itself (needed where the icon changes with state,
-// e.g. stopwatch Start/Lap/Rest, runner Next/Finish).
+// e.g. stopwatch Start/Lap/Rest, runner Next/Finish). A rubber key keeps its
+// dome: the glyph swaps inside it, wearing the class the old one wore.
 export function setButtonIcon(btn, name, label) {
-  btn.innerHTML = iconSvg(name);
+  const face = btn.querySelector('.rubber-dome') ?? btn;
+  face.innerHTML = iconSvg(name, face.querySelector('svg')?.getAttribute('class') ?? 'icon');
   btn.setAttribute('aria-label', label);
   btn.title = label;
 }

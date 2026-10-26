@@ -114,7 +114,7 @@
 
     <section id="runner" class="view" hidden>
       <div class="runner-header">
-        <button id="runner-back" type="button" class="secondary back-btn" aria-label="Back" title="Back"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+        <button id="runner-back" type="button" class="btn-rubber rubber-round" aria-label="Back" title="Back"><span class="rubber-dome"><svg class="rubber-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></span></button>
         <div class="runner-progress">
           <span id="runner-routine-name"></span>
           <span id="runner-step"></span>
@@ -125,20 +125,20 @@
            for the question, then for what happened. -->
       <div id="runner-confirm" class="confirm" data-confirm>
         <div class="confirm-bar runner-bar" data-confirm-bar="idle">
-          <button id="runner-end" type="button" class="secondary small" data-confirm-ask aria-controls="runner-end-ask" aria-label="End workout" title="End workout"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></button>
+          <button id="runner-end" type="button" class="btn-rubber rubber-round" data-confirm-ask aria-controls="runner-end-ask" aria-label="End workout" title="End workout"><span class="rubber-dome"><svg class="rubber-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></span></button>
           <span id="runner-status" class="status">Ready</span>
           <div class="runner-actions">
-            <button id="runner-next" type="button" aria-label="Next" title="Next"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+            <button id="runner-next" type="button" class="btn-rubber rubber-round rubber-primary" aria-label="Next" title="Next"><span class="rubber-dome"><svg class="rubber-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span></button>
           </div>
         </div>
         <div id="runner-end-ask" class="confirm-bar" data-confirm-bar="ask" role="group" aria-labelledby="runner-end-question" hidden>
           <p id="runner-end-question">End this workout now? Past exercises are saved; remaining ones are skipped.</p>
-          <button type="button" class="secondary" data-confirm-keep>Keep going</button>
-          <button type="button" class="danger" data-confirm-go data-pending="Ending the workout…">End workout</button>
+          <button type="button" class="btn-rubber" data-confirm-keep><span class="rubber-dome"><span class="rubber-label">Keep going</span></span></button>
+          <button type="button" class="btn-rubber rubber-danger" data-confirm-go data-pending="Ending the workout…"><span class="rubber-dome"><span class="rubber-label">End workout</span></span></button>
         </div>
         <div class="confirm-bar" data-confirm-bar="done" role="group" aria-labelledby="runner-ended" hidden>
           <p id="runner-ended">Workout ended.</p>
-          <button id="runner-home" type="button" class="secondary">Home</button>
+          <button id="runner-home" type="button" class="btn-rubber"><span class="rubber-dome"><span class="rubber-label">Home</span></span></button>
         </div>
         <p class="confirm-status" data-confirm-status role="status"></p>
       </div>
@@ -286,6 +286,32 @@
       </form>
     </dialog>
   </main>
+
+  <!-- Rubber's etch (the bible's _rubber_etch.html): a .rubber-glyph or
+       .rubber-label is cut into its dome, its own colour at 0.92 the floor,
+       the wall nearer the light shaded and the far wall lit. Whole-pixel
+       offsets, no blur: half-pixel edges smeared small glyphs. -->
+  <svg aria-hidden="true" focusable="false" style="position: absolute; width: 0; height: 0">
+    <defs>
+      <filter id="rubber-etch" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+        <feColorMatrix in="SourceGraphic" type="matrix"
+                       values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.92 0" result="floor" />
+        <feOffset in="SourceAlpha" dx="-1" dy="1" result="away" />
+        <feComposite in="SourceAlpha" in2="away" operator="out" result="shade-band" />
+        <feFlood flood-color="#000" flood-opacity="0.25" />
+        <feComposite in2="shade-band" operator="in" result="shade" />
+        <feOffset in="SourceAlpha" dx="1" dy="-1" result="toward" />
+        <feComposite in="SourceAlpha" in2="toward" operator="out" result="lit-band" />
+        <feFlood flood-color="#fff" flood-opacity="0.30" />
+        <feComposite in2="lit-band" operator="in" result="lit" />
+        <feMerge>
+          <feMergeNode in="floor" />
+          <feMergeNode in="shade" />
+          <feMergeNode in="lit" />
+        </feMerge>
+      </filter>
+    </defs>
+  </svg>
 
   <script type="module" src="/js/app.js?v=36"></script>
 </body>

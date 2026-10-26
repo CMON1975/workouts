@@ -109,20 +109,23 @@ async function openBrowser(url, { init = null, viewport = null, media = null } =
   // A real left click at an element's centre: trusted, so it carries the
   // user activation that unlocks audio (an evaluated .click() does not).
   const tap = async (selector) => {
+    for (const type of ['mousePressed', 'mouseReleased']) await mouse(type, selector);
+  };
+  // Half a tap, to look at a key while it's held down.
+  const mouse = async (type, selector) => {
     const { x, y } = await evaluate(`(() => {
       const el = document.querySelector(${JSON.stringify(selector)});
       el.scrollIntoView({ block: 'center' });
       const r = el.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     })()`);
-    for (const type of ['mousePressed', 'mouseReleased']) {
-      await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
-    }
+    await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
   };
   return {
     evaluate,
     key,
     tap,
+    mouse,
     errors,
     media: (features) => send('Emulation.setEmulatedMedia', { features }),
     async close() {
@@ -533,6 +536,52 @@ const scenarios = {
     } finally { await page.close(); }
   },
 
+  // The user's pick from the side-by-side (2026-10-26): the runner's keys
+  // are the bible's rubber. A key draws its own bezel and dome, so the
+  // concrete's hover, press and disabled (a bare button's) stay off it.
+  async 'runner keys: rubber domes; Finish keeps its dome; the concrete states stay off'(server) {
+    await importWeek(server, lift('Lift A'), lift('Lift B'));
+    const page = await startRoutine(server);
+    // A key: whether it shows its bezel, at full strength and unmoved; its
+    // shape; and what its dome holds.
+    const look = (sel) => page.evaluate(`(() => {
+      const k = document.querySelector(${JSON.stringify(sel)});
+      const s = getComputedStyle(k), r = k.getBoundingClientRect();
+      const dome = k.querySelector(':scope > .rubber-dome');
+      return {
+        bezel: s.backgroundImage.startsWith('linear-gradient') && s.opacity === '1' && s.transform === 'none',
+        shape: Math.abs(r.width - r.height) < 0.5 ? 'round' : r.width > r.height ? 'wide' : 'tall',
+        holds: dome ? [...dome.children].map(c => c.getAttribute('class')).join() : null,
+      };
+    })()`);
+    const ROUND = { bezel: true, shape: 'round', holds: 'rubber-glyph' };
+    const WIDE = { bezel: true, shape: 'wide', holds: 'rubber-label' };
+    const domeScale = () => page.evaluate(`getComputedStyle(document.querySelector('#runner-next .rubber-dome')).transform`);
+    try {
+      assert.deepEqual(await look('#runner-end'), ROUND);
+      assert.deepEqual(await look('#runner-next'), ROUND);
+      await page.mouse('mousePressed', '#runner-next');
+      await sleep(200); // the sink eases in over 120ms
+      assert.deepEqual(await look('#runner-next'), ROUND, 'held: the bezel stays, unmoved');
+      assert.equal(await domeScale(), 'matrix(0.94, 0, 0, 0.94, 0, 0)', 'held: the dome sinks');
+      await page.mouse('mouseReleased', '#runner-next');
+      await waitFor(page, `document.getElementById('runner-next').getAttribute('aria-label') === 'Finish'`, 'the last exercise');
+      assert.deepEqual(await look('#runner-next'), ROUND, 'Finish keeps its dome');
+      assert.deepEqual(await look('#runner-back'), ROUND);
+      await page.evaluate(`document.getElementById('runner-next').disabled = true`);
+      assert.deepEqual(await look('#runner-next'), ROUND, 'disabled: the bezel stays');
+      await page.evaluate(`document.getElementById('runner-next').disabled = false`);
+
+      await page.evaluate(`document.getElementById('runner-end').click()`);
+      assert.deepEqual(await look('#runner [data-confirm-keep]'), WIDE);
+      assert.deepEqual(await look('#runner [data-confirm-go]'), WIDE);
+      await page.evaluate(`document.querySelector('#runner [data-confirm-go]').click()`);
+      await waitFor(page, `!document.querySelector('#runner [data-confirm-bar="done"]').hidden`, 'the done bar');
+      assert.deepEqual(await look('#runner-home'), WIDE);
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
   // HANDOFF 2026-10-08: End workout asks in the runner's action bar (the
   // bible's confirm), not a modal; the done bar says what happened.
   async 'end workout: asks in the bar; Escape and Keep going back out; End ends'(server) {
@@ -540,7 +589,7 @@ const scenarios = {
     const page = await startRoutine(server);
     try {
       assert.equal(await page.evaluate(`!!document.getElementById('end-early-dialog')`), false, 'no modal');
-      assert.deepEqual(await page.evaluate(`document.getElementById('runner-end').className`), 'secondary small');
+      assert.deepEqual(await page.evaluate(`document.getElementById('runner-end').className`), 'btn-rubber rubber-round');
       await page.evaluate(`document.getElementById('runner-end').focus()`);
       assert.deepEqual(await endBox(page), { bar: 'idle', focus: 'runner-end', status: '', busy: false });
 
@@ -1016,7 +1065,8 @@ const scenarios = {
 
       await page.evaluate(`document.querySelector('#routine-list button').click()`);
       await waitFor(page, `!!document.querySelector('#runner-root input[type=checkbox]')`, 'the checkbox exercise');
-      const done = ['#runner-root input[type=checkbox]', '#runner-root textarea', '#runner-next'];
+      // Next is a rubber key, so the pick is still the dialog's Save.
+      const done = ['#runner-root input[type=checkbox]', '#runner-root textarea', '#te-save'];
       seen.push(await state(...done));
       await page.evaluate(`document.querySelector('#runner-root .check-concrete span:last-child').click()`);
       seen.push(await state(...done));
@@ -1086,6 +1136,26 @@ const scenarios = {
       assert.deepEqual(await look('#te-rows-fixed + .check-box'), ['solid 1px'], 'unchecked: an empty box');
       await page.evaluate(`document.getElementById('te-rows-fixed').click()`);
       assert.deepEqual(await look('#te-rows-fixed + .check-box'), ['highlight'], 'checked');
+      return page.errors;
+    } finally { await page.close(); }
+  },
+
+  // The bible's rubber under forced colors: the bezel and dome are
+  // gradients and shadows, so each key draws its edge (the primary's
+  // thicker), and the etch is off, as its walls drew as stray lines.
+  async "forced colors: the runner's keys keep their edges; the etch is off"(server) {
+    await importWeek(server, lift('Lift A'));
+    const page = await startRoutine(server, { media: FORCED_COLORS });
+    const look = (sel) => page.evaluate(`(() => {
+      const k = document.querySelector(${JSON.stringify(sel)}), s = getComputedStyle(k);
+      const etched = [...k.querySelectorAll('svg, span span')].some(g => getComputedStyle(g).filter !== 'none');
+      return s.borderTopStyle + ' ' + s.borderTopWidth + (etched ? ' etched' : '');
+    })()`);
+    try {
+      assert.equal(await look('#runner-end'), 'solid 1px');
+      assert.equal(await look('#runner-next'), 'solid 3px', 'the primary');
+      await page.evaluate(`document.getElementById('runner-end').click()`);
+      assert.equal(await look('#runner [data-confirm-keep]'), 'solid 1px');
       return page.errors;
     } finally { await page.close(); }
   },

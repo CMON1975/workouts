@@ -57,9 +57,25 @@ const tokensIn = (inDark) => new Map(
 const LIGHT_TOKENS = tokensIn(false);
 const DARK_TOKENS = tokensIn(true);
 
+// A selector list's selectors, split on its top-level commas only: a
+// :not(a, b) is one selector.
+function selectors(list) {
+  const out = [];
+  let cur = '';
+  let depth = 0;
+  for (const ch of list) {
+    if (ch === '(') depth++;
+    if (ch === ')') depth--;
+    if (ch === ',' && depth === 0) { out.push(cur.trim()); cur = ''; continue; }
+    cur += ch;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
 // Top-level rules whose selector list names `sel`; later declarations win.
 const rule = (sel) => new Map(DECLS
-  .filter((d) => d.context.length === 1 && d.context[0].split(',').map((x) => x.trim()).includes(sel))
+  .filter((d) => d.context.length === 1 && selectors(d.context[0]).includes(sel))
   .map((d) => [d.prop, d.value]));
 
 // Split a value on top-level whitespace and commas, keeping (...) groups whole.
@@ -117,8 +133,9 @@ test('the pre-bible token names are gone', () => {
   }
 });
 
+// A token, or a component's own property (a rubber key's --d and --dome).
 test('every var() reference resolves to a defined custom property, with no fallbacks', () => {
-  const defined = new Set([...LIGHT_TOKENS.keys(), ...DARK_TOKENS.keys()]);
+  const defined = new Set(DECLS.filter((d) => d.prop.startsWith('--')).map((d) => d.prop));
   for (const d of DECLS) {
     for (const m of d.value.matchAll(/var\(\s*(--[\w-]+)\s*(,)?/g)) {
       assert.ok(defined.has(m[1]), `undefined ${m[1]} in ${where(d)}`);
@@ -141,9 +158,16 @@ test('outside the token blocks, colour comes only from tokens', () => {
   }
 });
 
+// A material key (the bible's rubber) is round, or its corners scale with
+// its height, --d.
+const isMaterial = (d) => /\.(btn-rubber|rubber-)/.test(d.context.at(-1));
+
 test('radii are the bible 2px (or 0)', () => {
   for (const d of ruleDecls.filter((x) => /^border(-\w+)*-radius$/.test(x.prop))) {
-    for (const p of parts(d.value)) assert.ok(p === '0' || p === '2px', `radius ${p} in ${where(d)}`);
+    for (const p of parts(d.value)) {
+      const ok = p === '0' || p === '2px' || (isMaterial(d) && (p === '50%' || /^calc\(var\(--d\) \* [\d.() -]+\)$/.test(p)));
+      assert.ok(ok, `radius ${p} in ${where(d)}`);
+    }
   }
 });
 
@@ -185,8 +209,10 @@ test('spacing comes from the bible scale', () => {
 
 test('shadows fall to the lower left (one light source)', () => {
   for (const d of ruleDecls.filter((x) => x.prop === 'box-shadow' && x.value !== 'none')) {
-    // A shadow token is checked by what it holds.
-    const value = d.value.replace(/var\((--[\w-]+)\)/g, (m, name) => LIGHT_TOKENS.get(name) ?? m);
+    // A shadow token is checked by what it holds, and an offset scaled on
+    // a key's height by its factor's sign.
+    const value = d.value.replace(/var\((--[\w-]+)\)/g, (m, name) => LIGHT_TOKENS.get(name) ?? m)
+      .replace(/calc\(var\(--d\) \* (-?[\d.]+)\)/g, '$1px');
     // Split the shadow list on top-level commas.
     const layers = [];
     let cur = '';
@@ -203,10 +229,12 @@ test('shadows fall to the lower left (one light source)', () => {
       const [x, y] = (layer.replace(/\binset\b/, '').match(/-?\d+(\.\d+)?px|\b0\b/g) ?? []).map(parseFloat);
       if (inset) {
         // Interior shadow pools bottom-left (offset right/up), or the faint
-        // top-right rim highlight: exactly mirrored offsets either way.
-        assert.ok(x === -y, `inset shadow not on the lower-left axis in ${where(d)}`);
+        // top-right rim highlight: exactly mirrored offsets either way. A
+        // material's dome keeps to the axis without mirroring exactly.
+        assert.ok(x === -y || (isMaterial(d) && x * y < 0), `inset shadow not on the lower-left axis in ${where(d)}`);
       } else {
-        assert.ok(x < 0 && y > 0, `drop shadow must fall down-left in ${where(d)}`);
+        // A material's ring or halo has no offset, so casts no direction.
+        assert.ok((x < 0 && y > 0) || (isMaterial(d) && x === 0 && y === 0), `drop shadow must fall down-left in ${where(d)}`);
       }
     }
   }
@@ -237,9 +265,10 @@ test('controls are extruded slabs, panels are hairline cavities and fields are p
   }
   // Disabled is flat ink tint, so it shows on the page and on a cavity
   // floor alike (bible AUDIT A17: a bg-with-white fill was the page itself).
-  assert.equal(rule('button:disabled').get('background'), 'color-mix(in srgb, var(--color-fg) 12%, transparent)');
-  assert.equal(rule('button:disabled').get('box-shadow'), 'none');
-  assert.equal(rule('button:active:not(:disabled)').get('box-shadow'),
+  // (A rubber key's states are its own.)
+  assert.equal(rule('button:disabled:where(:not(.btn-rubber))').get('background'), 'color-mix(in srgb, var(--color-fg) 12%, transparent)');
+  assert.equal(rule('button:disabled:where(:not(.btn-rubber))').get('box-shadow'), 'none');
+  assert.equal(rule('button:active:not(:disabled, .btn-rubber)').get('box-shadow'),
     'inset 1px -1px 2px rgba(0, 0, 0, 0.45), inset -1px 1px 0 rgba(255, 255, 255, 0.03)');
   for (const sel of ['button.secondary:active:not(:disabled)', '.template-btn:active:not(:disabled)']) {
     assert.equal(rule(sel).get('box-shadow'), PRESS, `${sel} press`);
@@ -267,7 +296,7 @@ test('controls are extruded slabs, panels are hairline cavities and fields are p
 // Rules inside one at-rule whose selector list names `sel`.
 const ruleIn = (media, sel) => new Map(DECLS
   .filter((d) => d.context.length === 2 && d.context[0] === media
-    && d.context[1].split(',').map((x) => x.trim()).includes(sel))
+    && selectors(d.context[1]).includes(sel))
   .map((d) => [d.prop, d.value]));
 
 // The bible's primary (2026-10-06) is the accent slab: neutral-800 in light,
@@ -280,8 +309,8 @@ test('the primary is the accent slab; in dark its ink and steps flip', () => {
   assert.equal(rule('button').get('background'), 'var(--color-accent)');
   assert.equal(ruleIn(DARK, 'button').get('color'), 'var(--color-neutral-900)');
   assert.equal(rule("button.chip[aria-pressed='true']").size, 0, 'pressed chip override');
-  assert.equal(ruleIn(DARK, 'button:active:not(:disabled)').get('background'), 'var(--color-neutral-300)');
-  assert.equal(ruleIn(`${DARK} and (hover: hover)`, 'button:hover:not(:disabled)').get('background'), 'var(--color-neutral-100)');
+  assert.equal(ruleIn(DARK, 'button:active:not(:disabled, .btn-rubber)').get('background'), 'var(--color-neutral-300)');
+  assert.equal(ruleIn(`${DARK} and (hover: hover)`, 'button:hover:not(:disabled, .btn-rubber)').get('background'), 'var(--color-neutral-100)');
 });
 
 // The bible's forms: focus is the button's 2px fg outline, and a group of
@@ -328,6 +357,63 @@ test('fields, checkboxes and segments take the button focus ring; a fieldset is 
   for (const prop of ['font-size', 'color']) {
     assert.equal(legend.get(prop), label.get(prop), `legend ${prop} is the label's`);
   }
+});
+
+// The bible's rubber (2026-10-14): materials held in every theme, the bezel
+// washed from each theme's raised face, and the dome roles swapping in dark,
+// where the pale dome is the one that stands out.
+test('rubber: the bible materials, the bezel from the raised face, roles that swap in dark', () => {
+  const materials = {
+    '--color-rubber': 'var(--color-neutral-700)', '--color-rubber-danger': '#870008',
+    '--color-rubber-pale': 'var(--color-neutral-200)', '--color-etch': 'var(--color-neutral-50)',
+    '--color-etch-ink': 'var(--color-neutral-800)',
+    '--color-bezel-crown': 'color-mix(in srgb, var(--color-surface-raised) 30%, white)',
+    '--color-bezel': 'color-mix(in srgb, var(--color-surface-raised) 75%, white)',
+    '--color-bezel-edge': 'color-mix(in srgb, var(--color-surface-raised) 80%, black)',
+  };
+  for (const [k, v] of Object.entries(materials)) {
+    assert.equal(LIGHT_TOKENS.get(k), v, k);
+    assert.ok(!DARK_TOKENS.has(k), `${k} holds in every theme`);
+  }
+  const pale = ['var(--color-rubber-pale)', 'var(--color-etch-ink)'];
+  const dark = ['var(--color-rubber)', 'var(--color-etch)'];
+  const roles = (tokens) => ['--color-dome', '--color-dome-etch', '--color-dome-primary', '--color-dome-primary-etch'].map((k) => tokens.get(k));
+  assert.deepEqual(roles(LIGHT_TOKENS), [...pale, ...dark], 'light: everyday pale, primary dark');
+  assert.deepEqual(roles(DARK_TOKENS), [...dark, ...pale], 'dark: everyday dark, primary pale');
+});
+
+// A rubber key draws its own bezel and dome, so no hover, press or disabled
+// of the bare button (the concrete primary) reaches it. The e2e sees press
+// and disabled; headless Chromium never hovers, so this is hover's check.
+test("the bare button's states stay off rubber keys", () => {
+  const states = new Set(DECLS.flatMap((d) => d.context.slice(-1).flatMap(selectors))
+    .filter((s) => /^button:(hover|active|disabled)/.test(s)));
+  assert.ok(states.size >= 3, [...states].join(' | '));
+  for (const s of states) assert.match(s, /\.btn-rubber\b/, s);
+});
+
+// A <button> in index.html by one of its attributes, opening tag to close.
+const buttonWith = (attr) => HTML.match(new RegExp(`<button[^>]*\\b${attr}[^>]*>[\\s\\S]*?</button>`))?.[0] ?? '';
+const classesOf = (tag) => tag.match(/^<button[^>]*\bclass="([^"]*)"/)?.[1] ?? '';
+
+// The user's pick from the side-by-side (2026-10-26): the runner's keys are
+// rubber, each a dome in a bezel with its glyph or label etched in.
+test("rubber: the runner's keys are domes in a bezel, etched", () => {
+  const keys = [
+    ['id="runner-back"', 'btn-rubber rubber-round', null],
+    ['id="runner-end"', 'btn-rubber rubber-round', null],
+    ['id="runner-next"', 'btn-rubber rubber-round rubber-primary', null],
+    ['data-confirm-keep', 'btn-rubber', 'Keep going'],
+    ['data-confirm-go', 'btn-rubber rubber-danger', 'End workout'],
+    ['id="runner-home"', 'btn-rubber', 'Home'],
+  ];
+  for (const [attr, cls, words] of keys) {
+    const key = buttonWith(attr);
+    assert.equal(classesOf(key), cls, `${attr} class`);
+    const face = words ? `<span class="rubber-label">${words}</span>` : '<svg class="rubber-glyph" ';
+    assert.ok(key.includes(`><span class="rubber-dome">${face}`), `${attr} etches into its dome`);
+  }
+  assert.equal(HTML.match(/<filter id="rubber-etch"/g)?.length, 1, 'the etch filter, once');
 });
 
 test('inline icons use the bible stroke weight', () => {

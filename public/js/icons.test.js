@@ -15,6 +15,10 @@ test('iconSvg renders an inline lucide svg with app conventions', () => {
   assert.match(svg, /M20 6 9 17l-5-5/, 'carries the lucide check path');
 });
 
+test('iconSvg takes the class a rubber glyph wears', () => {
+  assert.match(iconSvg('check', 'rubber-glyph'), /^<svg class="rubber-glyph" /);
+});
+
 test('every registered icon renders non-empty markup', () => {
   assert.ok(ICON_NAMES.length >= 16, 'registry covers the app inventory');
   for (const name of ICON_NAMES) {

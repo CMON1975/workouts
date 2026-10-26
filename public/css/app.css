@@ -104,6 +104,24 @@
   --color-series-2:  #d4581f;
   --color-series-3:  #14946a;
 
+  /* Rubber (the runner's keys): materials, held in every theme as a rubber
+     key is black in a dark room too. The bezel is the raised face washed,
+     declared once so each theme recomputes it from its own. */
+  --color-rubber:        var(--color-neutral-700);
+  --color-rubber-danger: #870008;
+  --color-rubber-pale:   var(--color-neutral-200);
+  --color-etch:          var(--color-neutral-50);
+  --color-etch-ink:      var(--color-neutral-800);
+  --color-bezel-crown:   color-mix(in srgb, var(--color-surface-raised) 30%, white);
+  --color-bezel:         color-mix(in srgb, var(--color-surface-raised) 75%, white);
+  --color-bezel-edge:    color-mix(in srgb, var(--color-surface-raised) 80%, black);
+  /* Rubber's roles: the everyday keys take the dome that sits in the room,
+     the primary the one that stands out (dark here, 9.82:1 on the bezel). */
+  --color-dome:              var(--color-rubber-pale);
+  --color-dome-etch:         var(--color-etch-ink);
+  --color-dome-primary:      var(--color-rubber);
+  --color-dome-primary-etch: var(--color-etch);
+
   /* App-derived, not bible tokens: hairline rules and the modal scrim, mixed
      from bible tokens the way the bible's ghost button mixes its border. */
   --color-rule:  color-mix(in srgb, var(--color-fg) 12%, transparent);
@@ -128,6 +146,12 @@
     --color-series-1:  #3987e5;
     --color-series-2:  #d95926;
     --color-series-3:  #199e70;
+    /* Rubber's roles swap: the pale dome stands out (3.62:1 on the bezel,
+       14.5 on the page) and the dark one sits in. */
+    --color-dome:              var(--color-rubber);
+    --color-dome-etch:         var(--color-etch);
+    --color-dome-primary:      var(--color-rubber-pale);
+    --color-dome-primary-etch: var(--color-etch-ink);
   }
 }
 
@@ -345,7 +369,10 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-button:active:not(:disabled) {
+/* A rubber key draws its own bezel and dome, so the bare button's states
+   stay off it. The exclusion sits inside :not() or :where(), which keeps
+   each rule's weight as it was. */
+button:active:not(:disabled, .btn-rubber) {
   background: var(--color-neutral-900);
   box-shadow: inset 1px -1px 2px rgba(0, 0, 0, 0.45), inset -1px 1px 0 rgba(255, 255, 255, 0.03);
   transform: translateY(0.5px);
@@ -364,14 +391,14 @@ button.secondary:active:not(:disabled), .icon-btn:active:not(:disabled), .templa
 
 /* Hover only where a pointer hovers: iOS would leave it stuck after a tap. */
 @media (hover: hover) {
-  button:hover:not(:disabled) { background: var(--color-neutral-700); }
+  button:hover:not(:disabled, .btn-rubber) { background: var(--color-neutral-700); }
   button.secondary:hover:not(:disabled), .icon-btn:hover:not(:disabled), .template-btn:hover:not(:disabled), .history-row:hover:not(:disabled) {
     background: color-mix(in srgb, var(--color-surface-raised) 92%, white);
   }
 }
 
 /* Flat ink tint: shows on the page and on a cavity floor alike. */
-button:disabled {
+button:disabled:where(:not(.btn-rubber)) {
   background: color-mix(in srgb, var(--color-fg) 12%, transparent);
   color: var(--color-muted);
   box-shadow: none;
@@ -383,10 +410,10 @@ button:disabled {
    step lighter and press sinks a step darker (light's 800 to 700 / 900). */
 @media (prefers-color-scheme: dark) {
   button { color: var(--color-neutral-900); }
-  button:active:not(:disabled) { background: var(--color-neutral-300); }
+  button:active:not(:disabled, .btn-rubber) { background: var(--color-neutral-300); }
 }
 @media (prefers-color-scheme: dark) and (hover: hover) {
-  button:hover:not(:disabled) { background: var(--color-neutral-100); }
+  button:hover:not(:disabled, .btn-rubber) { background: var(--color-neutral-100); }
 }
 
 /* Body metrics quick-log */
@@ -680,7 +707,7 @@ button.small svg.icon,
 .icon-btn svg.icon,
 .row-action svg.icon { width: 22px; height: 22px; }
 /* Icon-only primary actions keep a comfortable tap width */
-#submit, #runner-next { min-width: 72px; }
+#submit { min-width: 72px; }
 
 button.danger {
   background: var(--color-danger);
@@ -692,9 +719,6 @@ button.danger:active:not(:disabled) {
 @media (hover: hover) {
   button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--color-danger) 90%, black); }
 }
-
-/* Far-left of the footer, opposite Next; don't stretch like other .small buttons */
-#runner-end { flex: 0 0 auto; }
 
 /* The bible's confirm (PATTERNS.md "Confirm", confirm.js): each bar is a
    hairline cavity, words left and buttons right, words above buttons when
@@ -1185,6 +1209,160 @@ button.small {
   font-size: var(--text-base);
 }
 
+/* ─── Rubber (the bible's, 2026-10-14) ─────────────────────────────────────
+   The runner's keys, the user's pick from the side-by-side (2026-10-26): a
+   matte dome in a bezel, its glyph or label etched in, sinking when
+   pressed. Markup: button.btn-rubber > span.rubber-dome > svg.rubber-glyph
+   (or span.rubber-label); .rubber-round for an icon key, .rubber-primary
+   for Next, .rubber-danger for End workout. #rubber-etch is defined once
+   in index.html. --d is the key's height, over the 44px tap, and every
+   depth scales from it. Light from the upper-right, shadow lower-left.
+   App changes: hover only where a pointer hovers, as the concrete's;
+   labels are capitals in CSS, so a screen reader still reads words; the
+   latch and the ghost are left out, as no runner key needs them. */
+.btn-rubber {
+  --d: 2.625rem;
+  --dome: var(--color-dome);
+  position: relative;
+  display: inline-grid;
+  box-sizing: border-box;
+  height: var(--d);
+  min-width: var(--d);
+  flex-shrink: 0;
+  padding: calc(var(--d) * 0.085);
+  border: 0;
+  border-radius: calc(var(--d) * 0.22);
+  cursor: pointer;
+  user-select: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--color-dome-etch);
+  background: linear-gradient(225deg, var(--color-bezel-crown), var(--color-bezel) 45%, var(--color-bezel-edge));
+  box-shadow:
+    calc(var(--d) * -0.04) calc(var(--d) * 0.06) calc(var(--d) * 0.14) rgba(15, 23, 42, 0.30),
+    calc(var(--d) * -0.01) calc(var(--d) * 0.015) calc(var(--d) * 0.03) rgba(15, 23, 42, 0.30),
+    inset 1px -1px 0 rgba(255, 255, 255, 0.55),
+    inset -1px 1px 2px rgba(15, 23, 42, 0.18);
+  transition: box-shadow 120ms ease-out;
+}
+/* As wide as it is tall: sized round its glyph, WebKit stretched it. */
+.rubber-round {
+  width: var(--d);
+  border-radius: 50%;
+}
+.rubber-primary {
+  --dome: var(--color-dome-primary);
+  color: var(--color-dome-primary-etch);
+}
+.rubber-danger {
+  --dome: var(--color-rubber-danger);
+  color: var(--color-etch);
+}
+
+/* The dome: matte, no gloss, a soft rise lit from the upper-right. */
+.rubber-dome {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0 calc(var(--d) * 0.32);
+  border-radius: calc(var(--d) * (0.22 - 0.085));
+  background: radial-gradient(circle at 62% 30%,
+    color-mix(in srgb, var(--dome) 85%, white),
+    var(--dome) 55%,
+    color-mix(in srgb, var(--dome) 75%, black));
+  box-shadow:
+    0 0 0 calc(var(--d) * 0.008) color-mix(in srgb, var(--dome) 45%, black),
+    inset calc(var(--d) * -0.02) calc(var(--d) * 0.03) calc(var(--d) * 0.05) rgba(255, 255, 255, 0.10),
+    inset calc(var(--d) * 0.03) calc(var(--d) * -0.04) calc(var(--d) * 0.08) rgba(0, 0, 0, 0.35);
+  transition: filter 120ms ease-out, transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.rubber-round .rubber-dome {
+  padding: 0;
+  border-radius: 50%;
+}
+
+/* The etch: the glyph or label is cut in, its own colour the groove's
+   floor. Glyphs draw at stroke 3 and fill half the dome. */
+.rubber-glyph,
+.rubber-label {
+  filter: url(#rubber-etch);
+}
+.rubber-glyph {
+  width: 52%;
+  height: 52%;
+  stroke-width: 3;
+}
+.rubber-label { text-transform: uppercase; }
+
+@media (hover: hover) {
+  .btn-rubber:hover:not(:disabled) .rubber-dome { filter: brightness(1.08); }
+}
+.btn-rubber:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 3px;
+}
+
+/* Pressed, rubber gives: the dome sinks into the bezel, shrinking as it
+   goes, the rim's shadow falls across it, and it darkens, with a touch
+   of contrast to hold its label apart. */
+.btn-rubber:active:not(:disabled) {
+  box-shadow:
+    calc(var(--d) * -0.01) calc(var(--d) * 0.012) calc(var(--d) * 0.03) rgba(15, 23, 42, 0.30),
+    inset 1px -1px 0 rgba(255, 255, 255, 0.45),
+    inset calc(var(--d) * -0.03) calc(var(--d) * 0.04) calc(var(--d) * 0.07) rgba(15, 23, 42, 0.45);
+}
+.btn-rubber:active:not(:disabled) .rubber-dome {
+  transform: scale(0.94);
+  filter: brightness(0.82) contrast(1.15);
+  box-shadow:
+    0 0 0 calc(var(--d) * 0.008) color-mix(in srgb, var(--dome) 45%, black),
+    0 0 calc(var(--d) * 0.02) calc(var(--d) * 0.035) rgba(0, 0, 0, 0.7),
+    inset calc(var(--d) * -0.07) calc(var(--d) * 0.09) calc(var(--d) * 0.12) rgba(0, 0, 0, 0.65),
+    inset calc(var(--d) * 0.01) calc(var(--d) * -0.01) calc(var(--d) * 0.03) rgba(255, 255, 255, 0.06);
+}
+
+/* Disabled: the dome greys and fades with its etch, and nothing moves. */
+.btn-rubber:disabled { cursor: not-allowed; }
+.btn-rubber:disabled .rubber-dome {
+  filter: grayscale(1) opacity(0.55);
+  box-shadow: 0 0 0 calc(var(--d) * 0.008) color-mix(in srgb, var(--dome) 45%, black);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-rubber,
+  .rubber-dome {
+    transition: none;
+  }
+}
+
+/* Forced colors drop the gradients and every shadow, so a key would be
+   bare words: it draws its edge, a primary's thicker, hover lights the
+   edge, and disabled goes GrayText. The etch is off: its walls drew as
+   stray lines. */
+@media (forced-colors: active) {
+  .btn-rubber {
+    border: 1px solid ButtonText;
+  }
+  .rubber-primary {
+    border-width: 3px;
+  }
+  .btn-rubber:hover:not(:disabled) {
+    border-color: Highlight;
+  }
+  .rubber-glyph,
+  .rubber-label {
+    filter: none;
+  }
+  .btn-rubber:disabled {
+    border-color: GrayText;
+    color: GrayText;
+  }
+}
+
 /* Runner */
 
 .runner-header {
@@ -1193,8 +1371,6 @@ button.small {
   gap: var(--spacing-3);
   margin-bottom: var(--spacing-3);
 }
-
-.runner-header .back-btn { margin-bottom: 0; }
 
 .runner-progress {
   display: flex;
@@ -1219,10 +1395,6 @@ button.small {
   display: flex;
   gap: var(--spacing-2);
   align-items: center;
-}
-
-.runner-actions button:not(.small) {
-  min-width: 96px;
 }
 
 /* History menu (Past sessions / Log history) */
